@@ -122,11 +122,14 @@ class Unit {
     }
   
     render(ctx) {
-      // Example placeholder rendering:
+      /* Circle
       ctx.fillStyle = this.team;
       ctx.beginPath();
       ctx.arc(this.x, this.y, 10, 0, Math.PI * 2);
       ctx.fill();
+      */
+     
+      ctx.drawImage(tileSprites['guy'], 20, 20, 100, 100, this.x -16, this.y -16, tileSize, tileSize);
     }
 
     renderPath(ctx) {

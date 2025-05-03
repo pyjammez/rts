@@ -5,6 +5,27 @@ const TILE = {
     GRASS: 1,
 };
 
+const tileSprites = {
+  grass: new Image(),
+  dirt: new Image(),
+  sand: new Image(),
+  stone: new Image(),
+  guy: new Image()
+};
+
+tileSprites.grass.src = 'assets/grass.png';
+tileSprites.sand.src = 'assets/sand.png';
+tileSprites.dirt.src = 'assets/dirt.png';
+tileSprites.stone.src = 'assets/stone.png';
+tileSprites.guy.src = 'assets/guy.png';
+
+const tileMap = {
+  1: 'grass',
+  0: 'dirt',
+  3: 'sand',
+  4: 'stone'
+}
+
 /* example
 const mapData = [
   [0, 1, 0, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1],
@@ -27,8 +48,17 @@ function renderMap() {
     for (let y = 0; y < mapData.length; y++) {
         for (let x = 0; x < mapData[y].length; x++) {
             const tile = mapData[y][x];
-            ctx.fillStyle = tile === 1 ? '#4CAF50' : '#8B4513'; // grass or dirt
-            ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+            ctx.drawImage(tileSprites[tileMap[tile]], x * tileSize, y * tileSize, tileSize, tileSize);
+            
+            /*
+            if (tile === 1) {
+              ctx.fillStyle = '#4CAF50'; // grass
+              ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+            } else {
+              ctx.fillStyle = '#8B4513'; // dirt
+              ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+            }
+            */
         }
     }
 }
