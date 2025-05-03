@@ -122,7 +122,7 @@ class Unit {
     }
   
     render(ctx) {
-      /* Circle
+      /* Circle unit
       ctx.fillStyle = this.team;
       ctx.beginPath();
       ctx.arc(this.x, this.y, 10, 0, Math.PI * 2);
