@@ -4,24 +4,83 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Field General</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="ui/style.css" />
 </head>
 <body>
+  <div id="configPanel" class="config-panel">
+    <h1>Map Configuration</h1>
+    
+    <div class="config-section">
+      <label>Water Coverage: <span id="waterLevelValue">10</span>%</label>
+      <div class="spectrum-labels">
+        <span>No Water</span>
+        <span>All Water</span>
+      </div>
+      <input type="range" id="waterLevel" min="0" max="100" value="10">
+      <div class="spectrum-hint">Sand auto-surrounds water edges</div>
+    </div>
+    
+    <div class="config-section">
+      <label for="rockCount">Rocks: <span id="rockValue">15</span></label>
+      <input type="range" id="rockCount" min="0" max="150" value="15">
+    </div>
+    
+    <div class="config-section">
+      <label for="treeCount">Trees: <span id="treeValue">30</span></label>
+      <input type="range" id="treeCount" min="0" max="300" value="30">
+    </div>
+    
+    <button id="startButton" class="start-button">Start Game</button>
+  </div>
+
+  <div id="hud" class="hud" style="display: none;">
+    <div class="hud-panel hud-top-left">
+      <div class="hud-title">Team Controls</div>
+      <button id="spawnRed" class="hud-button red">Create Red Unit</button>
+      <button id="spawnBlue" class="hud-button blue">Create Blue Unit</button>
+      <div class="team-counts">
+        <div>Red Units: <span id="redCount">0</span></div>
+        <div>Blue Units: <span id="blueCount">0</span></div>
+      </div>
+    </div>
+
+    <div class="hud-panel hud-bottom-right">
+      <div class="hud-title">Mini Map</div>
+      <canvas id="miniMapCanvas" width="240" height="136"></canvas>
+    </div>
+  </div>
+  
   <canvas id="gameCanvas"></canvas>
 
   <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
   </script>
 
-  <script src="unit.js"></script>
-  <script src="physics.js"></script>
-  <script src="map.js"></script>
-  <script src="gameState.js"></script>
-  <script src="gameLoop.js"></script>
-  <script src="input.js"></script>
-  <script src="main.js"></script>
+  <script src="ui/config.js"></script>
+  <script src="ecs/entityManager.js"></script>
+  <script src="ecs/unitComponents.js"></script>
+  <script src="entities/unit.js"></script>
+  <script src="systems/processors/unitMovementProcessor.js"></script>
+  <script src="systems/processors/unitCombatProcessor.js"></script>
+  <script src="systems/processors/unitRenderProcessor.js"></script>
+  <script src="systems/unitMovement.js"></script>
+  <script src="systems/unitCombat.js"></script>
+  <script src="systems/unitRender.js"></script>
+  <script src="systems/physics.js"></script>
+  <script src="world/map.js"></script>
+  <script src="world/gameState.js"></script>
+  <script src="ui/hud.js"></script>
+  <script src="core/gameLoop.js"></script>
+  <script src="systems/input.js"></script>
+  <script src="core/main.js"></script>
 </body>
 </html>
