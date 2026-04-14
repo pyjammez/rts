@@ -1,0 +1,194 @@
+body { 
+  margin: 0; 
+  overflow: hidden;
+  font-family: Arial, sans-serif;
+}
+
+canvas { 
+  background: #1c1c1c; 
+  display: block; 
+  cursor: crosshair;
+}
+
+.config-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(20, 20, 20, 0.95);
+  border: 2px solid #4a9eff;
+  border-radius: 8px;
+  padding: 30px;
+  width: 350px;
+  max-height: 90vh;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 0 20px rgba(74, 158, 255, 0.3);
+}
+
+.config-panel h1 {
+  text-align: center;
+  color: #4a9eff;
+  margin-top: 0;
+  margin-bottom: 25px;
+  font-size: 28px;
+}
+
+.config-section {
+  margin-bottom: 20px;
+}
+
+.config-section label {
+  display: block;
+  color: #e0e0e0;
+  margin-bottom: 8px;
+  font-weight: bold;
+}
+
+.config-section input[type="range"] {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #333;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.config-section input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #4a9eff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.config-section input[type="range"]::-webkit-slider-thumb:hover {
+  background: #6ab3ff;
+}
+
+.config-section input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #4a9eff;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+}
+
+.config-section input[type="range"]::-moz-range-thumb:hover {
+  background: #6ab3ff;
+}
+
+.spectrum-labels {
+  display: flex;
+  justify-content: space-between;
+  color: #aaa;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.spectrum-hint {
+  text-align: center;
+  color: #888;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.start-button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 25px;
+  background: #4a9eff;
+  color: black;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.start-button:hover {
+  background: #6ab3ff;
+}
+
+.start-button:active {
+  background: #2a7eff;
+}
+
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 900;
+}
+
+.hud-panel {
+  pointer-events: auto;
+  background: rgba(15, 20, 26, 0.9);
+  border: 1px solid rgba(120, 160, 200, 0.5);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  color: #dbe6f3;
+  padding: 12px;
+}
+
+.hud-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #8fc7ff;
+}
+
+.hud-top-left {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 220px;
+}
+
+.hud-bottom-right {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+}
+
+.hud-button {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.hud-button.red {
+  background: #963737;
+  border-color: #bb4a4a;
+}
+
+.hud-button.blue {
+  background: #2f4e98;
+  border-color: #4b72d1;
+}
+
+.team-counts {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#miniMapCanvas {
+  width: 240px;
+  height: 136px;
+  image-rendering: pixelated;
+  border: 1px solid rgba(173, 216, 255, 0.4);
+  background: #111;
+  display: block;
+}
