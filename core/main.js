@@ -157,12 +157,15 @@ function update(dt) {
 
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.imageSmoothingEnabled = false;
 
   ctx.save();
   ctx.scale(camera.zoom, camera.zoom);
   ctx.translate(-camera.x, -camera.y);
   renderMap();
-  if (typeof renderUnitSystem === 'function') {
+  if (typeof renderWorldObjects === 'function') {
+    renderWorldObjects(gameRuntime.aliveUnits, ctx, DEBUG);
+  } else if (typeof renderUnitSystem === 'function') {
     renderUnitSystem(gameRuntime.aliveUnits, ctx, DEBUG);
   }
   renderBullets(ctx);
@@ -171,8 +174,48 @@ function render() {
   }
   ctx.restore();
 
+  renderWorldAtmosphere();
   renderSelectionBox();
   if (typeof renderHUD === 'function') renderHUD();
+}
+
+function renderWorldAtmosphere() {
+  const w = canvas.width;
+  const h = canvas.height;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'overlay';
+  const sunWash = ctx.createLinearGradient(0, 0, w, h);
+  sunWash.addColorStop(0, 'rgba(255, 220, 145, 0.26)');
+  sunWash.addColorStop(0.48, 'rgba(255, 220, 145, 0.06)');
+  sunWash.addColorStop(1, 'rgba(62, 37, 18, 0.12)');
+  ctx.fillStyle = sunWash;
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.globalCompositeOperation = 'multiply';
+  const vignette = ctx.createRadialGradient(
+    w * 0.5,
+    h * 0.42,
+    Math.min(w, h) * 0.12,
+    w * 0.5,
+    h * 0.5,
+    Math.max(w, h) * 0.72
+  );
+  vignette.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  vignette.addColorStop(0.68, 'rgba(95, 57, 24, 0.1)');
+  vignette.addColorStop(1, 'rgba(22, 11, 4, 0.46)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = '#f7df9b';
+  for (let i = 0; i < 120; i++) {
+    const x = (i * 97 + MAP_SEED % 311) % w;
+    const y = (i * 53 + MAP_SEED % 197) % h;
+    ctx.fillRect(x, y, 1, 1);
+  }
+  ctx.restore();
 }
 
 function initializeGame() {

@@ -12,7 +12,11 @@ function initHUD() {
 
   if (miniMapCanvas) {
     miniMapCtx = miniMapCanvas.getContext('2d');
+    miniMapCanvas.addEventListener('click', handleMiniMapClick);
+    miniMapCanvas.addEventListener('pointerdown', handleMiniMapClick);
   }
+
+  document.addEventListener('pointerdown', handleMiniMapPointerCapture, true);
 
   const spawnRed = document.getElementById('spawnRed');
   const spawnBlue = document.getElementById('spawnBlue');
@@ -108,6 +112,15 @@ function renderMiniMap() {
     }
   }
 
+  if (Array.isArray(sheepData)) {
+    miniMapCtx.fillStyle = '#eadfca';
+    for (const sheep of sheepData) {
+      const px = (sheep.x / getMapWidthPx()) * w;
+      const py = (sheep.y / getMapHeightPx()) * h;
+      miniMapCtx.fillRect(px - 0.5, py - 0.5, 2, 2);
+    }
+  }
+
   // Camera viewport
   const vw = (camera.viewportWidth / camera.zoom / getMapWidthPx()) * w;
   const vh = (camera.viewportHeight / camera.zoom / getMapHeightPx()) * h;
@@ -117,6 +130,35 @@ function renderMiniMap() {
   miniMapCtx.strokeStyle = '#ffffff';
   miniMapCtx.lineWidth = 1;
   miniMapCtx.strokeRect(vx, vy, vw, vh);
+}
+
+function handleMiniMapClick(e) {
+  if (!miniMapCanvas || !camera || !terrainData || terrainData.length === 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  const rect = miniMapCanvas.getBoundingClientRect();
+  const scaleX = miniMapCanvas.width / rect.width;
+  const scaleY = miniMapCanvas.height / rect.height;
+  const mapX = (e.clientX - rect.left) * scaleX;
+  const mapY = (e.clientY - rect.top) * scaleY;
+  const worldX = (mapX / miniMapCanvas.width) * getMapWidthPx();
+  const worldY = (mapY / miniMapCanvas.height) * getMapHeightPx();
+
+  camera.x = worldX - (camera.viewportWidth / camera.zoom) * 0.5;
+  camera.y = worldY - (camera.viewportHeight / camera.zoom) * 0.5;
+  clampCameraPosition();
+}
+
+function handleMiniMapPointerCapture(e) {
+  if (!miniMapCanvas || !camera || !terrainData || terrainData.length === 0) return;
+
+  const rect = miniMapCanvas.getBoundingClientRect();
+  const insideMiniMap = e.clientX >= rect.left && e.clientX <= rect.right &&
+    e.clientY >= rect.top && e.clientY <= rect.bottom;
+
+  if (!insideMiniMap) return;
+  handleMiniMapClick(e);
 }
 
 function renderHUD() {

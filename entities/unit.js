@@ -116,6 +116,10 @@ class Unit {
 
     setDestination(targetX, targetY) {
       if (!this.isValidDestination(targetX, targetY)) return;
+      const destination = findNearestWalkablePoint(targetX, targetY, this.size);
+      if (!destination) return;
+      targetX = destination.x;
+      targetY = destination.y;
 
       const startTile = {
         x: Math.floor(this.x / tileSize),
@@ -140,7 +144,9 @@ class Unit {
 
     issueMoveCommand(targetX, targetY, { append = false } = {}) {
       if (!this.isValidDestination(targetX, targetY)) return;
-      const command = { type: COMMAND_TYPE.MOVE, x: targetX, y: targetY };
+      const destination = findNearestWalkablePoint(targetX, targetY, this.size);
+      if (!destination) return;
+      const command = { type: COMMAND_TYPE.MOVE, x: destination.x, y: destination.y };
 
       if (!append) {
         this.commandQueue = [];
@@ -409,8 +415,11 @@ class Bullet {
     const candidates = typeof getUnitsNearPoint === 'function'
       ? getUnitsNearPoint(this.x, this.y, this.radius + tileSize)
       : units;
+    const sheepCandidates = typeof getLiveSheepNearPoint === 'function'
+      ? getLiveSheepNearPoint(this.x, this.y, this.radius + tileSize)
+      : [];
 
-    for (const unit of candidates) {
+    for (const unit of candidates.concat(sheepCandidates)) {
       if (unit.isDead) continue;
       // Never collide with shooter or same-team units.
       if (unit === this.shooter) continue;

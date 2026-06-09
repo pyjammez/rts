@@ -153,6 +153,9 @@ canvas.addEventListener('mouseup', (e) => {
         // single click selection
       const { x, y } = screenToWorld(selectionEnd.x, selectionEnd.y);
         let clickedUnit = null;
+        const clickedSheep = typeof getSheepAtPoint === 'function'
+          ? getSheepAtPoint(x, y)
+          : null;
 
         const selectedUnits = units.filter(u => u.selected && !u.isDead);
         const selectedTeam = selectedUnits.length > 0 ? selectedUnits[0].team : null;
@@ -167,7 +170,14 @@ canvas.addEventListener('mouseup', (e) => {
             }
         }
 
-        if (clickedUnit && selectedUnits.length > 0 && selectedTeam && clickedUnit.team !== selectedTeam) {
+        if (clickedSheep && selectedUnits.length > 0 && selectedTeam) {
+            addCommandClickMarker(clickedSheep.x, clickedSheep.y, 'red');
+            selectedUnits.forEach(u => {
+              if (u.team === selectedTeam) {
+                u.issueAttackCommand(clickedSheep, { append: e.shiftKey });
+              }
+            });
+        } else if (clickedUnit && selectedUnits.length > 0 && selectedTeam && clickedUnit.team !== selectedTeam) {
             // Attack command: selected team targets clicked enemy unit
             selectedUnits.forEach(u => {
               if (u.team === selectedTeam) {
@@ -206,9 +216,9 @@ canvas.addEventListener('contextmenu', (e) => {
       break;
     }
   }
-
-  // Visual feedback for command click
-  addCommandClickMarker(world.x, world.y, clickedUnit ? 'red' : 'green');
+  const clickedSheep = typeof getSheepAtPoint === 'function'
+    ? getSheepAtPoint(world.x, world.y)
+    : null;
 
   const selectedUnits = units.filter(unit => unit.selected && !unit.isDead);
   if (selectedUnits.length === 0) return;
@@ -217,7 +227,16 @@ canvas.addEventListener('contextmenu', (e) => {
   const controllableUnits = selectedUnits.filter(u => u.team === selectedTeam);
 
   // Right-click enemy = attack command (locked target until dead)
+  if (clickedSheep) {
+    addCommandClickMarker(clickedSheep.x, clickedSheep.y, 'red');
+    controllableUnits.forEach(unit => {
+      unit.issueAttackCommand(clickedSheep, { append: e.shiftKey });
+    });
+    return;
+  }
+
   if (clickedUnit && clickedUnit.team !== selectedTeam) {
+    addCommandClickMarker(world.x, world.y, 'red');
     controllableUnits.forEach(unit => {
       unit.issueAttackCommand(clickedUnit, { append: e.shiftKey });
     });
@@ -225,13 +244,27 @@ canvas.addEventListener('contextmenu', (e) => {
   }
 
   // Otherwise right-click ground/friendly = move command
+  const baseDestination = findNearestWalkablePoint(world.x, world.y, controllableUnits[0] ? controllableUnits[0].size : 20);
+  if (!baseDestination) return;
+
+  let markerPoint = null;
   controllableUnits.forEach((unit, index) => {
     const offset = getFormationOffset(index, controllableUnits.length);
-    const targetX = clamp(world.x + offset.x, unit.size * 0.5, getMapWidthPx() - unit.size * 0.5);
-    const targetY = clamp(world.y + offset.y, unit.size * 0.5, getMapHeightPx() - unit.size * 0.5);
+    const targetX = clamp(baseDestination.x + offset.x, unit.size * 0.5, getMapWidthPx() - unit.size * 0.5);
+    const targetY = clamp(baseDestination.y + offset.y, unit.size * 0.5, getMapHeightPx() - unit.size * 0.5);
+    const destination = findNearestWalkablePoint(targetX, targetY, unit.size);
 
-    unit.issueMoveCommand(targetX, targetY, { append: e.shiftKey });
+    if (destination) {
+      if (!markerPoint || (index === 0 && !destination.adjusted)) {
+        markerPoint = destination;
+      }
+      unit.issueMoveCommand(destination.x, destination.y, { append: e.shiftKey });
+    }
   });
+
+  if (markerPoint) {
+    addCommandClickMarker(markerPoint.x, markerPoint.y, 'green');
+  }
 });
 
 window.addEventListener('keydown', (e) => {

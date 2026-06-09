@@ -8,7 +8,7 @@
 </head>
 <body>
   <div id="configPanel" class="config-panel">
-    <h1>Map Configuration</h1>
+    <h1>Field General</h1>
     
     <div class="config-section">
       <label>Water Coverage: <span id="waterLevelValue">10</span>%</label>
@@ -29,23 +29,28 @@
       <label for="treeCount">Trees: <span id="treeValue">30</span></label>
       <input type="range" id="treeCount" min="0" max="300" value="30">
     </div>
+
+    <div class="config-section">
+      <label for="sheepCount">Sheep: <span id="sheepValue">12</span></label>
+      <input type="range" id="sheepCount" min="0" max="80" value="12">
+    </div>
     
-    <button id="startButton" class="start-button">Start Game</button>
+    <button id="startButton" class="start-button">Begin Campaign</button>
   </div>
 
   <div id="hud" class="hud" style="display: none;">
     <div class="hud-panel hud-top-left">
-      <div class="hud-title">Team Controls</div>
-      <button id="spawnRed" class="hud-button red">Create Red Unit</button>
-      <button id="spawnBlue" class="hud-button blue">Create Blue Unit</button>
+      <div class="hud-title">War Council</div>
+      <button id="spawnRed" class="hud-button red">Muster Crimson Guard</button>
+      <button id="spawnBlue" class="hud-button blue">Muster Azure Guard</button>
       <div class="team-counts">
-        <div>Red Units: <span id="redCount">0</span></div>
-        <div>Blue Units: <span id="blueCount">0</span></div>
+        <div>Crimson Guard: <span id="redCount">0</span></div>
+        <div>Azure Guard: <span id="blueCount">0</span></div>
       </div>
     </div>
 
     <div class="hud-panel hud-bottom-right">
-      <div class="hud-title">Mini Map</div>
+      <div class="hud-title">Kingdom Map</div>
       <canvas id="miniMapCanvas" width="240" height="136"></canvas>
     </div>
   </div>
@@ -65,22 +70,22 @@
     window.addEventListener('resize', resizeCanvas);
   </script>
 
-  <script src="ui/config.js"></script>
-  <script src="ecs/entityManager.js"></script>
-  <script src="ecs/unitComponents.js"></script>
-  <script src="entities/unit.js"></script>
-  <script src="systems/processors/unitMovementProcessor.js"></script>
-  <script src="systems/processors/unitCombatProcessor.js"></script>
-  <script src="systems/processors/unitRenderProcessor.js"></script>
-  <script src="systems/unitMovement.js"></script>
-  <script src="systems/unitCombat.js"></script>
-  <script src="systems/unitRender.js"></script>
-  <script src="systems/physics.js"></script>
-  <script src="world/map.js"></script>
-  <script src="world/gameState.js"></script>
-  <script src="ui/hud.js"></script>
-  <script src="core/gameLoop.js"></script>
-  <script src="systems/input.js"></script>
-  <script src="core/main.js"></script>
+  <script src="ui/config.js?v=mixedtreesrocks1"></script>
+  <script src="ecs/entityManager.js?v=mixedtreesrocks1"></script>
+  <script src="ecs/unitComponents.js?v=mixedtreesrocks1"></script>
+  <script src="entities/unit.js?v=mixedtreesrocks1"></script>
+  <script src="systems/processors/unitMovementProcessor.js?v=mixedtreesrocks1"></script>
+  <script src="systems/processors/unitCombatProcessor.js?v=mixedtreesrocks1"></script>
+  <script src="systems/processors/unitRenderProcessor.js?v=mixedtreesrocks1"></script>
+  <script src="systems/unitMovement.js?v=mixedtreesrocks1"></script>
+  <script src="systems/unitCombat.js?v=mixedtreesrocks1"></script>
+  <script src="systems/unitRender.js?v=mixedtreesrocks1"></script>
+  <script src="systems/physics.js?v=mixedtreesrocks1"></script>
+  <script src="world/map.js?v=mixedtreesrocks1"></script>
+  <script src="world/gameState.js?v=mixedtreesrocks1"></script>
+  <script src="ui/hud.js?v=mixedtreesrocks1"></script>
+  <script src="core/gameLoop.js?v=mixedtreesrocks1"></script>
+  <script src="systems/input.js?v=mixedtreesrocks1"></script>
+  <script src="core/main.js?v=mixedtreesrocks1"></script>
 </body>
 </html>

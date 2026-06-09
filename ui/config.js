@@ -3,6 +3,7 @@ let mapConfig = {
   waterLevel: 10,   // % of map that is water (0-100)
   rockCount: 15,
   treeCount: 30,
+  sheepCount: 12,
   terrain: {}
 };
 
@@ -10,6 +11,7 @@ function initConfigPanel() {
   const waterLevelInput = document.getElementById('waterLevel');
   const rockInput = document.getElementById('rockCount');
   const treeInput = document.getElementById('treeCount');
+  const sheepInput = document.getElementById('sheepCount');
   const startButton = document.getElementById('startButton');
 
   waterLevelInput.addEventListener('input', (e) => {
@@ -25,6 +27,11 @@ function initConfigPanel() {
   treeInput.addEventListener('input', (e) => {
     mapConfig.treeCount = parseInt(e.target.value);
     document.getElementById('treeValue').textContent = mapConfig.treeCount;
+  });
+
+  sheepInput.addEventListener('input', (e) => {
+    mapConfig.sheepCount = parseInt(e.target.value);
+    document.getElementById('sheepValue').textContent = mapConfig.sheepCount;
   });
 
   // Start game button
@@ -43,6 +50,7 @@ function hideConfigPanel() {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('rockValue').textContent = mapConfig.rockCount;
   document.getElementById('treeValue').textContent = mapConfig.treeCount;
+  document.getElementById('sheepValue').textContent = mapConfig.sheepCount;
   document.getElementById('waterLevelValue').textContent = mapConfig.waterLevel;
 
   initConfigPanel();

@@ -23,6 +23,23 @@ function processUnitRender(unit, ctx) {
     return;
   }
 
+  ctx.save();
+  ctx.fillStyle = 'rgba(25, 12, 5, 0.28)';
+  ctx.beginPath();
+  ctx.ellipse(unit.x + 2, unit.y + 10, tileSize * 0.32, tileSize * 0.13, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  if (unit.selected) {
+    ctx.save();
+    ctx.strokeStyle = unit.team === 'red' ? 'rgba(255, 196, 118, 0.9)' : 'rgba(173, 220, 255, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(unit.x, unit.y + 10, tileSize * 0.38, tileSize * 0.17, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   if (tileSprites.unit && tileSprites.unit.complete && tileSprites.unit.naturalWidth > 0) {
     ctx.drawImage(tileSprites.unit, frameX, frameY, frameSize, frameSize, drawX, drawY, tileSize, tileSize);
   } else {
@@ -45,20 +62,19 @@ function processUnitRender(unit, ctx) {
   }
 
   if (unit.selected) {
-    const barWidth = tileSize;
+    const barWidth = tileSize * 0.9;
     const barHeight = 4;
-    const barX = drawX;
+    const barX = unit.x - barWidth / 2;
     const barY = drawY - 8;
     const hpRatio = Math.max(0, unit.hp / unit.maxHp);
-    ctx.fillStyle = '#333';
+    ctx.fillStyle = 'rgba(41, 24, 12, 0.9)';
     ctx.fillRect(barX, barY, barWidth, barHeight);
-    ctx.fillStyle = hpRatio > 0.5 ? '#3ecf3e' : hpRatio > 0.25 ? '#e6c025' : '#d63333';
+    ctx.fillStyle = hpRatio > 0.5 ? '#5bbf55' : hpRatio > 0.25 ? '#d8a733' : '#a8362e';
     ctx.fillRect(barX, barY, barWidth * hpRatio, barHeight);
-    ctx.strokeStyle = '#000';
+    ctx.strokeStyle = 'rgba(255, 225, 151, 0.75)';
     ctx.lineWidth = 0.5;
     ctx.strokeRect(barX, barY, barWidth, barHeight);
   }
 }
 
 window.processUnitRender = processUnitRender;
-
