@@ -3,8 +3,35 @@ function processUnitCombat(unit, dt) {
 
   unit.fireCooldown = Math.max(0, unit.fireCooldown - dt);
   unit.attackRepathCooldown = Math.max(0, unit.attackRepathCooldown - dt);
+  unit.attackAnimationTime = Math.max(0, (unit.attackAnimationTime || 0) - dt);
 
   const isMoving = !!unit.target || (unit.path && unit.pathIndex < unit.path.length);
+
+  if (unit.mountTarget) {
+    const sheep = unit.mountTarget;
+    if (sheep.isDead || sheep.isMounted || (sheep.reservedByUnitId && sheep.reservedByUnitId !== unit.id)) {
+      if (typeof unit.clearMountTarget === 'function') {
+        unit.clearMountTarget();
+      } else {
+        unit.mountTarget = null;
+      }
+      return;
+    }
+
+    const dist = Math.hypot(sheep.x - unit.x, sheep.y - unit.y);
+    if (dist <= unit.size * 0.9 + sheep.size * 0.45) {
+      unit.clearMovementState();
+      unit.mountSheep(sheep);
+      return;
+    }
+
+    if (!unit.target && unit.attackRepathCooldown <= 0) {
+      unit.attackRepathCooldown = 0.35;
+      sheep.reservedByUnitId = unit.id;
+      unit.setDestination(sheep.x, sheep.y);
+    }
+    return;
+  }
 
   if (unit.attackOrderTarget) {
     if (!unit.isEnemyValid(unit.attackOrderTarget)) {
@@ -34,7 +61,7 @@ function processUnitCombat(unit, dt) {
     unit.target = null;
 
     if (unit.fireCooldown <= 0) {
-      unit.shootAt(unit.attackOrderTarget, 8);
+      unit.shootAt(unit.attackOrderTarget, unit.damage || 8);
     }
     return;
   }
@@ -51,10 +78,9 @@ function processUnitCombat(unit, dt) {
   }
 
   if (unit.currentEnemy && unit.fireCooldown <= 0) {
-    const shotDamage = isMoving ? 4 : 8;
+    const shotDamage = isMoving ? (unit.movingDamage || 4) : (unit.damage || 8);
     unit.shootAt(unit.currentEnemy, shotDamage);
   }
 }
 
 window.processUnitCombat = processUnitCombat;
-

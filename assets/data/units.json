@@ -1,0 +1,65 @@
+{
+  "soldier": {
+    "name": "Soldier",
+    "hp": 100,
+    "speed": 100,
+    "size": 20,
+    "weapon": "sword",
+    "role": "Sword infantry",
+    "model": "soldier"
+  },
+  "archer": {
+    "name": "Archer",
+    "hp": 72,
+    "speed": 96,
+    "size": 18,
+    "weapon": "longbow",
+    "role": "Long range, fragile",
+    "model": "archer"
+  },
+  "knight": {
+    "name": "Knight",
+    "hp": 155,
+    "speed": 82,
+    "size": 24,
+    "weapon": "sword",
+    "role": "Durable sword fighter",
+    "model": "knight"
+  },
+  "scout": {
+    "name": "Scout",
+    "hp": 64,
+    "speed": 150,
+    "size": 17,
+    "weapon": "sling",
+    "role": "Fast skirmisher",
+    "model": "scout"
+  },
+  "gunman": {
+    "name": "Gunman",
+    "hp": 82,
+    "speed": 98,
+    "size": 19,
+    "weapon": "pistol",
+    "role": "Fast-firing pistol infantry",
+    "model": "gunman"
+  },
+  "crossbowman": {
+    "name": "Crossbowman",
+    "hp": 92,
+    "speed": 88,
+    "size": 20,
+    "weapon": "crossbow",
+    "role": "Heavy ranged infantry",
+    "model": "crossbowman"
+  },
+  "grenademan": {
+    "name": "Grenademan",
+    "hp": 105,
+    "speed": 84,
+    "size": 21,
+    "weapon": "grenade",
+    "role": "Splash-damage specialist",
+    "model": "grenademan"
+  }
+}

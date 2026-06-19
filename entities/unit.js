@@ -1,6 +1,7 @@
 const COMMAND_TYPE = Object.freeze({
   MOVE: 'move',
-  ATTACK_UNIT: 'attack-unit'
+  ATTACK_UNIT: 'attack-unit',
+  MOUNT_SHEEP: 'mount-sheep'
 });
 const MAX_COMMAND_QUEUE = 16;
 
@@ -28,6 +29,7 @@ class Unit {
       this.spriteFrameTime = 0;
       this.spriteFrameDuration = 0.12;
       this.spriteDirectionRow = 0; // 0=down, 1=left, 2=right, 3=up
+      this.heading = Math.PI * 0.5;
         // Combat state
         this.isDead = false;
         this.shootRange = 120;      // px — starts shooting within this distance
@@ -37,9 +39,22 @@ class Unit {
         this.currentEnemy = null;
         this.attackOrderTarget = null; // Explicit attack-move target unit (locked until dead)
         this.attackRepathCooldown = 0;
+        this.attackAnimationTime = 0;
+        this.attackAnimationDuration = 0.24;
+        this.castleTopBuildingId = null;
+        this.castleTopStairPoint = null;
+        this.castleTopReached = false;
+        this.castleRampBase = null;
+        this.castleRampTop = null;
+        this.castleRampClimbed = false;
+        this.mountTarget = null;
+        this.mountType = null;
+        this.mountedSpeedBonus = 0;
+        this.baseSpeed = speed;
     }
 
     setFacingFromVector(dx, dy) {
+      if (Math.hypot(dx, dy) > 0.001) this.heading = Math.atan2(dy, dx);
       if (Math.abs(dx) > Math.abs(dy)) {
         this.spriteDirectionRow = dx >= 0 ? 2 : 1;
       } else {
@@ -72,6 +87,13 @@ class Unit {
       this.target = null;
       this.stuckTime = 0;
       this.repathCooldown = 0;
+    }
+
+    clearMountTarget() {
+      if (this.mountTarget && this.mountTarget.reservedByUnitId === this.id) {
+        this.mountTarget.reservedByUnitId = null;
+      }
+      this.mountTarget = null;
     }
 
     isValidDestination(x, y) {
@@ -153,6 +175,13 @@ class Unit {
         this.clearMovementState();
         this.attackOrderTarget = null;
         this.currentEnemy = null;
+        this.castleTopBuildingId = null;
+        this.castleTopStairPoint = null;
+        this.castleTopReached = false;
+        this.castleRampBase = null;
+        this.castleRampTop = null;
+        this.castleRampClimbed = false;
+        this.clearMountTarget();
         this.executeCommand(command);
         return;
       }
@@ -175,6 +204,13 @@ class Unit {
       if (!append) {
         this.commandQueue = [];
         this.clearMovementState();
+        this.castleTopBuildingId = null;
+        this.castleTopStairPoint = null;
+        this.castleTopReached = false;
+        this.castleRampBase = null;
+        this.castleRampTop = null;
+        this.castleRampClimbed = false;
+        this.clearMountTarget();
         this.executeCommand(command);
         return;
       }
@@ -189,6 +225,34 @@ class Unit {
       }
     }
 
+    issueMountCommand(sheep, { append = false } = {}) {
+      if (!sheep || sheep.isDead || sheep.isMounted || sheep.reservedByUnitId) return;
+
+      const command = { type: COMMAND_TYPE.MOUNT_SHEEP, sheep };
+
+      if (!append) {
+        this.commandQueue = [];
+        this.clearMovementState();
+        this.attackOrderTarget = null;
+        this.currentEnemy = null;
+        this.castleTopBuildingId = null;
+        this.castleTopStairPoint = null;
+        this.castleTopReached = false;
+        this.castleRampBase = null;
+        this.castleRampTop = null;
+        this.castleRampClimbed = false;
+        this.executeCommand(command);
+        return;
+      }
+
+      const hasActiveMove = !!this.target || this.hasActivePath();
+      if (!hasActiveMove) {
+        this.executeCommand(command);
+      } else if (this.commandQueue.length < MAX_COMMAND_QUEUE) {
+        this.commandQueue.push(command);
+      }
+    }
+
     executeCommand(command) {
       if (command.type === COMMAND_TYPE.MOVE) {
         this.setDestination(command.x, command.y);
@@ -199,6 +263,14 @@ class Unit {
         this.attackOrderTarget = command.targetUnit;
         this.currentEnemy = command.targetUnit;
         this.attackRepathCooldown = 0;
+      }
+
+      if (command.type === COMMAND_TYPE.MOUNT_SHEEP) {
+        this.mountTarget = command.sheep;
+        this.attackOrderTarget = null;
+        this.currentEnemy = null;
+        command.sheep.reservedByUnitId = this.id;
+        this.setDestination(command.sheep.x, command.sheep.y);
       }
     }
 
@@ -241,17 +313,69 @@ class Unit {
       const dx = target.x - this.x;
       const dy = target.y - this.y;
       this.setFacingFromVector(dx, dy);
-      bullets.push(Bullet.obtain(this.x, this.y, target, this.team, damage, this));
+      this.attackAnimationTime = this.attackAnimationDuration;
+      if (this.melee) {
+        target.takeDamage(damage);
+        this.fireCooldown = 1 / this.fireRate;
+        return;
+      }
+      bullets.push(Bullet.obtain(
+        this.x,
+        this.y,
+        target,
+        this.team,
+        damage,
+        this,
+        this.projectileSpeed,
+        this.projectileColor,
+        this.projectileType,
+        this.splashRadius
+      ));
       this.fireCooldown = 1 / this.fireRate;
+    }
+
+    mountSheep(sheep) {
+      if (!sheep || sheep.isDead || sheep.isMounted) return false;
+      if (this.unitType === 'scout' && this.mountType !== 'sheep' && typeof createWanderingHorse === 'function') {
+        const facing = this.spriteDirectionRow === 1 ? -1 : 1;
+        createWanderingHorse(this.x, this.y, facing);
+      }
+      sheep.isMounted = true;
+      sheep.reservedByUnitId = null;
+      sheep.riderUnitId = this.id;
+      if (typeof removeSheepFromMap === 'function') {
+        removeSheepFromMap(sheep);
+      }
+      this.mountTarget = null;
+      this.mountType = 'sheep';
+      this.mountedSpeedBonus = 42;
+      this.baseSpeed = this.baseSpeed || this.speed;
+      this.speed = this.baseSpeed + this.mountedSpeedBonus;
+      this.role = this.role && !this.role.includes('mounted')
+        ? `${this.role}, mounted`
+        : this.role || 'Mounted unit';
+      return true;
     }
 
     die() {
       this.isDead = true;
+      this.selected = false;
+      const deathNoise = typeof hashNoise === 'function'
+        ? hashNoise(this.id + 31, Math.floor(this.y))
+        : Math.random();
+      const deathNoiseB = typeof hashNoise === 'function'
+        ? hashNoise(this.id + 17, Math.floor(this.x))
+        : Math.random();
+      this.deathRotation = Math.atan2(
+        deathNoise - 0.5,
+        deathNoiseB - 0.5
+      );
       this.path = [];
       this.pathIndex = 0;
       this.commandQueue = [];
       this.target = null;
       this.currentEnemy = null;
+      this.clearMountTarget();
     }
 
     renderPath(ctx) {
@@ -360,20 +484,25 @@ class Unit {
 // --- Bullets ---
 window.bullets = window.bullets || [];
 const bullets = window.bullets;
+window.impactEffects = window.impactEffects || [];
+const impactEffects = window.impactEffects;
 
 
 class Bullet {
-  constructor(x, y, target, team, damage = 8, shooter = null) {
-    this.reset(x, y, target, team, damage, shooter);
+  constructor(x, y, target, team, damage = 8, shooter = null, speed = 200, color = null, projectileType = 'arrow', splashRadius = 0) {
+    this.reset(x, y, target, team, damage, shooter, speed, color, projectileType, splashRadius);
   }
 
-  reset(x, y, target, team, damage = 8, shooter = null) {
+  reset(x, y, target, team, damage = 8, shooter = null, speed = 200, color = null, projectileType = 'arrow', splashRadius = 0) {
     this.x = x;
     this.y = y;
     this.startX = x;
     this.startY = y;
     this.team = team;
     this.damage = damage;
+    this.color = color;
+    this.projectileType = projectileType || 'arrow';
+    this.splashRadius = Math.max(0, Number(splashRadius) || 0);
     this.dead = false;
     this.radius = 6; // larger for visibility
     this.maxRange = 1200; // px (increased for visibility)
@@ -382,21 +511,22 @@ class Bullet {
     const dx = target.x - x;
     const dy = target.y - y;
     const dist = Math.hypot(dx, dy) || 1;
+    this.targetDistance = dist;
     this.dirX = dx / dist;
     this.dirY = dy / dist;
-    this.speed = 200; // slower for visibility
+    this.speed = speed || 200;
     this.shooter = shooter;
     // Store the intended target for possible special effects, but do not home in
     this.intendedTarget = target;
   }
 
-  static obtain(x, y, target, team, damage = 8, shooter = null) {
+  static obtain(x, y, target, team, damage = 8, shooter = null, speed = 200, color = null, projectileType = 'arrow', splashRadius = 0) {
     const pooled = Bullet.pool.pop();
     if (pooled) {
-      pooled.reset(x, y, target, team, damage, shooter);
+      pooled.reset(x, y, target, team, damage, shooter, speed, color, projectileType, splashRadius);
       return pooled;
     }
-    return new Bullet(x, y, target, team, damage, shooter);
+    return new Bullet(x, y, target, team, damage, shooter, speed, color, projectileType, splashRadius);
   }
 
   static release(bullet) {
@@ -418,8 +548,17 @@ class Bullet {
     const sheepCandidates = typeof getLiveSheepNearPoint === 'function'
       ? getLiveSheepNearPoint(this.x, this.y, this.radius + tileSize)
       : [];
+    const duckCandidates = typeof getLiveDucksNearPoint === 'function'
+      ? getLiveDucksNearPoint(this.x, this.y, this.radius + tileSize)
+      : [];
+    const horseCandidates = typeof getLiveHorsesNearPoint === 'function'
+      ? getLiveHorsesNearPoint(this.x, this.y, this.radius + tileSize)
+      : [];
+    const buildingCandidates = typeof getLiveBuildingsNearPoint === 'function'
+      ? getLiveBuildingsNearPoint(this.x, this.y, this.radius + tileSize)
+      : [];
 
-    for (const unit of candidates.concat(sheepCandidates)) {
+    for (const unit of candidates.concat(sheepCandidates, duckCandidates, horseCandidates, buildingCandidates)) {
       if (unit.isDead) continue;
       // Never collide with shooter or same-team units.
       if (unit === this.shooter) continue;
@@ -429,7 +568,7 @@ class Bullet {
       const dy = unit.y - this.y;
       const dist = Math.hypot(dx, dy);
       if (dist < unit.size * 0.5 + this.radius) {
-        unit.takeDamage(this.damage);
+        this.applyImpactDamage(unit);
         this.dead = true;
         return;
       }
@@ -446,12 +585,46 @@ class Bullet {
     }
   }
 
+  applyImpactDamage(directTarget) {
+    if (this.splashRadius <= 0) {
+      directTarget.takeDamage(this.damage);
+      return;
+    }
+
+    const nearby = [];
+    impactEffects.push({
+      type: 'explosion',
+      x: this.x,
+      y: this.y,
+      radius: this.splashRadius,
+      age: 0,
+      duration: 0.42
+    });
+    if (typeof getUnitsNearPoint === 'function') nearby.push(...getUnitsNearPoint(this.x, this.y, this.splashRadius));
+    else nearby.push(...units);
+    if (typeof getLiveSheepNearPoint === 'function') nearby.push(...getLiveSheepNearPoint(this.x, this.y, this.splashRadius));
+    if (typeof getLiveDucksNearPoint === 'function') nearby.push(...getLiveDucksNearPoint(this.x, this.y, this.splashRadius));
+    if (typeof getLiveHorsesNearPoint === 'function') nearby.push(...getLiveHorsesNearPoint(this.x, this.y, this.splashRadius));
+    if (typeof getLiveBuildingsNearPoint === 'function') nearby.push(...getLiveBuildingsNearPoint(this.x, this.y, this.splashRadius));
+    nearby.push(directTarget);
+
+    for (const target of new Set(nearby)) {
+      if (!target || target.isDead || target === this.shooter || target.team === this.team) continue;
+      const distance = Math.hypot(target.x - this.x, target.y - this.y);
+      const targetRadius = Math.max(0, Number(target.size) || 0) * 0.5;
+      if (distance > this.splashRadius + targetRadius) continue;
+      const falloff = Math.max(0.45, 1 - distance / Math.max(1, this.splashRadius));
+      target.takeDamage(Math.max(1, Math.round(this.damage * falloff)));
+    }
+  }
+
   render(ctx) {
     if (this.dead) return;
     ctx.save();
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fillStyle = this.team === 'red' ? '#ff6600' : '#00ccff';
+    const drawRadius = this.projectileType === 'grenade' ? 7 : this.projectileType === 'bullet' ? 3 : 5;
+    ctx.arc(this.x, this.y, drawRadius, 0, Math.PI * 2);
+    ctx.fillStyle = this.color || (this.team === 'red' ? '#ff6600' : '#00ccff');
     ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = '#111';
@@ -469,10 +642,24 @@ function updateBullets(dt) {
     bullets.splice(i, 1);
     Bullet.release(b);
   }
+  for (let i = impactEffects.length - 1; i >= 0; i--) {
+    impactEffects[i].age += dt;
+    if (impactEffects[i].age >= impactEffects[i].duration) impactEffects.splice(i, 1);
+  }
 }
 
 function renderBullets(ctx) {
   for (const b of bullets) b.render(ctx);
+  for (const effect of impactEffects) {
+    const progress = effect.age / effect.duration;
+    ctx.save();
+    ctx.strokeStyle = `rgba(255, 151, 52, ${1 - progress})`;
+    ctx.lineWidth = 4 * (1 - progress) + 1;
+    ctx.beginPath();
+    ctx.arc(effect.x, effect.y, effect.radius * progress, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 }
 
 function renderUnits(debug = {}) {

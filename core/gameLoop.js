@@ -4,6 +4,17 @@ const MAX_STEPS_PER_FRAME = 5;
 
 let lastTime = 0;
 let accumulator = 0;
+let gameLoopRunning = false;
+
+function startGameLoop() {
+  if (gameLoopRunning) return;
+  gameLoopRunning = true;
+  lastTime = 0;
+  accumulator = 0;
+  requestAnimationFrame(gameLoop);
+}
+
+window.startGameLoop = startGameLoop;
 
 function gameLoop(timestamp) {
   if (!lastTime) {

@@ -1,0 +1,109 @@
+{
+  "skirmish_1v1": {
+    "shortName": "1v1",
+    "name": "1v1 Skirmish",
+    "summary": "Classic red versus blue battle with mirrored starting bases.",
+    "playable": true,
+    "startLabel": "Begin Skirmish",
+    "teams": ["red", "blue"],
+    "allowedUnits": ["soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan"],
+    "defaults": {
+      "mapStyle": "coastal_grassland",
+      "waterLevel": 10,
+      "rockCount": 15,
+      "treeCount": 30,
+      "sheepCount": 12,
+      "duckCount": 5,
+      "startingUnitsPerTeam": 7,
+      "towersPerTeam": 0,
+      "homesPerTeam": 1,
+      "unitRoster": {
+        "soldier": 1,
+        "archer": 1,
+        "knight": 1,
+        "scout": 1,
+        "gunman": 1,
+        "crossbowman": 1,
+        "grenademan": 1
+      }
+    },
+    "sections": ["map", "forces", "wildlife"]
+  },
+  "skirmish_2v2": {
+    "shortName": "2v2",
+    "name": "2v2 Skirmish",
+    "summary": "A larger team skirmish profile with doubled starting bases and forces.",
+    "playable": true,
+    "startLabel": "Begin 2v2 Skirmish",
+    "teams": ["red", "blue"],
+    "allowedUnits": ["soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan"],
+    "defaults": {
+      "mapStyle": "coastal_grassland",
+      "waterLevel": 8,
+      "rockCount": 22,
+      "treeCount": 46,
+      "sheepCount": 16,
+      "duckCount": 5,
+      "startingUnitsPerTeam": 7,
+      "towersPerTeam": 0,
+      "homesPerTeam": 1,
+      "unitRoster": {
+        "soldier": 1,
+        "archer": 1,
+        "knight": 1,
+        "scout": 1,
+        "gunman": 1,
+        "crossbowman": 1,
+        "grenademan": 1
+      }
+    },
+    "sections": ["map", "forces", "wildlife"]
+  },
+  "tower_defense": {
+    "shortName": "TD",
+    "name": "Tower Defense",
+    "summary": "Defend a base from waves. Setup is scaffolded; wave gameplay comes next.",
+    "playable": false,
+    "startLabel": "Tower Defense Coming Soon",
+    "teams": ["red"],
+    "allowedUnits": ["soldier", "archer", "gunman", "crossbowman", "grenademan"],
+    "defaults": {
+      "mapStyle": "defense_pass",
+      "waterLevel": 4,
+      "rockCount": 24,
+      "treeCount": 65,
+      "sheepCount": 4,
+      "duckCount": 3,
+      "startingGold": 250,
+      "waveCount": 10,
+      "pathComplexity": 55,
+      "towerSlots": 6
+    },
+    "sections": ["map", "defense"]
+  },
+  "unit_comparison": {
+    "shortName": "Compare",
+    "name": "Unit Comparison",
+    "summary": "Run an arena test where two configured groups spawn, close distance, and fight automatically.",
+    "playable": true,
+    "startLabel": "Begin Comparison",
+    "teams": ["red", "blue"],
+    "allowedUnits": ["soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan"],
+    "defaults": {
+      "mapStyle": "arena",
+      "waterLevel": 0,
+      "rockCount": 0,
+      "treeCount": 8,
+      "sheepCount": 0,
+      "duckCount": 0,
+      "redUnitCount": 5,
+      "blueUnitCount": 5,
+      "redUnitType": "soldier",
+      "blueUnitType": "soldier",
+      "homesPerTeam": 0,
+      "towersPerTeam": 0,
+      "arenaSize": 50
+    },
+    "sections": ["map", "comparison"]
+  }
+}

@@ -3,12 +3,14 @@ let miniMapCanvas = null;
 let miniMapCtx = null;
 let redCountEl = null;
 let blueCountEl = null;
+let selectedInfoEl = null;
 
 function initHUD() {
   hudRoot = document.getElementById('hud');
   miniMapCanvas = document.getElementById('miniMapCanvas');
   redCountEl = document.getElementById('redCount');
   blueCountEl = document.getElementById('blueCount');
+  selectedInfoEl = document.getElementById('selectedInfo');
 
   if (miniMapCanvas) {
     miniMapCtx = miniMapCanvas.getContext('2d');
@@ -115,21 +117,51 @@ function renderMiniMap() {
   if (Array.isArray(sheepData)) {
     miniMapCtx.fillStyle = '#eadfca';
     for (const sheep of sheepData) {
+      if (sheep.isMounted) continue;
       const px = (sheep.x / getMapWidthPx()) * w;
       const py = (sheep.y / getMapHeightPx()) * h;
       miniMapCtx.fillRect(px - 0.5, py - 0.5, 2, 2);
     }
   }
 
+  if (Array.isArray(horseData)) {
+    miniMapCtx.fillStyle = '#9a6336';
+    for (const horse of horseData) {
+      if (horse.isDead) continue;
+      const px = (horse.x / getMapWidthPx()) * w;
+      const py = (horse.y / getMapHeightPx()) * h;
+      miniMapCtx.fillRect(px - 1, py - 1, 2.5, 2.5);
+    }
+  }
+
+  const buildings = typeof getBuildings === 'function' ? getBuildings() : window.buildingData;
+  if (Array.isArray(buildings)) {
+    for (const building of buildings) {
+      if (building.isDead) continue;
+      const px = (building.x / getMapWidthPx()) * w;
+      const py = (building.y / getMapHeightPx()) * h;
+      const bw = Math.max(3, (building.width * tileSize / getMapWidthPx()) * w);
+      const bh = Math.max(3, (building.height * tileSize / getMapHeightPx()) * h);
+      miniMapCtx.fillStyle = building.team === 'red' ? '#c63c3c' : '#3e69d7';
+      miniMapCtx.fillRect(px - bw * 0.5, py - bh * 0.5, bw, bh);
+      miniMapCtx.strokeStyle = '#f8e7ad';
+      miniMapCtx.strokeRect(px - bw * 0.5, py - bh * 0.5, bw, bh);
+    }
+  }
+
   // Camera viewport
   const vw = (camera.viewportWidth / camera.zoom / getMapWidthPx()) * w;
   const vh = (camera.viewportHeight / camera.zoom / getMapHeightPx()) * h;
-  const vx = (camera.x / getMapWidthPx()) * w;
-  const vy = (camera.y / getMapHeightPx()) * h;
+  const rawVx = (camera.x / getMapWidthPx()) * w;
+  const rawVy = (camera.y / getMapHeightPx()) * h;
+  const vx = Math.max(0, Math.min(rawVx, w));
+  const vy = Math.max(0, Math.min(rawVy, h));
+  const clippedVw = Math.max(0, Math.min(rawVx + vw, w) - vx);
+  const clippedVh = Math.max(0, Math.min(rawVy + vh, h) - vy);
 
   miniMapCtx.strokeStyle = '#ffffff';
   miniMapCtx.lineWidth = 1;
-  miniMapCtx.strokeRect(vx, vy, vw, vh);
+  miniMapCtx.strokeRect(vx, vy, clippedVw, clippedVh);
 }
 
 function handleMiniMapClick(e) {
@@ -164,7 +196,120 @@ function handleMiniMapPointerCapture(e) {
 function renderHUD() {
   if (!hudRoot || hudRoot.style.display === 'none') return;
   updateTeamCounts();
+  updateSelectedInfo();
   renderMiniMap();
+}
+
+function updateSelectedInfo() {
+  if (!selectedInfoEl) return;
+  const selectedUnits = Array.isArray(units)
+    ? units.filter(unit => unit.selected && !unit.isDead)
+    : [];
+
+  if (selectedUnits.length === 1) {
+    renderSelectedUnitInfo(selectedUnits[0]);
+    return;
+  }
+
+  const building = typeof getSelectedBuilding === 'function' ? getSelectedBuilding() : null;
+
+  if (building && !building.isDead) {
+    const name = `${building.team} ${building.type}`;
+    selectedInfoEl.style.display = 'block';
+    selectedInfoEl.innerHTML = `
+      <div class="selected-info-name">
+        <span>${name}</span>
+        <span class="selected-info-tag">Building</span>
+      </div>
+      <div class="selected-info-grid">
+        ${createInfoStat('Hit Points', `${Math.ceil(building.hp)} / ${building.maxHp}`)}
+        ${createInfoStat('Attack', building.damage ? building.damage : 'None')}
+        ${createInfoStat('Range', building.range ? Math.round(building.range) : 'None')}
+        ${createInfoStat('Team', building.team)}
+      </div>
+    `;
+    return;
+  }
+
+  const worldObject = typeof getSelectedWorldObject === 'function' ? getSelectedWorldObject() : null;
+  if (worldObject) {
+    renderSelectedWorldObjectInfo(worldObject);
+    return;
+  }
+
+  selectedInfoEl.style.display = 'none';
+  selectedInfoEl.textContent = '';
+}
+
+function createInfoStat(label, value) {
+  return `<div class="selected-info-stat"><span>${label}</span><b>${value}</b></div>`;
+}
+
+function renderSelectedUnitInfo(unit) {
+  const name = unit.displayName || unit.unitType || 'Unit';
+  const hp = `${Math.ceil(unit.hp)} / ${unit.maxHp}`;
+  const damage = Number.isFinite(Number(unit.damage)) ? unit.damage : 'Unknown';
+  const movingDamage = Number.isFinite(Number(unit.movingDamage)) ? unit.movingDamage : 'Unknown';
+  const range = Number.isFinite(Number(unit.shootRange)) ? Math.round(unit.shootRange) : 'Unknown';
+  const speed = Number.isFinite(Number(unit.speed)) ? Math.round(unit.speed) : 'Unknown';
+  const role = unit.role || 'Field unit';
+  const weapon = unit.weaponName || unit.weaponId || 'Unknown';
+  const splash = Number(unit.splashRadius) > 0
+    ? createInfoStat('Splash Radius', Math.round(unit.splashRadius))
+    : '';
+  const mountStatus = unit.mountType === 'sheep' ? 'Riding sheep' : unit.unitType === 'scout' ? 'Mounted scout' : 'On foot';
+
+  selectedInfoEl.style.display = 'block';
+  selectedInfoEl.innerHTML = `
+    <div class="selected-info-name">
+      <span>${unit.team} ${name}</span>
+      <span class="selected-info-tag">${role}</span>
+    </div>
+    <div class="selected-info-grid">
+      ${createInfoStat('Hit Points', hp)}
+      ${createInfoStat('Weapon', weapon)}
+      ${createInfoStat('Weapon Power', damage)}
+      ${createInfoStat('Moving Power', movingDamage)}
+      ${createInfoStat('Range', range)}
+      ${splash}
+      ${createInfoStat('Speed', speed)}
+      ${createInfoStat('Mount', mountStatus)}
+      ${createInfoStat('Team', unit.team)}
+      ${createInfoStat('Unit Type', unit.unitType || 'soldier')}
+      ${createInfoStat('Status', unit.attackOrderTarget ? 'Attacking' : unit.hasActivePath && unit.hasActivePath() ? 'Moving' : 'Idle')}
+    </div>
+  `;
+}
+
+function renderSelectedWorldObjectInfo(object) {
+  const isObstacle = object.objectType === 'obstacle';
+  const hp = `${Math.ceil(object.hp)} / ${object.maxHp}`;
+  const status = object.isDead
+    ? 'Destroyed'
+    : object.hp < object.maxHp
+      ? 'Damaged'
+      : object.displayName === 'Duck'
+        ? 'Swimming'
+        : object.grazeTimer > 0
+          ? 'Grazing'
+          : isObstacle
+            ? 'Intact'
+            : 'Wandering';
+
+  selectedInfoEl.style.display = 'block';
+  selectedInfoEl.innerHTML = `
+    <div class="selected-info-name">
+      <span>${object.displayName || 'World Object'}</span>
+      <span class="selected-info-tag">${isObstacle ? 'Natural obstacle' : 'Wildlife'}</span>
+    </div>
+    <div class="selected-info-grid">
+      ${createInfoStat('Hit Points', hp)}
+      ${createInfoStat('Team', object.team || 'neutral')}
+      ${isObstacle ? createInfoStat('Material', object.material || 'Natural') : createInfoStat('Habitat', object.habitat || 'Land')}
+      ${isObstacle ? createInfoStat('Hardness', object.hardness || 'Unknown') : createInfoStat('Speed', Math.round(object.speed || 0))}
+      ${createInfoStat('Status', status)}
+    </div>
+  `;
 }
 
 document.addEventListener('DOMContentLoaded', initHUD);

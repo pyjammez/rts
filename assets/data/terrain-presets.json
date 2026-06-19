@@ -1,0 +1,26 @@
+{
+  "coastal_grassland": {
+    "name": "Coastal Grassland",
+    "waterLevel": 10,
+    "rockCount": 15,
+    "treeCount": 30,
+    "sheepCount": 12,
+    "duckCount": 5
+  },
+  "defense_pass": {
+    "name": "Defense Pass",
+    "waterLevel": 4,
+    "rockCount": 24,
+    "treeCount": 65,
+    "sheepCount": 4,
+    "duckCount": 3
+  },
+  "arena": {
+    "name": "Open Arena",
+    "waterLevel": 0,
+    "rockCount": 0,
+    "treeCount": 8,
+    "sheepCount": 0,
+    "duckCount": 0
+  }
+}

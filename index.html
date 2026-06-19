@@ -3,65 +3,72 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Field General</title>
+  <title>open rts</title>
   <link rel="stylesheet" href="ui/style.css" />
 </head>
 <body>
-  <div id="configPanel" class="config-panel">
-    <h1>Field General</h1>
-    
-    <div class="config-section">
-      <label>Water Coverage: <span id="waterLevelValue">10</span>%</label>
-      <div class="spectrum-labels">
-        <span>No Water</span>
-        <span>All Water</span>
-      </div>
-      <input type="range" id="waterLevel" min="0" max="100" value="10">
-      <div class="spectrum-hint">Sand auto-surrounds water edges</div>
-    </div>
-    
-    <div class="config-section">
-      <label for="rockCount">Rocks: <span id="rockValue">15</span></label>
-      <input type="range" id="rockCount" min="0" max="150" value="15">
-    </div>
-    
-    <div class="config-section">
-      <label for="treeCount">Trees: <span id="treeValue">30</span></label>
-      <input type="range" id="treeCount" min="0" max="300" value="30">
-    </div>
+  <div id="titleScreen" class="title-screen">
+    <h1>open rts</h1>
+    <div class="title-hint">click anywhere to continue</div>
+  </div>
 
-    <div class="config-section">
-      <label for="sheepCount">Sheep: <span id="sheepValue">12</span></label>
-      <input type="range" id="sheepCount" min="0" max="80" value="12">
-    </div>
-    
+  <div id="modePanel" class="config-panel mode-panel" style="display: none;">
+    <h1>open rts</h1>
+    <div id="modeOptions" class="mode-options"></div>
+  </div>
+
+  <div id="configPanel" class="config-panel" style="display: none;">
+    <h1 id="configTitle">Field General</h1>
+    <p id="configSummary" class="config-summary"></p>
+    <div id="configSections"></div>
+    <button id="backToModes" class="secondary-button" type="button">Back to Modes</button>
     <button id="startButton" class="start-button">Begin Campaign</button>
   </div>
 
-  <div id="hud" class="hud" style="display: none;">
-    <div class="hud-panel hud-top-left">
-      <div class="hud-title">War Council</div>
-      <button id="spawnRed" class="hud-button red">Muster Crimson Guard</button>
-      <button id="spawnBlue" class="hud-button blue">Muster Azure Guard</button>
-      <div class="team-counts">
-        <div>Crimson Guard: <span id="redCount">0</span></div>
-        <div>Azure Guard: <span id="blueCount">0</span></div>
+  <div id="waitingRoomPanel" class="config-panel waiting-room-panel" style="display: none;">
+    <h1>Ready Room</h1>
+    <p id="waitingRoomSummary" class="config-summary"></p>
+    <div id="waitingRoomSettings" class="waiting-room-settings"></div>
+    <div class="waiting-room-chat">
+      <div class="hud-title">Chat</div>
+      <div id="waitingRoomChatLog" class="waiting-room-chat-log"></div>
+      <div class="waiting-room-chat-row">
+        <input id="waitingRoomChatInput" type="text" placeholder="Type a message..." />
+        <button id="waitingRoomChatSend" class="secondary-button" type="button">Send</button>
       </div>
     </div>
+    <button id="backToSettings" class="secondary-button" type="button">Back to Settings</button>
+    <button id="readyButton" class="start-button" type="button">Ready</button>
+  </div>
 
+  <div id="gameOverScreen" class="game-over-screen" style="display: none;">
+    <h1 id="gameOverTitle">Game Over</h1>
+    <div id="gameOverSummary" class="game-over-summary"></div>
+    <div class="title-hint">click anywhere to continue</div>
+  </div>
+
+  <div id="hud" class="hud" style="display: none;">
+    <div id="selectedInfo" class="hud-panel selected-info-panel" style="display: none;"></div>
     <div class="hud-panel hud-bottom-right">
       <div class="hud-title">Kingdom Map</div>
       <canvas id="miniMapCanvas" width="240" height="136"></canvas>
     </div>
   </div>
   
+  <canvas id="gameCanvas3d"></canvas>
   <canvas id="gameCanvas"></canvas>
 
+  <script src="engine/three-runtime/open-rts-three.js?v=three7"></script>
+  <script src="world/threeBootstrap.js?v=three5"></script>
+
   <script>
+    const canvas3d = document.getElementById('gameCanvas3d');
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
 
     function resizeCanvas() {
+      canvas3d.width = window.innerWidth;
+      canvas3d.height = window.innerHeight;
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     }
@@ -70,22 +77,30 @@
     window.addEventListener('resize', resizeCanvas);
   </script>
 
-  <script src="ui/config.js?v=mixedtreesrocks1"></script>
-  <script src="ecs/entityManager.js?v=mixedtreesrocks1"></script>
-  <script src="ecs/unitComponents.js?v=mixedtreesrocks1"></script>
-  <script src="entities/unit.js?v=mixedtreesrocks1"></script>
-  <script src="systems/processors/unitMovementProcessor.js?v=mixedtreesrocks1"></script>
-  <script src="systems/processors/unitCombatProcessor.js?v=mixedtreesrocks1"></script>
-  <script src="systems/processors/unitRenderProcessor.js?v=mixedtreesrocks1"></script>
-  <script src="systems/unitMovement.js?v=mixedtreesrocks1"></script>
-  <script src="systems/unitCombat.js?v=mixedtreesrocks1"></script>
-  <script src="systems/unitRender.js?v=mixedtreesrocks1"></script>
-  <script src="systems/physics.js?v=mixedtreesrocks1"></script>
-  <script src="world/map.js?v=mixedtreesrocks1"></script>
-  <script src="world/gameState.js?v=mixedtreesrocks1"></script>
-  <script src="ui/hud.js?v=mixedtreesrocks1"></script>
-  <script src="core/gameLoop.js?v=mixedtreesrocks1"></script>
-  <script src="systems/input.js?v=mixedtreesrocks1"></script>
-  <script src="core/main.js?v=mixedtreesrocks1"></script>
+  <script src="ui/gameModes.js?v=newunits1"></script>
+  <script src="ui/config.js?v=newunits1"></script>
+  <script src="ui/screens/TitleScreen.js?v=three1"></script>
+  <script src="ui/screens/ModeSelectScreen.js?v=three1"></script>
+  <script src="ui/screens/GameSetupScreen.js?v=three1"></script>
+  <script src="ui/screens/ReadyRoomScreen.js?v=three1"></script>
+  <script src="ui/screens/GameOverScreen.js?v=three1"></script>
+  <script src="ui/screens/bootstrap.js?v=three1"></script>
+  <script src="ecs/entityManager.js?v=three1"></script>
+  <script src="ecs/unitComponents.js?v=three1"></script>
+  <script src="entities/unit.js?v=newunits1"></script>
+  <script src="systems/processors/unitMovementProcessor.js?v=animalheading1"></script>
+  <script src="systems/processors/unitCombatProcessor.js?v=three1"></script>
+  <script src="systems/processors/unitRenderProcessor.js?v=three1"></script>
+  <script src="systems/unitMovement.js?v=three1"></script>
+  <script src="systems/unitCombat.js?v=three1"></script>
+  <script src="systems/unitRender.js?v=three1"></script>
+  <script src="systems/physics.js?v=three1"></script>
+  <script src="world/map.js?v=newunits1"></script>
+  <script src="world/gameState.js?v=newunits1"></script>
+  <script src="ui/hud.js?v=newunits1"></script>
+  <script src="world/renderer3d.js?v=newunits1"></script>
+  <script src="core/gameLoop.js?v=three1"></script>
+  <script src="systems/input.js?v=castlegate1"></script>
+  <script src="core/main.js?v=three1"></script>
 </body>
 </html>

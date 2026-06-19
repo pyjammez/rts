@@ -1,0 +1,93 @@
+{
+  "sword": {
+    "name": "Sword",
+    "damage": 9,
+    "movingDamage": 6,
+    "range": 46,
+    "stopRange": 62,
+    "fireRate": 1.35,
+    "melee": true
+  },
+  "shortbow": {
+    "name": "Shortbow",
+    "damage": 8,
+    "movingDamage": 4,
+    "range": 120,
+    "stopRange": 150,
+    "fireRate": 1.2,
+    "projectileSpeed": 200,
+    "projectileColor": "#f0c35a"
+  },
+  "longbow": {
+    "name": "Longbow",
+    "damage": 7,
+    "movingDamage": 3,
+    "range": 185,
+    "stopRange": 220,
+    "fireRate": 1.45,
+    "projectileSpeed": 235,
+    "projectileColor": "#f3d47b"
+  },
+  "lance": {
+    "name": "Lance",
+    "damage": 12,
+    "movingDamage": 7,
+    "range": 72,
+    "stopRange": 95,
+    "fireRate": 0.9,
+    "projectileSpeed": 190,
+    "projectileColor": "#d8d3bd"
+  },
+  "sling": {
+    "name": "Sling",
+    "damage": 5,
+    "movingDamage": 3,
+    "range": 95,
+    "stopRange": 125,
+    "fireRate": 1.8,
+    "projectileSpeed": 260,
+    "projectileColor": "#d6c39a"
+  },
+  "pistol": {
+    "name": "Pistol",
+    "damage": 14,
+    "movingDamage": 8,
+    "range": 145,
+    "stopRange": 175,
+    "fireRate": 1.65,
+    "projectileSpeed": 430,
+    "projectileColor": "#ffd27a",
+    "projectileType": "bullet"
+  },
+  "crossbow": {
+    "name": "Crossbow",
+    "damage": 18,
+    "movingDamage": 9,
+    "range": 165,
+    "stopRange": 195,
+    "fireRate": 0.72,
+    "projectileSpeed": 300,
+    "projectileColor": "#d8c09a",
+    "projectileType": "bolt"
+  },
+  "grenade": {
+    "name": "Grenade",
+    "damage": 22,
+    "movingDamage": 14,
+    "range": 125,
+    "stopRange": 155,
+    "fireRate": 0.55,
+    "projectileSpeed": 145,
+    "projectileColor": "#454b37",
+    "projectileType": "grenade",
+    "splashRadius": 72
+  },
+  "tower_arrow": {
+    "name": "Tower Arrow",
+    "damage": 12,
+    "range": 245,
+    "attackCooldown": 1.15,
+    "projectileSpeed": 260,
+    "projectileColor": "#f3d06e"
+  }
+}

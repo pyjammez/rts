@@ -99,6 +99,9 @@ function processUnitMovement(unit, dt) {
   }
 
   const movedDistance = Math.hypot(unit.x - oldX, unit.y - oldY);
+  if (movedDistance >= 0.001) {
+    unit.setFacingFromVector(unit.x - oldX, unit.y - oldY);
+  }
   unit.updateWalkAnimation(dt, movedDistance >= 0.2);
 
   if (movedDistance < 0.2 && dist >= waypointArrivalRadius) {
@@ -115,4 +118,3 @@ function processUnitMovement(unit, dt) {
 }
 
 window.processUnitMovement = processUnitMovement;
-

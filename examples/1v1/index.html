@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Open RTS - Example 1v1</title>
+    <style>body{font-family:sans-serif}</style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import IntroScreen from '/ui/screens/IntroScreen.js';
+      import CreatePrompt from '/ui/screens/CreatePrompt.js';
+      import { generateMap } from '/generators/MapGenerator.js';
+      import { populate } from '/generators/Populator.js';
+
+      const app = document.getElementById('app');
+      const intro = new IntroScreen(app);
+      const prompt = new CreatePrompt(app);
+      intro.show();
+      intro.onCreate = () => { intro.hide(); prompt.show(); };
+      prompt.onGenerate = (cfg) => {
+        prompt.hide();
+        const map = generateMap(64, 32);
+        const placed = populate(null, map, cfg);
+        app.innerHTML = '<pre style="white-space:pre-wrap">' + JSON.stringify({map: {w: map.width, h: map.height}, placed}, null, 2) + '</pre>';
+      };
+    </script>
+  </body>
+</html>
