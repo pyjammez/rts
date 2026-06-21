@@ -36,6 +36,7 @@ class Unit {
         this.stopShootRange = 150;  // px — stops shooting beyond this distance
         this.fireRate = 1.2;        // shots per second
         this.fireCooldown = 0;
+        this.fireStance = 'attack_at_will';
         this.currentEnemy = null;
         this.attackOrderTarget = null; // Explicit attack-move target unit (locked until dead)
         this.attackRepathCooldown = 0;
@@ -51,6 +52,7 @@ class Unit {
         this.mountType = null;
         this.mountedSpeedBonus = 0;
         this.baseSpeed = speed;
+        this.inventoryItem = null;
     }
 
     setFacingFromVector(dx, dy) {
@@ -60,6 +62,41 @@ class Unit {
       } else {
         this.spriteDirectionRow = dy >= 0 ? 0 : 3;
       }
+    }
+
+    setFireStance(stance) {
+      this.fireStance = stance === 'hold_fire' ? 'hold_fire' : 'attack_at_will';
+      if (this.fireStance === 'hold_fire') {
+        this.currentEnemy = null;
+        this.attackOrderTarget = null;
+      }
+    }
+
+    pickUpItem(item) {
+      if (!item || !item.pickupable || item.isPickedUp || this.inventoryItem) return false;
+      this.inventoryItem = {
+        id: item.itemId || item.obstacleType || 'item',
+        name: item.displayName || 'Item',
+        description: item.description || '',
+        carryType: item.objectType === 'obstacle' ? 'obstacle' : 'item',
+        obstacleType: item.obstacleType || null
+      };
+      if (typeof removeCarryableWorldObject !== 'function' || !removeCarryableWorldObject(item)) {
+        this.inventoryItem = null;
+        return false;
+      }
+      return true;
+    }
+
+    dropItem() {
+      if (!this.inventoryItem || typeof dropCarriedItem !== 'function') return false;
+      const item = this.inventoryItem;
+      const distance = this.size + 14;
+      const dropX = this.x + Math.cos(this.heading || 0) * distance;
+      const dropY = this.y + Math.sin(this.heading || 0) * distance;
+      if (!dropCarriedItem(item, dropX, dropY)) return false;
+      this.inventoryItem = null;
+      return true;
     }
 
     updateWalkAnimation(dt, isMoving) {

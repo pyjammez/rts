@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>open rts</title>
-  <link rel="stylesheet" href="ui/style.css" />
+  <link rel="stylesheet" href="ui/style.css?v=southscroll1" />
 </head>
 <body>
   <div id="titleScreen" class="title-screen">
@@ -48,10 +48,26 @@
   </div>
 
   <div id="hud" class="hud" style="display: none;">
-    <div id="selectedInfo" class="hud-panel selected-info-panel" style="display: none;"></div>
-    <div class="hud-panel hud-bottom-right">
-      <div class="hud-title">Kingdom Map</div>
-      <canvas id="miniMapCanvas" width="240" height="136"></canvas>
+    <div class="hud-panel command-bar">
+      <div id="bottomEdgeScrollZone" class="bottom-edge-scroll-zone" aria-hidden="true"></div>
+      <section id="selectedInfo" class="selected-info-panel">
+        <div class="command-empty-state">No selection</div>
+      </section>
+      <section id="unitActions" class="unit-actions-panel" aria-label="Unit actions">
+        <div class="command-section-title">Actions</div>
+        <div class="stance-control" role="group" aria-label="Fire stance">
+          <button id="attackAtWillAction" class="command-action is-active" type="button" aria-pressed="true">Attack At Will</button>
+          <button id="holdFireAction" class="command-action" type="button" aria-pressed="false">Hold Fire</button>
+        </div>
+        <div class="inventory-actions">
+          <button id="pickUpItemAction" class="command-action" type="button">Pick Up Item</button>
+          <button id="dropItemAction" class="command-action" type="button">Drop Item</button>
+        </div>
+        <div id="unitActionStatus" class="unit-action-status">Select a unit</div>
+      </section>
+      <section class="command-map-panel" aria-label="Minimap">
+        <canvas id="miniMapCanvas" width="240" height="136"></canvas>
+      </section>
     </div>
   </div>
   
@@ -77,8 +93,8 @@
     window.addEventListener('resize', resizeCanvas);
   </script>
 
-  <script src="ui/gameModes.js?v=newunits1"></script>
-  <script src="ui/config.js?v=newunits1"></script>
+  <script src="ui/gameModes.js?v=versus1"></script>
+  <script src="ui/config.js?v=versus1"></script>
   <script src="ui/screens/TitleScreen.js?v=three1"></script>
   <script src="ui/screens/ModeSelectScreen.js?v=three1"></script>
   <script src="ui/screens/GameSetupScreen.js?v=three1"></script>
@@ -87,20 +103,20 @@
   <script src="ui/screens/bootstrap.js?v=three1"></script>
   <script src="ecs/entityManager.js?v=three1"></script>
   <script src="ecs/unitComponents.js?v=three1"></script>
-  <script src="entities/unit.js?v=newunits1"></script>
+  <script src="entities/unit.js?v=carryobjects1"></script>
   <script src="systems/processors/unitMovementProcessor.js?v=animalheading1"></script>
-  <script src="systems/processors/unitCombatProcessor.js?v=three1"></script>
+  <script src="systems/processors/unitCombatProcessor.js?v=commandbar1"></script>
   <script src="systems/processors/unitRenderProcessor.js?v=three1"></script>
   <script src="systems/unitMovement.js?v=three1"></script>
   <script src="systems/unitCombat.js?v=three1"></script>
   <script src="systems/unitRender.js?v=three1"></script>
   <script src="systems/physics.js?v=three1"></script>
-  <script src="world/map.js?v=newunits1"></script>
+  <script src="world/map.js?v=castlegateflow1"></script>
   <script src="world/gameState.js?v=newunits1"></script>
-  <script src="ui/hud.js?v=newunits1"></script>
-  <script src="world/renderer3d.js?v=newunits1"></script>
+  <script src="ui/hud.js?v=trackpad1"></script>
+  <script src="world/renderer3d.js?v=castlegateflow1"></script>
   <script src="core/gameLoop.js?v=three1"></script>
-  <script src="systems/input.js?v=castlegate1"></script>
-  <script src="core/main.js?v=three1"></script>
+  <script src="systems/input.js?v=trackpad1"></script>
+  <script src="core/main.js?v=southscroll1"></script>
 </body>
 </html>

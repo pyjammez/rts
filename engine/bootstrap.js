@@ -33,7 +33,7 @@ function setupUI() {
     window.mapConfig.rockCount = cfg.rocks || window.mapConfig.rockCount;
     window.mapConfig.sheepCount = cfg.sheep || window.mapConfig.sheepCount;
     window.mapConfig._unitsRequested = cfg.units || window.mapConfig._unitsRequested;
-    window.mapConfig._gameMode = cfg.mode || window.mapConfig._gameMode || '1v1';
+    window.mapConfig._gameMode = cfg.mode || window.mapConfig._gameMode || 'versus';
 
     if (typeof initializeGame === 'function') {
       initializeGame();

@@ -29,17 +29,30 @@ const gameRuntime = {
 window.gameRuntime = gameRuntime;
 
 function getEdgeScrollDirection() {
-  if (!inputState.mouseInside) {
+  if (!inputState.mouseInside && !inputState.southEdgeActive) {
     return { x: 0, y: 0 };
   }
 
   let x = 0;
   let y = 0;
+  const commandBar = document.querySelector('.command-bar');
+  const commandBarRect = commandBar?.getBoundingClientRect();
+  const commandBarVisible = !!commandBarRect &&
+    commandBarRect.width > 0 &&
+    commandBarRect.height > 0 &&
+    getComputedStyle(commandBar).display !== 'none';
+  const bottomEdge = commandBarVisible
+    ? Math.max(camera.edgeScrollMargin, Math.min(camera.viewportHeight, commandBarRect.top))
+    : camera.viewportHeight;
+  const bottomScrollMargin = Math.max(camera.edgeScrollMargin, 40);
 
-  if (inputState.mouseX <= camera.edgeScrollMargin) x -= 1;
-  if (inputState.mouseX >= camera.viewportWidth - camera.edgeScrollMargin) x += 1;
-  if (inputState.mouseY <= camera.edgeScrollMargin) y -= 1;
-  if (inputState.mouseY >= camera.viewportHeight - camera.edgeScrollMargin) y += 1;
+  if (inputState.mouseInside) {
+    if (inputState.mouseX <= camera.edgeScrollMargin) x -= 1;
+    if (inputState.mouseX >= camera.viewportWidth - camera.edgeScrollMargin) x += 1;
+    if (inputState.mouseY <= camera.edgeScrollMargin) y -= 1;
+    if (inputState.mouseY >= bottomEdge - bottomScrollMargin && inputState.mouseY <= bottomEdge) y += 1;
+  }
+  if (inputState.southEdgeActive) y = 1;
 
   return { x, y };
 }
@@ -143,6 +156,7 @@ function zoomToFullMap() {
 
 window.zoomToFullMap = zoomToFullMap;
 window.zoomAtScreenPoint = zoomAtScreenPoint;
+window.getEdgeScrollDirection = getEdgeScrollDirection;
 
 function updateCamera(dt) {
   camera.viewportWidth = canvas.width;

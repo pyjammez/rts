@@ -4,6 +4,14 @@ let miniMapCtx = null;
 let redCountEl = null;
 let blueCountEl = null;
 let selectedInfoEl = null;
+let unitActionsEl = null;
+let attackAtWillAction = null;
+let holdFireAction = null;
+let pickUpItemAction = null;
+let dropItemAction = null;
+let unitActionStatus = null;
+let actionMessage = '';
+let actionMessageUntil = 0;
 
 function initHUD() {
   hudRoot = document.getElementById('hud');
@@ -11,6 +19,38 @@ function initHUD() {
   redCountEl = document.getElementById('redCount');
   blueCountEl = document.getElementById('blueCount');
   selectedInfoEl = document.getElementById('selectedInfo');
+  unitActionsEl = document.getElementById('unitActions');
+  attackAtWillAction = document.getElementById('attackAtWillAction');
+  holdFireAction = document.getElementById('holdFireAction');
+  pickUpItemAction = document.getElementById('pickUpItemAction');
+  dropItemAction = document.getElementById('dropItemAction');
+  unitActionStatus = document.getElementById('unitActionStatus');
+  const bottomEdgeScrollZone = document.getElementById('bottomEdgeScrollZone');
+
+  const updateBottomEdgeScroll = event => {
+    inputState.mouseInside = true;
+    inputState.southEdgeActive = true;
+    inputState.mouseX = event.clientX;
+    inputState.mouseY = Math.max(0, event.currentTarget.getBoundingClientRect().bottom - 1);
+  };
+  bottomEdgeScrollZone?.addEventListener('mouseenter', updateBottomEdgeScroll);
+  bottomEdgeScrollZone?.addEventListener('mousemove', updateBottomEdgeScroll);
+  bottomEdgeScrollZone?.addEventListener('mouseleave', () => {
+    inputState.southEdgeActive = false;
+    inputState.mouseInside = false;
+  });
+  bottomEdgeScrollZone?.addEventListener('wheel', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof handleCameraGesture === 'function') {
+      handleCameraGesture(event, event.clientX, event.clientY);
+    }
+  }, { passive: false });
+
+  attackAtWillAction?.addEventListener('click', () => setSelectedUnitsFireStance('attack_at_will'));
+  holdFireAction?.addEventListener('click', () => setSelectedUnitsFireStance('hold_fire'));
+  pickUpItemAction?.addEventListener('click', pickUpNearbyItems);
+  dropItemAction?.addEventListener('click', dropSelectedUnitItems);
 
   if (miniMapCanvas) {
     miniMapCtx = miniMapCanvas.getContext('2d');
@@ -134,6 +174,16 @@ function renderMiniMap() {
     }
   }
 
+  if (Array.isArray(window.itemData)) {
+    miniMapCtx.fillStyle = '#f0c35a';
+    for (const item of window.itemData) {
+      if (item.isDead || item.isPickedUp) continue;
+      const px = (item.x / getMapWidthPx()) * w;
+      const py = (item.y / getMapHeightPx()) * h;
+      miniMapCtx.fillRect(px - 1, py - 1, 2, 2);
+    }
+  }
+
   const buildings = typeof getBuildings === 'function' ? getBuildings() : window.buildingData;
   if (Array.isArray(buildings)) {
     for (const building of buildings) {
@@ -197,17 +247,106 @@ function renderHUD() {
   if (!hudRoot || hudRoot.style.display === 'none') return;
   updateTeamCounts();
   updateSelectedInfo();
+  updateUnitActions();
   renderMiniMap();
+}
+
+function getSelectedLivingUnits() {
+  return Array.isArray(units) ? units.filter(unit => unit.selected && !unit.isDead) : [];
+}
+
+function setActionMessage(message) {
+  actionMessage = message;
+  actionMessageUntil = performance.now() + 1800;
+}
+
+function setSelectedUnitsFireStance(stance) {
+  const selectedUnits = getSelectedLivingUnits();
+  if (selectedUnits.length === 0) return;
+  selectedUnits.forEach(unit => {
+    if (typeof unit.setFireStance === 'function') unit.setFireStance(stance);
+    else unit.fireStance = stance;
+  });
+  setActionMessage(stance === 'hold_fire' ? 'Selected units will hold fire' : 'Selected units will attack at will');
+  updateUnitActions();
+}
+
+function pickUpNearbyItems() {
+  let pickedUp = 0;
+  for (const unit of getSelectedLivingUnits()) {
+    if (unit.inventoryItem || typeof getNearestCarryableObject !== 'function') continue;
+    const item = getNearestCarryableObject(unit.x, unit.y, 90);
+    if (item && typeof unit.pickUpItem === 'function' && unit.pickUpItem(item)) pickedUp++;
+  }
+  setActionMessage(pickedUp > 0 ? `${pickedUp} item${pickedUp === 1 ? '' : 's'} picked up` : 'No tree, rock, or item close enough');
+  updateUnitActions();
+}
+
+function dropSelectedUnitItems() {
+  let dropped = 0;
+  for (const unit of getSelectedLivingUnits()) {
+    if (typeof unit.dropItem === 'function' && unit.dropItem()) dropped++;
+  }
+  setActionMessage(dropped > 0 ? `${dropped} item${dropped === 1 ? '' : 's'} dropped` : 'No carried item to drop');
+  updateUnitActions();
+}
+
+function updateUnitActions() {
+  if (!unitActionsEl) return;
+  const selectedUnits = getSelectedLivingUnits();
+  const hasUnits = selectedUnits.length > 0;
+  const allHold = hasUnits && selectedUnits.every(unit => unit.fireStance === 'hold_fire');
+  const allAttack = hasUnits && selectedUnits.every(unit => unit.fireStance !== 'hold_fire');
+  const canDrop = selectedUnits.some(unit => !!unit.inventoryItem);
+  const canPickUp = selectedUnits.some(unit => !unit.inventoryItem);
+
+  for (const button of [attackAtWillAction, holdFireAction, pickUpItemAction, dropItemAction]) {
+    if (button) button.disabled = !hasUnits;
+  }
+  if (pickUpItemAction) pickUpItemAction.disabled = !canPickUp;
+  if (dropItemAction) dropItemAction.disabled = !canDrop;
+  attackAtWillAction?.classList.toggle('is-active', allAttack);
+  holdFireAction?.classList.toggle('is-active', allHold);
+  attackAtWillAction?.setAttribute('aria-pressed', String(allAttack));
+  holdFireAction?.setAttribute('aria-pressed', String(allHold));
+
+  if (!unitActionStatus) return;
+  if (performance.now() < actionMessageUntil) {
+    unitActionStatus.textContent = actionMessage;
+  } else if (!hasUnits) {
+    unitActionStatus.textContent = 'Select a unit';
+  } else {
+    const stance = allHold ? 'Hold fire' : allAttack ? 'Attack at will' : 'Mixed stance';
+    unitActionStatus.textContent = `${selectedUnits.length} selected | ${stance}`;
+  }
 }
 
 function updateSelectedInfo() {
   if (!selectedInfoEl) return;
-  const selectedUnits = Array.isArray(units)
-    ? units.filter(unit => unit.selected && !unit.isDead)
-    : [];
+  const selectedUnits = getSelectedLivingUnits();
 
   if (selectedUnits.length === 1) {
     renderSelectedUnitInfo(selectedUnits[0]);
+    return;
+  }
+
+  if (selectedUnits.length > 1) {
+    const team = selectedUnits[0].team;
+    const totalHp = selectedUnits.reduce((sum, unit) => sum + Math.max(0, unit.hp), 0);
+    const maxHp = selectedUnits.reduce((sum, unit) => sum + unit.maxHp, 0);
+    const carrying = selectedUnits.filter(unit => unit.inventoryItem).length;
+    selectedInfoEl.innerHTML = `
+      <div class="selected-info-name">
+        <span>${selectedUnits.length} ${team} units</span>
+        <span class="selected-info-tag">Selection</span>
+      </div>
+      <div class="selected-info-grid">
+        ${createInfoStat('Combined HP', `${Math.ceil(totalHp)} / ${maxHp}`)}
+        ${createInfoStat('Attack Stance', selectedUnits.every(unit => unit.fireStance === 'hold_fire') ? 'Hold fire' : 'Attack at will')}
+        ${createInfoStat('Carrying Items', `${carrying} / ${selectedUnits.length}`)}
+        ${createInfoStat('Team', team)}
+      </div>
+    `;
     return;
   }
 
@@ -237,8 +376,7 @@ function updateSelectedInfo() {
     return;
   }
 
-  selectedInfoEl.style.display = 'none';
-  selectedInfoEl.textContent = '';
+  selectedInfoEl.innerHTML = '<div class="command-empty-state">No selection</div>';
 }
 
 function createInfoStat(label, value) {
@@ -258,6 +396,7 @@ function renderSelectedUnitInfo(unit) {
     ? createInfoStat('Splash Radius', Math.round(unit.splashRadius))
     : '';
   const mountStatus = unit.mountType === 'sheep' ? 'Riding sheep' : unit.unitType === 'scout' ? 'Mounted scout' : 'On foot';
+  const inventory = unit.inventoryItem?.name || 'Empty';
 
   selectedInfoEl.style.display = 'block';
   selectedInfoEl.innerHTML = `
@@ -274,6 +413,8 @@ function renderSelectedUnitInfo(unit) {
       ${splash}
       ${createInfoStat('Speed', speed)}
       ${createInfoStat('Mount', mountStatus)}
+      ${createInfoStat('Inventory', inventory)}
+      ${createInfoStat('Fire Stance', unit.fireStance === 'hold_fire' ? 'Hold fire' : 'Attack at will')}
       ${createInfoStat('Team', unit.team)}
       ${createInfoStat('Unit Type', unit.unitType || 'soldier')}
       ${createInfoStat('Status', unit.attackOrderTarget ? 'Attacking' : unit.hasActivePath && unit.hasActivePath() ? 'Moving' : 'Idle')}
@@ -283,6 +424,7 @@ function renderSelectedUnitInfo(unit) {
 
 function renderSelectedWorldObjectInfo(object) {
   const isObstacle = object.objectType === 'obstacle';
+  const isItem = object.objectType === 'item';
   const hp = `${Math.ceil(object.hp)} / ${object.maxHp}`;
   const status = object.isDead
     ? 'Destroyed'
@@ -300,13 +442,13 @@ function renderSelectedWorldObjectInfo(object) {
   selectedInfoEl.innerHTML = `
     <div class="selected-info-name">
       <span>${object.displayName || 'World Object'}</span>
-      <span class="selected-info-tag">${isObstacle ? 'Natural obstacle' : 'Wildlife'}</span>
+      <span class="selected-info-tag">${isItem ? 'Item' : isObstacle ? 'Natural obstacle' : 'Wildlife'}</span>
     </div>
     <div class="selected-info-grid">
       ${createInfoStat('Hit Points', hp)}
       ${createInfoStat('Team', object.team || 'neutral')}
-      ${isObstacle ? createInfoStat('Material', object.material || 'Natural') : createInfoStat('Habitat', object.habitat || 'Land')}
-      ${isObstacle ? createInfoStat('Hardness', object.hardness || 'Unknown') : createInfoStat('Speed', Math.round(object.speed || 0))}
+      ${isItem ? createInfoStat('Portable', object.pickupable ? 'Yes' : 'No') : isObstacle ? createInfoStat('Material', object.material || 'Natural') : createInfoStat('Habitat', object.habitat || 'Land')}
+      ${isItem ? createInfoStat('Item Type', object.itemId || 'item') : isObstacle ? createInfoStat('Hardness', object.hardness || 'Unknown') : createInfoStat('Speed', Math.round(object.speed || 0))}
       ${createInfoStat('Status', status)}
     </div>
   `;

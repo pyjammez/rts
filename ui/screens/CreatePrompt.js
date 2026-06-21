@@ -6,9 +6,7 @@ export default class CreatePrompt {
     this.el.innerHTML = `
       <label>Mode:
         <select id="mode-select">
-          <option value="1v1">1v1</option>
-          <option value="2v2">2v2</option>
-          <option value="3v3">3v3</option>
+          <option value="versus">Versus</option>
           <option value="ctf">Capture the Flag</option>
           <option value="arena">Arena</option>
           <option value="towerDefense">Tower Defense</option>

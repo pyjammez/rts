@@ -1,4 +1,4 @@
-const DEFAULT_MODE_ID = 'skirmish_1v1';
+const DEFAULT_MODE_ID = 'versus';
 
 let selectedModeId = DEFAULT_MODE_ID;
 

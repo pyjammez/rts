@@ -238,13 +238,13 @@ const DEFAULT_TERRAIN_PRESETS = {
 };
 
 const DEFAULT_GAME_MODES = {
-  skirmish_1v1: {
-    id: 'skirmish_1v1',
-    shortName: '1v1',
-    name: '1v1 Skirmish',
-    summary: 'Classic red versus blue battle with mirrored starting bases.',
+  versus: {
+    id: 'versus',
+    shortName: 'Versus',
+    name: 'Versus',
+    summary: 'Player-versus-player battle with configurable teams and room settings.',
     playable: true,
-    startLabel: 'Begin Skirmish',
+    startLabel: 'Create Versus Room',
     teams: ['red', 'blue'],
     allowedUnits: ['soldier', 'archer', 'knight', 'scout', 'gunman', 'crossbowman', 'grenademan'],
     defaults: {
@@ -254,37 +254,7 @@ const DEFAULT_GAME_MODES = {
       treeCount: 30,
       sheepCount: 12,
       duckCount: 5,
-      startingUnitsPerTeam: 7,
-      towersPerTeam: 0,
-      homesPerTeam: 1,
-      unitRoster: {
-        soldier: 1,
-        archer: 1,
-        knight: 1,
-        scout: 1,
-        gunman: 1,
-        crossbowman: 1,
-        grenademan: 1
-      }
-    },
-    sections: ['map', 'forces', 'wildlife']
-  },
-  skirmish_2v2: {
-    id: 'skirmish_2v2',
-    shortName: '2v2',
-    name: '2v2 Skirmish',
-    summary: 'A larger team skirmish profile with doubled starting bases and forces.',
-    playable: true,
-    startLabel: 'Begin 2v2 Skirmish',
-    teams: ['red', 'blue'],
-    allowedUnits: ['soldier', 'archer', 'knight', 'scout', 'gunman', 'crossbowman', 'grenademan'],
-    defaults: {
-      mapStyle: 'coastal_grassland',
-      waterLevel: 8,
-      rockCount: 22,
-      treeCount: 46,
-      sheepCount: 16,
-      duckCount: 5,
+      playersPerTeam: 1,
       startingUnitsPerTeam: 7,
       towersPerTeam: 0,
       homesPerTeam: 1,
@@ -426,7 +396,7 @@ async function loadGameDefinitions() {
 }
 
 function getGameModeDefinition(modeId) {
-  return GAME_MODES[modeId] || GAME_MODES.skirmish_1v1;
+  return GAME_MODES[modeId] || GAME_MODES.versus;
 }
 
 function getTerrainPreset(presetId) {

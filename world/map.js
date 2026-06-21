@@ -157,6 +157,8 @@ let decorationData = [];
 let sheepData = [];
 let duckData = [];
 let horseData = [];
+let itemData = [];
+let nextWorldItemId = 1;
 let obstacleEntityData = [];
 let obstacleEntityGrid = [];
 let obstacleRevision = 0;
@@ -257,6 +259,9 @@ function regenerateMapData() {
   seedDucks();
   horseData = [];
   window.horseData = horseData;
+  itemData = [];
+  nextWorldItemId = 1;
+  window.itemData = itemData;
   rebuildObstacleEntities();
   buildingData = [];
   nextBuildingId = 1;
@@ -765,6 +770,95 @@ function getLiveHorsesNearPoint(worldX, worldY, radius) {
   );
 }
 
+function createWorldItem(item, x, y) {
+  return {
+    id: nextWorldItemId++,
+    itemId: item?.id || 'field_kit',
+    x,
+    y,
+    team: 'neutral',
+    objectType: 'item',
+    displayName: item?.name || 'Field Kit',
+    description: item?.description || 'A compact battlefield supply kit.',
+    hp: 12,
+    maxHp: 12,
+    size: 20,
+    pickupable: true,
+    isPickedUp: false,
+    isDead: false,
+    selected: false,
+    takeDamage(amount) {
+      this.hp = Math.max(0, this.hp - amount);
+      if (this.hp <= 0) {
+        this.isDead = true;
+        this.selected = false;
+        if (selectedWorldObject === this) selectedWorldObject = null;
+      }
+    }
+  };
+}
+
+function dropWorldItem(item, worldX, worldY) {
+  const point = findNearestWalkablePoint(worldX, worldY, 18);
+  if (!point) return null;
+  const worldItem = createWorldItem(item, point.x, point.y);
+  itemData.push(worldItem);
+  window.itemData = itemData;
+  return worldItem;
+}
+
+function removeWorldItem(item) {
+  const index = itemData.indexOf(item);
+  if (index < 0) return false;
+  if (selectedWorldObject === item) clearWorldObjectSelection();
+  itemData.splice(index, 1);
+  window.itemData = itemData;
+  return true;
+}
+
+function getWorldItemAtPoint(worldX, worldY) {
+  if (!Array.isArray(itemData)) return null;
+  let closest = null;
+  let closestDistance = Infinity;
+  for (const item of itemData) {
+    if (item.isDead || item.isPickedUp) continue;
+    const distance = Math.hypot(item.x - worldX, item.y - worldY);
+    if (distance <= item.size && distance < closestDistance) {
+      closest = item;
+      closestDistance = distance;
+    }
+  }
+  return closest;
+}
+
+function getNearestPickupItem(worldX, worldY, radius = 80) {
+  if (!Array.isArray(itemData)) return null;
+  let closest = null;
+  let closestDistance = radius;
+  for (const item of itemData) {
+    if (item.isDead || item.isPickedUp || !item.pickupable) continue;
+    const distance = Math.hypot(item.x - worldX, item.y - worldY);
+    if (distance <= closestDistance) {
+      closest = item;
+      closestDistance = distance;
+    }
+  }
+  return closest;
+}
+
+function drawWorldItem(item) {
+  ctx.save();
+  ctx.translate(item.x, item.y);
+  ctx.fillStyle = '#6c4524';
+  ctx.strokeStyle = '#2f1c0e';
+  ctx.lineWidth = 2;
+  ctx.fillRect(-9, -8, 18, 16);
+  ctx.strokeRect(-9, -8, 18, 16);
+  ctx.fillStyle = '#b98a42';
+  ctx.fillRect(-2, -8, 4, 16);
+  ctx.restore();
+}
+
 function obstacleSpecies(obstacleType, tileX, tileY) {
   if (obstacleType === OBSTACLE.ROCK) return 'Granite Outcrop';
   const treeKind = Math.floor(hashNoise(tileX + 83, tileY + 29) * 3);
@@ -799,6 +893,8 @@ function rebuildObstacleEntities() {
         material: isTree ? 'Wood' : 'Stone',
         hardness: isTree ? 'Medium' : 'Very high',
         team: 'neutral',
+        pickupable: true,
+        isPickedUp: false,
         hp: maxHp,
         maxHp,
         selected: false,
@@ -829,7 +925,7 @@ function getObstacleAtPoint(worldX, worldY) {
   let closest = null;
   let closestDist = Infinity;
   for (const obstacle of obstacleEntityData) {
-    if (obstacle.isDead) continue;
+    if (obstacle.isDead || obstacle.isPickedUp) continue;
     const dist = Math.hypot(obstacle.x - worldX, obstacle.y - worldY);
     if (dist <= obstacle.size && dist < closestDist) {
       closest = obstacle;
@@ -837,6 +933,79 @@ function getObstacleAtPoint(worldX, worldY) {
     }
   }
   return closest;
+}
+
+function getNearestCarryableObject(worldX, worldY, radius = 90) {
+  let closest = getNearestPickupItem(worldX, worldY, radius);
+  let closestDistance = closest ? Math.hypot(closest.x - worldX, closest.y - worldY) : Infinity;
+
+  for (const obstacle of obstacleEntityData) {
+    if (obstacle.isDead || obstacle.isPickedUp || !obstacle.pickupable) continue;
+    const distance = Math.hypot(obstacle.x - worldX, obstacle.y - worldY);
+    const reach = radius + obstacle.size * 0.5;
+    if (distance <= reach && distance < closestDistance) {
+      closest = obstacle;
+      closestDistance = distance;
+    }
+  }
+  return closest;
+}
+
+function removeCarryableWorldObject(object) {
+  if (!object || object.isDead || object.isPickedUp) return false;
+  if (object.objectType === 'item') return removeWorldItem(object);
+  if (object.objectType !== 'obstacle' || !isInsideMap(object.tileX, object.tileY)) return false;
+  if (obstacleData[object.tileY][object.tileX] !== object.obstacleType) return false;
+
+  object.isPickedUp = true;
+  object.selected = false;
+  obstacleData[object.tileY][object.tileX] = OBSTACLE.NONE;
+  if (selectedWorldObject === object) selectedWorldObject = null;
+  rebuildObstacleEntities();
+  return true;
+}
+
+function canDropObstacleAt(tileX, tileY) {
+  if (!isInsideMap(tileX, tileY)) return false;
+  if (terrainData[tileY][tileX] === TERRAIN.WATER) return false;
+  if (obstacleData[tileY][tileX] !== OBSTACLE.NONE) return false;
+  if (isTileBlockedByBuilding(tileX, tileY)) return false;
+
+  const center = tileCenter(tileX, tileY);
+  if (Array.isArray(units) && units.some(unit =>
+    !unit.isDead && Math.hypot(unit.x - center.x, unit.y - center.y) < tileSize * 0.72
+  )) return false;
+  return true;
+}
+
+function findObstacleDropTile(worldX, worldY) {
+  const originX = Math.floor(worldX / tileSize);
+  const originY = Math.floor(worldY / tileSize);
+  for (let radius = 0; radius <= 5; radius++) {
+    for (let offsetY = -radius; offsetY <= radius; offsetY++) {
+      for (let offsetX = -radius; offsetX <= radius; offsetX++) {
+        if (radius > 0 && Math.max(Math.abs(offsetX), Math.abs(offsetY)) !== radius) continue;
+        const tileX = originX + offsetX;
+        const tileY = originY + offsetY;
+        if (canDropObstacleAt(tileX, tileY)) return { tileX, tileY };
+      }
+    }
+  }
+  return null;
+}
+
+function dropCarriedObstacle(item, worldX, worldY) {
+  const site = findObstacleDropTile(worldX, worldY);
+  if (!site) return null;
+  obstacleData[site.tileY][site.tileX] = item.obstacleType;
+  decorationData[site.tileY][site.tileX] = DECOR.NONE;
+  rebuildObstacleEntities();
+  return obstacleEntityGrid[site.tileY][site.tileX] || true;
+}
+
+function dropCarriedItem(item, worldX, worldY) {
+  if (item?.carryType === 'obstacle') return dropCarriedObstacle(item, worldX, worldY);
+  return dropWorldItem(item, worldX, worldY);
 }
 
 function getObstacleRevision() {
@@ -943,14 +1112,32 @@ function canPlaceBuildingAt(type, tileX, tileY) {
     }
   }
 
+  // Castles need a clear, three-tile-wide apron so groups can actually use
+  // the gate after spawning inside the courtyard.
+  if (type === BUILDING_TYPES.HOME) {
+    const gateTileX = tileX + Math.floor(stats.width * 0.5);
+    for (let y = tileY + stats.height; y <= tileY + stats.height + 1; y++) {
+      for (let x = gateTileX - 1; x <= gateTileX + 1; x++) {
+        if (!isInsideMap(x, y)) return false;
+        if (terrainData[y][x] === TERRAIN.WATER) return false;
+        if (obstacleData[y][x] !== OBSTACLE.NONE) return false;
+        if (isTileBlockedByBuilding(x, y)) return false;
+      }
+    }
+  }
+
   return true;
 }
 
 function prepareBuildingPad(type, tileX, tileY) {
   const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
+  const gateTileX = tileX + Math.floor(stats.width * 0.5);
+  const minX = type === BUILDING_TYPES.HOME ? Math.min(tileX, gateTileX - 1) : tileX;
+  const maxX = type === BUILDING_TYPES.HOME ? Math.max(tileX + stats.width - 1, gateTileX + 1) : tileX + stats.width - 1;
+  const maxY = tileY + stats.height - 1 + (type === BUILDING_TYPES.HOME ? 2 : 0);
 
-  for (let y = tileY; y < tileY + stats.height; y++) {
-    for (let x = tileX; x < tileX + stats.width; x++) {
+  for (let y = tileY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
       if (!isInsideMap(x, y)) return false;
       terrainData[y][x] = TERRAIN.GRASS;
       obstacleData[y][x] = OBSTACLE.NONE;
@@ -1138,9 +1325,11 @@ function getCastleContainingPoint(worldX, worldY) {
   return getBuildings().find(building => isPointInsideCastle(building, worldX, worldY)) || null;
 }
 
-function getCastleDoorPoints(building) {
+function getCastleDoorPoints(building, laneIndex = 0) {
   if (!building || building.type !== BUILDING_TYPES.HOME) return null;
-  const gateTileX = building.tileX + Math.floor(building.width * 0.5);
+  const laneOffsets = [0, -1, 1];
+  const normalizedLane = Math.abs(Math.floor(Number(laneIndex) || 0)) % laneOffsets.length;
+  const gateTileX = building.tileX + Math.floor(building.width * 0.5) + laneOffsets[normalizedLane];
   return {
     inside: tileCenter(gateTileX, building.tileY + building.height - 2),
     threshold: tileCenter(gateTileX, building.tileY + building.height - 1),
@@ -1173,14 +1362,14 @@ function getCastleDoorApproach(unit, building, door) {
   return route;
 }
 
-function commandUnitIntoCastle(unit, building, destination, append = false) {
+function commandUnitIntoCastle(unit, building, destination, append = false, laneIndex = 0) {
   if (!unit || !building || !destination || unit.isDead || building.isDead) return false;
   if (isPointInsideCastle(building, unit.x, unit.y)) {
     unit.issueMoveCommand(destination.x, destination.y, { append });
     return true;
   }
 
-  const door = getCastleDoorPoints(building);
+  const door = getCastleDoorPoints(building, laneIndex);
   if (!door) return false;
   const route = [
     ...getCastleDoorApproach(unit, building, door),
@@ -1193,9 +1382,9 @@ function commandUnitIntoCastle(unit, building, destination, append = false) {
   return issueUnitRoute(unit, route, append);
 }
 
-function commandUnitOutOfCastle(unit, building, destination, append = false) {
+function commandUnitOutOfCastle(unit, building, destination, append = false, laneIndex = 0) {
   if (!unit || !building || !destination || unit.isDead || building.isDead) return false;
-  const door = getCastleDoorPoints(building);
+  const door = getCastleDoorPoints(building, laneIndex);
   if (!door) return false;
   clearCastleTopCommand(unit);
   return issueUnitRoute(unit, [door.inside, door.threshold, door.outside, destination], append);
@@ -2545,7 +2734,7 @@ function drawHomeBuildingFront(building) {
   ctx.lineWidth = 2;
   ctx.strokeRect(left + wall * 0.18, bottom - wall * 0.94, w - wall * 0.36, wall * 0.7);
 
-  const gateW = tileSize * 1.9;
+  const gateW = tileSize * 2.8;
   const gateX = -gateW * 0.5;
   const gateY = bottom - wall * 1.02;
   ctx.fillStyle = '#201711';
@@ -2741,6 +2930,12 @@ function renderWorldObjects(units, ctx, debug = {}) {
     drawList.push({ type: 'horse', sortY: horse.y + 14, horse });
   }
 
+  for (const worldItem of itemData) {
+    if (worldItem.isDead || worldItem.isPickedUp) continue;
+    if (worldItem.x < camX - 30 || worldItem.x > camX + viewWidth + 30 || worldItem.y < camY - 30 || worldItem.y > camY + viewHeight + 30) continue;
+    drawList.push({ type: 'world-item', sortY: worldItem.y + 10, worldItem });
+  }
+
   for (const building of buildingData) {
     if (building.isDead) continue;
     if (building.x < camX - 120 || building.x > camX + viewWidth + 120 || building.y < camY - 140 || building.y > camY + viewHeight + 90) continue;
@@ -2784,6 +2979,8 @@ function renderWorldObjects(units, ctx, debug = {}) {
       drawDuck(item.duck);
     } else if (item.type === 'horse') {
       drawHorse(item.horse);
+    } else if (item.type === 'world-item') {
+      drawWorldItem(item.worldItem);
     } else if (item.type === 'unit') {
       if (window.UnitComponents && window.UnitComponents.render) {
         const renderComp = window.UnitComponents.render.get(item.unit.id);

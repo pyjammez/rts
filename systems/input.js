@@ -10,7 +10,8 @@ const inputState = {
   right: false,
   mouseX: 0,
   mouseY: 0,
-  mouseInside: false
+  mouseInside: false,
+  southEdgeActive: false
 };
 
 const commandClickMarkers = [];
@@ -69,6 +70,32 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function getWheelPixelMultiplier(event) {
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return 16;
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return Math.max(1, camera.viewportHeight);
+  return 1;
+}
+
+function handleCameraGesture(event, screenX, screenY) {
+  const multiplier = getWheelPixelMultiplier(event);
+  const deltaX = event.deltaX * multiplier;
+  const deltaY = event.deltaY * multiplier;
+
+  // Chromium reports a trackpad pinch as a ctrl-modified wheel gesture.
+  if (event.ctrlKey) {
+    const zoomFactor = clamp(Math.exp(-deltaY * 0.012), 0.8, 1.25);
+    zoomAtScreenPoint(screenX, screenY, zoomFactor);
+    return;
+  }
+
+  const panScale = 1 / Math.max(0.25, camera.zoom);
+  camera.x += deltaX * panScale;
+  camera.y += deltaY * panScale;
+  if (typeof clampCameraPosition === 'function') clampCameraPosition();
+}
+
+window.handleCameraGesture = handleCameraGesture;
+
 function getFormationOffset(index, totalUnits, spacing = 36) {
   const cols = Math.max(1, Math.ceil(Math.sqrt(totalUnits)));
   const rows = Math.ceil(totalUnits / cols);
@@ -113,6 +140,7 @@ function getInspectableAtWorldPoint(worldX, worldY) {
   return (typeof getSheepAtPoint === 'function' && getSheepAtPoint(worldX, worldY)) ||
     (typeof getDuckAtPoint === 'function' && getDuckAtPoint(worldX, worldY)) ||
     (typeof getHorseAtPoint === 'function' && getHorseAtPoint(worldX, worldY)) ||
+    (typeof getWorldItemAtPoint === 'function' && getWorldItemAtPoint(worldX, worldY)) ||
     (typeof getObstacleAtPoint === 'function' && getObstacleAtPoint(worldX, worldY)) ||
     null;
 }
@@ -171,7 +199,8 @@ canvas.addEventListener('mouseenter', () => {
   inputState.mouseInside = true;
 });
 
-canvas.addEventListener('mouseleave', () => {
+canvas.addEventListener('mouseleave', event => {
+  if (event.relatedTarget?.closest?.('#bottomEdgeScrollZone')) return;
   inputState.mouseInside = false;
 });
 
@@ -182,8 +211,7 @@ canvas.addEventListener('wheel', (e) => {
   inputState.mouseX = mouse.x;
   inputState.mouseY = mouse.y;
 
-  const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-  zoomAtScreenPoint(mouse.x, mouse.y, zoomFactor);
+  handleCameraGesture(e, mouse.x, mouse.y);
 }, { passive: false });
 
 canvas.addEventListener('mouseup', (e) => {
@@ -227,6 +255,9 @@ canvas.addEventListener('mouseup', (e) => {
         const clickedHorse = typeof getHorseAtPoint === 'function'
           ? getHorseAtPoint(x, y)
           : null;
+        const clickedItem = typeof getWorldItemAtPoint === 'function'
+          ? getWorldItemAtPoint(x, y)
+          : null;
         const clickedObstacle = typeof getObstacleAtPoint === 'function'
           ? getObstacleAtPoint(x, y)
           : null;
@@ -251,7 +282,7 @@ canvas.addEventListener('mouseup', (e) => {
         }
 
         const clickedWildlife = clickedDuck;
-        const clickedInspectable = clickedSheep || clickedDuck || clickedHorse || clickedObstacle;
+        const clickedInspectable = clickedSheep || clickedDuck || clickedHorse || clickedItem || clickedObstacle;
         if (clickedSheep && selectedUnits.length > 0 && selectedTeam) {
             const rider = selectedUnits.find(u => u.team === selectedTeam && !u.mountType && !u.mountTarget);
             if (rider && typeof rider.issueMountCommand === 'function') {
@@ -451,7 +482,7 @@ canvas.addEventListener('contextmenu', (e) => {
       if (
         destination &&
         typeof commandUnitIntoCastle === 'function' &&
-        commandUnitIntoCastle(unit, clickedBuilding, destination, e.shiftKey)
+        commandUnitIntoCastle(unit, clickedBuilding, destination, e.shiftKey, index)
       ) {
         routed++;
       }
@@ -479,7 +510,7 @@ canvas.addEventListener('contextmenu', (e) => {
         typeof isPointInsideCastle === 'function' &&
         !isPointInsideCastle(occupiedCastle, destination.x, destination.y) &&
         typeof commandUnitOutOfCastle === 'function' &&
-        commandUnitOutOfCastle(unit, occupiedCastle, destination, e.shiftKey)
+        commandUnitOutOfCastle(unit, occupiedCastle, destination, e.shiftKey, index)
       ) {
         return;
       }

@@ -153,7 +153,8 @@ const RTS3D = (() => {
       pistolRound: new THREE.MeshBasicMaterial({ color: 0xffe09a }),
       bolt: new THREE.MeshStandardMaterial({ color: 0x5b3822, roughness: 0.82 }),
       grenade: new THREE.MeshStandardMaterial({ color: 0x35402d, roughness: 0.86, metalness: 0.18 }),
-      explosion: new THREE.MeshBasicMaterial({ color: 0xff9a32, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+      explosion: new THREE.MeshBasicMaterial({ color: 0xff9a32, transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
+      supply: new THREE.MeshStandardMaterial({ color: 0x76502b, roughness: 0.9 })
     };
   }
 
@@ -335,6 +336,32 @@ const RTS3D = (() => {
     fuse.rotation.z = -0.35;
   }
 
+  function addCarriedObject(parent, unit, riderY = 0) {
+    const item = unit.inventoryItem;
+    if (!item) return;
+
+    if (item.carryType === 'obstacle' && item.obstacleType === OBSTACLE.TREE) {
+      const trunk = addCylinder(parent, 0, 1.02 + riderY, -0.08, 0.07, 0.1, 0.92, state.materials.trunk, 8);
+      trunk.rotation.z = Math.PI * 0.5;
+      addSphere(parent, -0.43, 1.08 + riderY, -0.08, 0.27, state.materials.foliage, { x: 0.34, y: 0.3, z: 0.3 });
+      addSphere(parent, -0.58, 1.1 + riderY, -0.05, 0.2, state.materials.foliageLight);
+      return;
+    }
+
+    if (item.carryType === 'obstacle' && item.obstacleType === OBSTACLE.ROCK) {
+      const rock = new window.THREE.Mesh(
+        geometry('carried:rock', () => new window.THREE.DodecahedronGeometry(1, 0)),
+        state.materials.rock
+      );
+      rock.scale.set(0.28, 0.22, 0.25);
+      rock.rotation.set(0.2, 0.45, -0.15);
+      addMesh(parent, rock, 0.05, 1.12 + riderY, 0);
+      return;
+    }
+
+    addBox(parent, 0, 0.92 + riderY, -0.12, 0.32, 0.2, 0.24, state.materials.supply);
+  }
+
   function worldToScene(worldX, worldY) {
     return {
       x: (worldX - getMapWidthPx() * 0.5) * SCALE,
@@ -473,7 +500,7 @@ const RTS3D = (() => {
     const wallH = RAMPART_HEIGHT;
     const halfW = outerW * 0.5;
     const halfD = outerD * 0.5;
-    const gateW = 1.45;
+    const gateW = 2.65;
     const frontSegment = (outerW - gateW) * 0.5;
     const frontOffset = gateW * 0.5 + frontSegment * 0.5;
 
@@ -750,6 +777,7 @@ const RTS3D = (() => {
       sword.rotation.z = swing;
       addBox(group, 0.25, 0.46 + riderY, 0, 0.24, 0.05, 0.08, state.materials.wood).rotation.z = swing;
     }
+    addCarriedObject(group, unit, riderY);
     return group;
   }
 
@@ -822,12 +850,28 @@ const RTS3D = (() => {
     return group;
   }
 
+  function createWorldItem(item) {
+    const group = new window.THREE.Group();
+    const position = worldToScene(item.x, item.y);
+    group.position.set(position.x, 0, position.z);
+    if (item.selected) addSelectionRing(group, 0.34);
+    addBox(group, 0, 0.03, 0, 0.34, 0.24, 0.28, state.materials.supply);
+    addBox(group, 0, 0.27, 0, 0.38, 0.045, 0.32, state.materials.iron);
+    addBox(group, 0, 0.1, 0, 0.055, 0.17, 0.3, state.materials.iron);
+    return group;
+  }
+
   function buildDynamicWorld(units) {
     state.dynamicGroup.clear();
     for (const unit of units) state.dynamicGroup.add(createUnit(unit));
     for (const sheep of sheepData) if (!sheep.isMounted) state.dynamicGroup.add(createSheep(sheep));
     if (Array.isArray(duckData)) for (const duck of duckData) state.dynamicGroup.add(createDuck(duck));
     if (Array.isArray(horseData)) for (const horse of horseData) if (!horse.isDead) state.dynamicGroup.add(createHorse(horse));
+    if (Array.isArray(window.itemData)) {
+      for (const item of window.itemData) {
+        if (!item.isDead && !item.isPickedUp) state.dynamicGroup.add(createWorldItem(item));
+      }
+    }
     const selectedObject = typeof getSelectedWorldObject === 'function' ? getSelectedWorldObject() : null;
     if (selectedObject && selectedObject.objectType === 'obstacle') {
       const position = worldToScene(selectedObject.x, selectedObject.y);

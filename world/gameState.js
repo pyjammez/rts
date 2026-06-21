@@ -120,6 +120,7 @@ function spawnInitialUnits() {
       }
     }
   }
+
 }
 
 function spawnComparisonUnits(config) {

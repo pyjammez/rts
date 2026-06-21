@@ -33,6 +33,12 @@ function processUnitCombat(unit, dt) {
     return;
   }
 
+  if (unit.fireStance === 'hold_fire') {
+    unit.currentEnemy = null;
+    unit.attackOrderTarget = null;
+    return;
+  }
+
   if (unit.attackOrderTarget) {
     if (!unit.isEnemyValid(unit.attackOrderTarget)) {
       unit.attackOrderTarget = null;
