@@ -11,6 +11,7 @@ const RTS3D = (() => {
     geometry: new Map(),
     raycaster: null,
     groundPlane: null,
+    treeCrowns: [],
     staticSignature: '',
     initialized: false,
     threeUnavailableWarned: false
@@ -89,144 +90,12 @@ const RTS3D = (() => {
   }
 
   function createMaterials() {
-    const THREE = window.THREE;
-    const stoneMap = createStoneTexture(false);
-    const stoneBump = createStoneTexture(true);
-    const courtyardMap = createCourtyardTexture();
-
-    return {
-      ground: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 }),
-      water: new THREE.MeshPhysicalMaterial({
-        color: 0x3f86a8,
-        roughness: 0.18,
-        metalness: 0.02,
-        transparent: true,
-        opacity: 0.72,
-        depthWrite: false,
-        clearcoat: 0.55,
-        clearcoatRoughness: 0.2
-      }),
-      stone: new THREE.MeshStandardMaterial({
-        color: 0xd5cfbd,
-        map: stoneMap,
-        bumpMap: stoneBump,
-        bumpScale: 0.075,
-        roughness: 0.9,
-        metalness: 0
-      }),
-      stoneDark: new THREE.MeshStandardMaterial({
-        color: 0xaaa597,
-        map: stoneMap,
-        bumpMap: stoneBump,
-        bumpScale: 0.08,
-        roughness: 0.94
-      }),
-      stoneLight: new THREE.MeshStandardMaterial({
-        color: 0xe2dbc7,
-        map: stoneMap,
-        bumpMap: stoneBump,
-        bumpScale: 0.045,
-        roughness: 0.86
-      }),
-      courtyard: new THREE.MeshStandardMaterial({ map: courtyardMap, color: 0xa29779, roughness: 1 }),
-      wood: new THREE.MeshStandardMaterial({ color: 0x52311c, roughness: 0.88 }),
-      iron: new THREE.MeshStandardMaterial({ color: 0x242728, roughness: 0.42, metalness: 0.7 }),
-      slit: new THREE.MeshBasicMaterial({ color: 0x171713 }),
-      red: new THREE.MeshStandardMaterial({ color: 0xb92e26, roughness: 0.72 }),
-      blue: new THREE.MeshStandardMaterial({ color: 0x2c5fb5, roughness: 0.72 }),
-      skin: new THREE.MeshStandardMaterial({ color: 0xc99062, roughness: 0.82 }),
-      leather: new THREE.MeshStandardMaterial({ color: 0x3a2115, roughness: 0.93 }),
-      steel: new THREE.MeshStandardMaterial({ color: 0xaeb5b4, roughness: 0.28, metalness: 0.72 }),
-      bone: new THREE.MeshStandardMaterial({ color: 0xd9cfad, roughness: 0.92 }),
-      sheep: new THREE.MeshStandardMaterial({ color: 0xe4dfce, roughness: 1 }),
-      sheepFace: new THREE.MeshStandardMaterial({ color: 0x30251d, roughness: 0.95 }),
-      horse: new THREE.MeshStandardMaterial({ color: 0x744321, roughness: 0.95 }),
-      foliage: new THREE.MeshStandardMaterial({ color: 0x245f2d, roughness: 0.98 }),
-      foliageLight: new THREE.MeshStandardMaterial({ color: 0x3d7a37, roughness: 0.98 }),
-      trunk: new THREE.MeshStandardMaterial({ color: 0x65401f, roughness: 1 }),
-      rock: new THREE.MeshStandardMaterial({ color: 0x77766c, roughness: 0.98 }),
-      duck: new THREE.MeshStandardMaterial({ color: 0xd4bd71, roughness: 0.92 }),
-      duckHead: new THREE.MeshStandardMaterial({ color: 0x234a34, roughness: 0.88 }),
-      orange: new THREE.MeshStandardMaterial({ color: 0xe27a22, roughness: 0.8 }),
-      selection: new THREE.MeshBasicMaterial({ color: 0xf3ca4a, transparent: true, opacity: 0.9, side: THREE.DoubleSide }),
-      projectile: new THREE.MeshBasicMaterial({ color: 0xffd56b }),
-      pistolRound: new THREE.MeshBasicMaterial({ color: 0xffe09a }),
-      bolt: new THREE.MeshStandardMaterial({ color: 0x5b3822, roughness: 0.82 }),
-      grenade: new THREE.MeshStandardMaterial({ color: 0x35402d, roughness: 0.86, metalness: 0.18 }),
-      explosion: new THREE.MeshBasicMaterial({ color: 0xff9a32, transparent: true, opacity: 0.7, side: THREE.DoubleSide }),
-      supply: new THREE.MeshStandardMaterial({ color: 0x76502b, roughness: 0.9 })
-    };
-  }
-
-  function createStoneTexture(heightMap) {
-    const THREE = window.THREE;
-    const canvasTexture = document.createElement('canvas');
-    canvasTexture.width = 256;
-    canvasTexture.height = 256;
-    const textureCtx = canvasTexture.getContext('2d');
-    textureCtx.fillStyle = heightMap ? '#777' : '#b3ae9e';
-    textureCtx.fillRect(0, 0, 256, 256);
-
-    const courseH = 31;
-    for (let row = 0; row < 9; row++) {
-      const y = row * courseH;
-      const offset = row % 2 ? -24 : 0;
-      for (let col = -1; col < 7; col++) {
-        const variation = hashNoise(row * 31 + col * 17 + 7, row * 13 + col * 23 + 11);
-        const w = 45 + Math.floor(variation * 13);
-        const x = offset + col * 49;
-        const shade = heightMap ? 102 + Math.floor(variation * 52) : 158 + Math.floor(variation * 42);
-        textureCtx.fillStyle = `rgb(${shade},${heightMap ? shade : shade - 3},${heightMap ? shade : shade - 13})`;
-        textureCtx.fillRect(x + 2, y + 2, w - 4, courseH - 4);
-        textureCtx.strokeStyle = heightMap ? '#555' : 'rgba(55,50,42,0.55)';
-        textureCtx.lineWidth = 2;
-        textureCtx.strokeRect(x + 1, y + 1, w - 2, courseH - 2);
-        if (!heightMap) {
-          textureCtx.fillStyle = 'rgba(255,246,218,0.12)';
-          textureCtx.fillRect(x + 4, y + 4, w - 8, 2);
-          if (variation > 0.72) {
-            textureCtx.fillStyle = 'rgba(52,73,42,0.22)';
-            textureCtx.fillRect(x + 5, y + courseH - 8, Math.max(5, w * 0.35), 4);
-          }
-        }
-      }
-    }
-
-    const texture = new THREE.CanvasTexture(canvasTexture);
-    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(2.5, 2.5);
-    if (!heightMap) texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = Math.min(8, state.renderer?.capabilities.getMaxAnisotropy?.() || 1);
-    return texture;
-  }
-
-  function createCourtyardTexture() {
-    const THREE = window.THREE;
-    const canvasTexture = document.createElement('canvas');
-    canvasTexture.width = 192;
-    canvasTexture.height = 192;
-    const textureCtx = canvasTexture.getContext('2d');
-    textureCtx.fillStyle = '#81765f';
-    textureCtx.fillRect(0, 0, 192, 192);
-    textureCtx.strokeStyle = 'rgba(47,40,31,0.5)';
-    textureCtx.lineWidth = 2;
-    for (let y = 0; y < 192; y += 18) {
-      textureCtx.beginPath();
-      textureCtx.moveTo(0, y);
-      textureCtx.lineTo(192, y + 2);
-      textureCtx.stroke();
-      for (let x = (y / 18) % 2 ? 9 : 0; x < 192; x += 28) {
-        textureCtx.beginPath();
-        textureCtx.moveTo(x, y);
-        textureCtx.lineTo(x - 3, y + 18);
-        textureCtx.stroke();
-      }
-    }
-    const texture = new THREE.CanvasTexture(canvasTexture);
-    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(4, 4);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    return texture;
+    return OpenRTS.rendering.threeMaterials.create({
+      THREE: window.THREE,
+      renderer: state.renderer,
+      documentRef: document,
+      noise: hashNoise
+    });
   }
 
   function geometry(key, factory) {
@@ -458,12 +327,12 @@ const RTS3D = (() => {
     return [terrain];
   }
 
-  function addBattlements(parent, axis, centerX, centerZ, length, wallThickness, height, material, skipCenter = false) {
+  function addBattlements(parent, axis, centerX, centerZ, length, wallThickness, height, material, skipCenter = false, skipHalfWidth = 0.8) {
     const count = Math.max(4, Math.round(length / 0.58));
     const merlonW = Math.min(0.38, length / count * 0.62);
     for (let i = 0; i < count; i++) {
       const offset = -length * 0.5 + (i + 0.5) * (length / count);
-      if (skipCenter && Math.abs(offset) < 0.8) continue;
+      if (skipCenter && Math.abs(offset) < skipHalfWidth) continue;
       if (axis === 'x') {
         addBox(parent, centerX + offset, height, centerZ - wallThickness * 0.42, merlonW, 0.34, 0.22, material);
         addBox(parent, centerX + offset, height, centerZ + wallThickness * 0.42, merlonW, 0.34, 0.22, material);
@@ -500,7 +369,7 @@ const RTS3D = (() => {
     const wallH = RAMPART_HEIGHT;
     const halfW = outerW * 0.5;
     const halfD = outerD * 0.5;
-    const gateW = 2.65;
+    const gateW = 3.05;
     const frontSegment = (outerW - gateW) * 0.5;
     const frontOffset = gateW * 0.5 + frontSegment * 0.5;
 
@@ -520,7 +389,7 @@ const RTS3D = (() => {
     addBattlements(group, 'x', 0, -halfD, outerW, wallT, wallH + 0.09, state.materials.stone);
     addBattlements(group, 'z', -halfW, 0, outerD, wallT, wallH + 0.09, state.materials.stone);
     addBattlements(group, 'z', halfW, 0, outerD, wallT, wallH + 0.09, state.materials.stone);
-    addBattlements(group, 'x', 0, halfD, outerW, wallT, wallH + 0.09, state.materials.stone, true);
+    addBattlements(group, 'x', 0, halfD, outerW, wallT, wallH + 0.09, state.materials.stone, true, gateW * 0.56);
 
     const towerRadius = 0.72;
     const towerHeight = 1.65;
@@ -552,18 +421,32 @@ const RTS3D = (() => {
     addBattlements(group, 'z', -keepW * 0.5, -halfD + wallT * 1.25, keepD, keepW, 2.29, state.materials.stone);
     addBattlements(group, 'z', keepW * 0.5, -halfD + wallT * 1.25, keepD, keepW, 2.29, state.materials.stone);
 
-    addBox(group, 0, 0, halfD + wallT * 0.15, gateW + 0.72, 1.72, 0.72, state.materials.stoneDark);
-    addBox(group, 0, 1.72, halfD + wallT * 0.15, gateW + 0.84, 0.1, 0.82, state.materials.stoneLight);
-    addBattlements(group, 'x', 0, halfD + wallT * 0.15, gateW + 0.78, 0.82, 1.82, state.materials.stone);
+    const gatehouseZ = halfD + wallT * 0.15;
+    const gatePillarW = 0.62;
+    const gatehouseH = 1.88;
+    const openingShoulderY = 0.82;
+    addBox(group, -(gateW + gatePillarW) * 0.5, 0, gatehouseZ, gatePillarW, gatehouseH, 0.82, state.materials.stoneDark);
+    addBox(group, (gateW + gatePillarW) * 0.5, 0, gatehouseZ, gatePillarW, gatehouseH, 0.82, state.materials.stoneDark);
+    addBox(group, 0, 1.48, gatehouseZ, gateW + gatePillarW * 2, 0.4, 0.82, state.materials.stoneDark);
+    addBox(group, 0, gatehouseH, gatehouseZ, gateW + gatePillarW * 2 + 0.12, 0.1, 0.9, state.materials.stoneLight);
+    addBattlements(group, 'x', 0, gatehouseZ, gateW + gatePillarW * 2, 0.9, gatehouseH + 0.1, state.materials.stone);
 
-    addBox(group, 0, 0.05, halfD + wallT * 0.54, gateW * 0.68, 0.86, 0.04, state.materials.slit).material = state.materials.slit;
-    addSphere(group, 0, 0.88, halfD + wallT * 0.56, gateW * 0.34, state.materials.slit, {
-      x: gateW * 0.34,
-      y: gateW * 0.34,
-      z: 0.035
-    });
-    for (let i = -3; i <= 3; i++) {
-      addBox(group, i * gateW * 0.09, 0.08, halfD + wallT * 0.59, 0.025, 0.82, 0.025, state.materials.iron);
+    // Individual voussoirs form a real arch while leaving the doorway empty.
+    const archRadiusX = gateW * 0.5 + 0.02;
+    const archRadiusY = 0.7;
+    for (let i = 0; i < 11; i++) {
+      const angle = i / 10 * Math.PI;
+      const stone = addBox(
+        group,
+        Math.cos(angle) * archRadiusX,
+        openingShoulderY + Math.sin(angle) * archRadiusY,
+        gatehouseZ + 0.43,
+        0.38,
+        0.26,
+        0.18,
+        i === 5 ? state.materials.stoneLight : state.materials.stone
+      );
+      stone.rotation.z = angle - Math.PI * 0.5;
     }
 
     for (const slitX of [-outerW * 0.28, 0, outerW * 0.28]) addArrowSlit(group, slitX, 0.7, -halfD - wallT * 0.505, 'front');
@@ -626,31 +509,184 @@ const RTS3D = (() => {
     return group;
   }
 
+  function addBranchBetween(parent, start, end, radius, material = state.materials.trunk, segments = 8) {
+    const THREE = window.THREE;
+    const direction = new THREE.Vector3(end.x - start.x, end.y - start.y, end.z - start.z);
+    const length = direction.length();
+    if (length <= 0.001) return null;
+    const mesh = new THREE.Mesh(
+      geometry(`tree-branch:${radius.toFixed(3)}:${length.toFixed(3)}:${segments}`, () =>
+        new THREE.CylinderGeometry(radius * 0.72, radius, length, segments)
+      ),
+      material
+    );
+    mesh.position.set(
+      (start.x + end.x) * 0.5,
+      (start.y + end.y) * 0.5,
+      (start.z + end.z) * 0.5
+    );
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
+  }
+
+  function addTreeGroundShadow(parent, radiusX, radiusZ) {
+    const THREE = window.THREE;
+    const shadow = new THREE.Mesh(
+      geometry('tree-ground-shadow', () => new THREE.CircleGeometry(1, 32)),
+      state.materials.treeShadow
+    );
+    shadow.rotation.x = -Math.PI * 0.5;
+    shadow.position.y = 0.018;
+    shadow.scale.set(radiusX, radiusZ, 1);
+    shadow.renderOrder = 1;
+    parent.add(shadow);
+  }
+
+  function registerTreeCrown(crown, tileX, tileY, strength) {
+    crown.userData.windPhase = hashNoise(tileX + 503, tileY + 907) * Math.PI * 2;
+    crown.userData.windStrength = strength;
+    crown.userData.baseRotationX = crown.rotation.x;
+    crown.userData.baseRotationZ = crown.rotation.z;
+    state.treeCrowns.push(crown);
+  }
+
+  function addOakTree(group, tileX, tileY, height) {
+    const THREE = window.THREE;
+    const trunkHeight = height * 0.62;
+    addCylinder(group, 0, 0, 0, 0.105, 0.19, trunkHeight, state.materials.trunk, 12);
+
+    const crown = new THREE.Group();
+    const branchEnds = [
+      { x: -0.55, y: height * 0.7, z: 0.18 },
+      { x: 0.52, y: height * 0.73, z: -0.2 },
+      { x: -0.18, y: height * 0.9, z: -0.42 },
+      { x: 0.22, y: height * 0.94, z: 0.4 }
+    ];
+    for (let i = 0; i < branchEnds.length; i++) {
+      addBranchBetween(group, { x: 0, y: trunkHeight * (0.62 + i * 0.07), z: 0 }, branchEnds[i], 0.065 - i * 0.006);
+    }
+
+    const cardGeometry = geometry('tree:oak-foliage-card', () => new THREE.PlaneGeometry(1, 1));
+    const cardCount = 7;
+    for (let i = 0; i < cardCount; i++) {
+      const angle = i / cardCount * Math.PI * 2 + hashNoise(tileX + i * 19, tileY + 61) * 0.45;
+      const radial = i < 3 ? 0.28 : 0.5;
+      const card = new THREE.Mesh(cardGeometry, i % 3 === 0 ? state.materials.oakFoliageShade : state.materials.oakFoliage);
+      card.position.set(
+        Math.cos(angle) * radial,
+        height * (0.72 + hashNoise(tileX + i * 7, tileY + 97) * 0.2),
+        Math.sin(angle) * radial
+      );
+      const width = 1.05 + hashNoise(tileX + i * 31, tileY + 13) * 0.42;
+      card.scale.set(width, width * (0.82 + hashNoise(tileX + 43, tileY + i) * 0.18), 1);
+      card.rotation.y = angle + Math.PI * 0.5;
+      card.rotation.z = (hashNoise(tileX + i, tileY + 211) - 0.5) * 0.2;
+      card.castShadow = true;
+      crown.add(card);
+    }
+    group.add(crown);
+    registerTreeCrown(crown, tileX, tileY, 0.018);
+  }
+
+  function addPineTree(group, tileX, tileY, height) {
+    const THREE = window.THREE;
+    addCylinder(group, 0, 0, 0, 0.07, 0.15, height * 0.9, state.materials.trunk, 11);
+    const crown = new THREE.Group();
+    const layers = 6;
+    for (let i = 0; i < layers; i++) {
+      const progress = i / (layers - 1);
+      const radius = 0.84 - progress * 0.55 + hashNoise(tileX + i * 23, tileY + 47) * 0.08;
+      const layer = new THREE.Mesh(
+        geometry(`tree:pine-layer:${i}`, () => new THREE.ConeGeometry(1, 1, 10)),
+        i % 2 ? state.materials.foliage : state.materials.foliageLight
+      );
+      layer.scale.set(radius, height * (0.22 - progress * 0.04), radius * (0.9 + hashNoise(tileX + 17, tileY + i) * 0.18));
+      layer.position.set(
+        (hashNoise(tileX + i * 37, tileY + 71) - 0.5) * 0.12,
+        height * (0.32 + progress * 0.12),
+        (hashNoise(tileX + 89, tileY + i * 29) - 0.5) * 0.12
+      );
+      layer.rotation.y = hashNoise(tileX + i, tileY + 131) * Math.PI;
+      layer.castShadow = true;
+      crown.add(layer);
+    }
+    crown.add(new THREE.Mesh(
+      geometry('tree:pine-tip', () => new THREE.ConeGeometry(0.32, 0.72, 9)),
+      state.materials.foliageLight
+    ));
+    crown.children[crown.children.length - 1].position.y = height * 0.91;
+    crown.children[crown.children.length - 1].castShadow = true;
+    group.add(crown);
+    registerTreeCrown(crown, tileX, tileY, 0.009);
+  }
+
+  function palmFrondGeometry() {
+    const THREE = window.THREE;
+    const positions = new Float32Array([
+      0, 0, 0,
+      0.28, 0.04, -0.18,
+      0.28, 0.04, 0.18,
+      0.72, -0.03, -0.15,
+      0.72, -0.03, 0.15,
+      1.12, -0.25, 0
+    ]);
+    const geometryValue = new THREE.BufferGeometry();
+    geometryValue.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometryValue.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4, 3, 5, 4]);
+    geometryValue.computeVertexNormals();
+    return geometryValue;
+  }
+
+  function addPalmTree(group, tileX, tileY, height) {
+    const THREE = window.THREE;
+    const trunkHeight = height * 0.82;
+    const trunk = addCylinder(group, 0, 0, 0, 0.09, 0.16, trunkHeight, state.materials.trunk, 12);
+    trunk.rotation.z = (hashNoise(tileX + 307, tileY + 109) - 0.5) * 0.08;
+
+    const crown = new THREE.Group();
+    crown.position.y = trunkHeight;
+    const frondGeometry = geometry('tree:palm-frond', palmFrondGeometry);
+    for (let i = 0; i < 9; i++) {
+      const angle = i / 9 * Math.PI * 2 + hashNoise(tileX + i * 17, tileY + 313) * 0.18;
+      const frond = new THREE.Mesh(frondGeometry, i % 3 === 0 ? state.materials.foliageLight : state.materials.foliage);
+      frond.rotation.y = -angle;
+      frond.scale.set(0.9 + hashNoise(tileX + i * 41, tileY + 5) * 0.28, 1, 0.85 + hashNoise(tileX + 11, tileY + i) * 0.25);
+      frond.castShadow = true;
+      crown.add(frond);
+      const end = {
+        x: Math.cos(angle) * frond.scale.x,
+        y: -0.16,
+        z: -Math.sin(angle) * frond.scale.x
+      };
+      addBranchBetween(crown, { x: 0, y: 0, z: 0 }, end, 0.022, state.materials.trunk, 6);
+    }
+    addSphere(crown, 0, 0.02, 0, 0.22, state.materials.foliage, { x: 0.28, y: 0.2, z: 0.28 });
+    group.add(crown);
+    registerTreeCrown(crown, tileX, tileY, 0.026);
+  }
+
   function createTree(tileX, tileY) {
     const THREE = window.THREE;
     const center = tileCenter(tileX, tileY);
     const position = worldToScene(center.x, center.y);
     const group = new THREE.Group();
-    group.position.set(position.x, 0, position.z);
+    const jitterX = (hashNoise(tileX + 151, tileY + 263) - 0.5) * 0.16;
+    const jitterZ = (hashNoise(tileX + 379, tileY + 443) - 0.5) * 0.16;
+    group.position.set(position.x + jitterX, 0, position.z + jitterZ);
+    group.rotation.y = hashNoise(tileX + 719, tileY + 827) * Math.PI * 2;
     const kind = Math.floor(hashNoise(tileX + 83, tileY + 29) * 3);
-    const height = 1.65 + hashNoise(tileX + 17, tileY + 41) * 0.75;
-    addCylinder(group, 0, 0, 0, 0.1, 0.15, height * 0.58, state.materials.trunk, 9);
-    if (kind === 0) {
-      for (let i = 0; i < 3; i++) {
-        addCylinder(group, 0, height * (0.28 + i * 0.18), 0, 0.08, 0.62 - i * 0.1, 0.8, i % 2 ? state.materials.foliageLight : state.materials.foliage, 12);
-      }
-    } else if (kind === 1) {
-      addSphere(group, 0, height * 0.72, 0, 0.75, state.materials.foliage, { x: 0.78, y: 0.62, z: 0.72 });
-      addSphere(group, -0.38, height * 0.66, 0.12, 0.48, state.materials.foliageLight);
-      addSphere(group, 0.4, height * 0.7, -0.08, 0.5, state.materials.foliage);
-    } else {
-      for (let i = 0; i < 7; i++) {
-        const angle = i / 7 * Math.PI * 2;
-        const leaf = addBox(group, Math.cos(angle) * 0.32, height * 0.61, Math.sin(angle) * 0.32, 0.85, 0.08, 0.23, state.materials.foliageLight);
-        leaf.rotation.y = -angle;
-        leaf.rotation.z = Math.sin(angle) * 0.22;
-      }
-    }
+    const height = 2.25 + hashNoise(tileX + 17, tileY + 41) * 0.85;
+    const widthScale = 0.9 + hashNoise(tileX + 971, tileY + 593) * 0.24;
+    group.scale.x = widthScale;
+    group.scale.z = 0.92 + hashNoise(tileX + 641, tileY + 733) * 0.2;
+    addTreeGroundShadow(group, kind === 0 ? 0.72 : 0.88, kind === 0 ? 0.5 : 0.62);
+
+    if (kind === 0) addPineTree(group, tileX, tileY, height);
+    else if (kind === 1) addOakTree(group, tileX, tileY, height);
+    else addPalmTree(group, tileX, tileY, height);
     return group;
   }
 
@@ -678,6 +714,7 @@ const RTS3D = (() => {
 
   function buildStaticWorld() {
     state.staticGroup.clear();
+    state.treeCrowns = [];
     state.staticGroup.add(...createTerrainMeshes());
 
     for (let y = 0; y < MAP_ROWS; y++) {
@@ -693,7 +730,7 @@ const RTS3D = (() => {
   }
 
   function staticWorldSignature() {
-    const buildings = getBuildings().map(building => `${building.id}:${building.isDead ? 1 : 0}`).join(',');
+    const buildings = getBuildings().map(building => `${building.id}:${building.isDead ? 1 : 0}:${building.upgradeLevel || 0}`).join(',');
     const obstacles = typeof getObstacleRevision === 'function' ? getObstacleRevision() : 0;
     return `${MAP_SEED}:${MAP_COLS}:${MAP_ROWS}:${buildings}:${obstacles}:${JSON.stringify({
       terrainPreset: mapConfig?.terrainPreset || '',
@@ -759,6 +796,19 @@ const RTS3D = (() => {
     addBox(group, 0.09, 0.04 + riderY, stride, 0.09, 0.28, 0.09, state.materials.leather);
     addCylinder(group, 0, 0.28 + riderY, 0, type === 'knight' ? 0.22 : 0.18, type === 'knight' ? 0.24 : 0.2, type === 'knight' ? 0.62 : 0.52, teamMaterial, 12);
     addSphere(group, 0, 0.93 + riderY, 0, 0.14, state.materials.skin);
+    if (type === 'king') {
+      addCylinder(group, 0, 1.02 + riderY, 0, 0.17, 0.17, 0.11, state.materials.gold, 12);
+      for (let i = 0; i < 5; i++) {
+        const angle = i / 5 * Math.PI * 2;
+        const point = new THREE.Mesh(
+          geometry('unit:king-crown-point', () => new THREE.ConeGeometry(0.055, 0.2, 6)),
+          state.materials.gold
+        );
+        point.position.set(Math.cos(angle) * 0.13, 1.19 + riderY, Math.sin(angle) * 0.13);
+        point.castShadow = true;
+        group.add(point);
+      }
+    }
     if (type === 'knight') {
       addCylinder(group, 0, 0.89 + riderY, 0, 0.15, 0.17, 0.17, state.materials.steel, 12);
       addCylinder(group, -0.25, 0.45 + riderY, 0, 0.18, 0.18, 0.05, state.materials.steel, 16).rotation.z = Math.PI * 0.5;
@@ -819,6 +869,58 @@ const RTS3D = (() => {
     return group;
   }
 
+  function createRoast(roast) {
+    const THREE = window.THREE;
+    const group = new THREE.Group();
+    const position = worldToScene(roast.x, roast.y);
+    group.position.set(position.x, 0, position.z);
+
+    const logA = addCylinder(group, 0, 0.035, 0, 0.08, 0.1, 0.9, state.materials.wood, 8);
+    logA.rotation.z = Math.PI * 0.5;
+    logA.rotation.y = Math.PI * 0.25;
+    const logB = addCylinder(group, 0, 0.04, 0, 0.08, 0.1, 0.9, state.materials.wood, 8);
+    logB.rotation.z = Math.PI * 0.5;
+    logB.rotation.y = -Math.PI * 0.25;
+
+    const flicker = 1 + Math.sin(roast.age * 12.5) * 0.12;
+    const outerFlame = new THREE.Mesh(
+      geometry('roast:flame-outer', () => new THREE.ConeGeometry(0.3, 0.78, 9)),
+      state.materials.flameOrange
+    );
+    outerFlame.position.y = 0.4;
+    outerFlame.scale.set(1, flicker, 1);
+    outerFlame.rotation.y = roast.age * 1.7;
+    group.add(outerFlame);
+    const innerFlame = new THREE.Mesh(
+      geometry('roast:flame-inner', () => new THREE.ConeGeometry(0.16, 0.5, 8)),
+      state.materials.flameYellow
+    );
+    innerFlame.position.set(0.04, 0.3, -0.02);
+    innerFlame.scale.y = 1.05 + Math.cos(roast.age * 15) * 0.13;
+    group.add(innerFlame);
+
+    for (const side of [-1, 1]) {
+      addBranchBetween(group, { x: side * 0.62, y: 0.02, z: 0 }, { x: side * 0.62, y: 0.95, z: 0 }, 0.035, state.materials.wood, 7);
+    }
+    const spit = addCylinder(group, 0, 0.82, 0, 0.025, 0.025, 1.55, state.materials.iron, 8);
+    spit.rotation.z = Math.PI * 0.5;
+
+    const roastAssembly = new THREE.Group();
+    roastAssembly.position.y = 0.82;
+    roastAssembly.rotation.x = roast.rotation;
+    addSphere(roastAssembly, 0, 0, 0, 0.34, state.materials.roast, { x: 0.58, y: 0.28, z: 0.3 });
+    addSphere(roastAssembly, 0.46, 0, 0, 0.13, state.materials.roast);
+    for (const x of [-0.3, -0.1, 0.12, 0.32]) {
+      const stripe = addBox(roastAssembly, x, -0.2, 0.22, 0.045, 0.4, 0.035, state.materials.roastLight);
+      stripe.rotation.z = -0.22;
+    }
+    for (const [x, z] of [[-0.28, -0.18], [-0.28, 0.18], [0.25, -0.18], [0.25, 0.18]]) {
+      addBox(roastAssembly, x, -0.04, z, 0.055, 0.28, 0.055, state.materials.roastLight);
+    }
+    group.add(roastAssembly);
+    return group;
+  }
+
   function createDuck(duck) {
     const group = new window.THREE.Group();
     const position = worldToScene(duck.x, duck.y);
@@ -865,6 +967,7 @@ const RTS3D = (() => {
     state.dynamicGroup.clear();
     for (const unit of units) state.dynamicGroup.add(createUnit(unit));
     for (const sheep of sheepData) if (!sheep.isMounted) state.dynamicGroup.add(createSheep(sheep));
+    for (const roast of OpenRTS.systems.cooking.getRoasts()) state.dynamicGroup.add(createRoast(roast));
     if (Array.isArray(duckData)) for (const duck of duckData) state.dynamicGroup.add(createDuck(duck));
     if (Array.isArray(horseData)) for (const horse of horseData) if (!horse.isDead) state.dynamicGroup.add(createHorse(horse));
     if (Array.isArray(window.itemData)) {
@@ -880,7 +983,7 @@ const RTS3D = (() => {
       addSelectionRing(marker, selectedObject.obstacleType === OBSTACLE.TREE ? 0.78 : 0.64);
       state.dynamicGroup.add(marker);
     }
-    for (const bullet of bullets) {
+    for (const bullet of OpenRTS.systems.projectiles.getProjectiles()) {
       if (bullet.dead) continue;
       const position = worldToScene(bullet.x, bullet.y);
       if (bullet.projectileType === 'grenade') {
@@ -899,8 +1002,9 @@ const RTS3D = (() => {
         addSphere(state.dynamicGroup, position.x, 0.35, position.z, radius, material);
       }
     }
-    if (Array.isArray(window.impactEffects)) {
-      for (const effect of window.impactEffects) {
+    const impactEffects = OpenRTS.systems.projectiles.getImpactEffects();
+    if (Array.isArray(impactEffects)) {
+      for (const effect of impactEffects) {
         if (effect.type !== 'explosion') continue;
         const position = worldToScene(effect.x, effect.y);
         const progress = Math.min(1, effect.age / effect.duration);
@@ -937,6 +1041,16 @@ const RTS3D = (() => {
     state.camera.updateMatrixWorld();
   }
 
+  function updateTreeWind() {
+    const time = performance.now() * 0.001;
+    for (const crown of state.treeCrowns) {
+      const phase = crown.userData.windPhase || 0;
+      const strength = crown.userData.windStrength || 0;
+      crown.rotation.z = crown.userData.baseRotationZ + Math.sin(time * 0.72 + phase) * strength;
+      crown.rotation.x = crown.userData.baseRotationX + Math.cos(time * 0.53 + phase * 1.3) * strength * 0.55;
+    }
+  }
+
   function render3DScene(units) {
     if (!init3DRenderer()) return false;
     const signature = staticWorldSignature();
@@ -945,9 +1059,21 @@ const RTS3D = (() => {
       state.staticSignature = signature;
     }
     buildDynamicWorld(units);
+    updateTreeWind();
     updateCameraMatrices();
     state.renderer.render(state.scene, state.camera);
-    draw3DOverlay(units);
+    OpenRTS.rendering.threeOverlay.draw({
+      ctx,
+      canvas,
+      units,
+      buildings: getBuildings(),
+      selectedObject: typeof getSelectedWorldObject === 'function' ? getSelectedWorldObject() : null,
+      markers: typeof getCommandClickMarkers === 'function' ? getCommandClickMarkers() : [],
+      projectWorld,
+      towerType: BUILDING_TYPES.TOWER,
+      treeType: OBSTACLE.TREE,
+      rampartHeight: RAMPART_HEIGHT
+    });
     return true;
   }
 
@@ -961,70 +1087,6 @@ const RTS3D = (() => {
       x: (projected.x * 0.5 + 0.5) * canvas.width,
       y: (-projected.y * 0.5 + 0.5) * canvas.height
     };
-  }
-
-  function draw3DOverlay(units) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const building of getBuildings()) {
-      if (building.isDead || !building.selected) continue;
-      const point = projectWorld(building.x, building.y, building.type === BUILDING_TYPES.TOWER ? 2.9 : 2.5);
-      if (point) drawOverlayBar(point.x, point.y, Math.ceil(building.hp), building.maxHp, 76);
-    }
-    for (const unit of units) {
-      if (unit.isDead || !unit.selected) continue;
-      const elevation = unit.castleTopReached ? RAMPART_HEIGHT : 0;
-      const point = projectWorld(unit.x, unit.y, 1.2 + elevation);
-      if (point) drawOverlayBar(point.x, point.y, Math.ceil(unit.hp), unit.maxHp, 44, false);
-    }
-    const selectedObject = typeof getSelectedWorldObject === 'function' ? getSelectedWorldObject() : null;
-    if (selectedObject) {
-      const height = selectedObject.objectType === 'obstacle'
-        ? selectedObject.obstacleType === OBSTACLE.TREE ? 2.45 : 0.85
-        : selectedObject.displayName === 'Horse' ? 1.0 : 0.72;
-      const point = projectWorld(selectedObject.x, selectedObject.y, height);
-      if (point) drawOverlayBar(point.x, point.y, Math.ceil(selectedObject.hp), selectedObject.maxHp, 54);
-    }
-    draw3DCommandClickMarkers();
-  }
-
-  function draw3DCommandClickMarkers() {
-    if (typeof getCommandClickMarkers !== 'function') return;
-    for (const marker of getCommandClickMarkers()) {
-      const point = projectWorld(marker.x, marker.y, 0.08);
-      if (!point) continue;
-      const t = marker.age / marker.duration;
-      const radius = marker.startRadius + (marker.endRadius - marker.startRadius) * t;
-      const alpha = 1 - t;
-      ctx.save();
-      ctx.strokeStyle = marker.color === 'red' ? `rgba(255,74,74,${alpha})` : `rgba(91,224,120,${alpha})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(point.x, point.y, Math.max(5, radius * 0.9), Math.max(3, radius * 0.36), 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-
-  function drawOverlayBar(x, y, hp, maxHp, width, showNumbers = true) {
-    const ratio = Math.max(0, Math.min(1, hp / maxHp));
-    ctx.save();
-    if (showNumbers) {
-      ctx.font = 'bold 12px Georgia, "Times New Roman", serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(42,25,12,0.86)';
-      ctx.strokeText(`${hp} / ${maxHp}`, x, y - 5);
-      ctx.fillStyle = '#fff0c9';
-      ctx.fillText(`${hp} / ${maxHp}`, x, y - 5);
-    }
-    ctx.fillStyle = 'rgba(41,24,12,0.92)';
-    ctx.fillRect(x - width * 0.5, y, width, 7);
-    ctx.fillStyle = ratio > 0.5 ? '#5bbf55' : ratio > 0.25 ? '#d8a733' : '#a8362e';
-    ctx.fillRect(x - width * 0.5, y, width * ratio, 7);
-    ctx.strokeStyle = 'rgba(255,225,151,0.82)';
-    ctx.strokeRect(x - width * 0.5, y, width, 7);
-    ctx.restore();
   }
 
   function is3DWorldPointVisible(worldX, worldY, height = 0) {

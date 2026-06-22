@@ -1,7 +1,20 @@
 const tileSize = 32;
 const MAP_ROWS = 34;
 const MAP_COLS = 60;
-const MAP_SEED = Math.floor(Math.random() * 4294967295);
+let MAP_SEED = 0;
+const worldRuntime = OpenRTS.world.runtime.configure({ tileSize, rows: MAP_ROWS, columns: MAP_COLS });
+
+function replaceWorldCollection(name, value) {
+  return worldRuntime.replace(name, value);
+}
+
+function worldRandom() {
+  return OpenRTS.random.stream('world').next();
+}
+
+function wildlifeRandom() {
+  return OpenRTS.random.stream('wildlife').next();
+}
 
 const TERRAIN = {
   WATER: 0,
@@ -80,38 +93,15 @@ tileSprites.wallDark.src = 'assets/wall_dark.png';
 tileSprites.unit.src = 'assets/unit_sprites.svg';
 
 function hashNoise(x, y, seed = MAP_SEED) {
-  let h = (x * 374761393 + y * 668265263 + seed * 1597334677) >>> 0;
-  h ^= h >>> 13;
-  h = (h * 1274126177) >>> 0;
-  h ^= h >>> 16;
-  return h / 4294967295;
+  return OpenRTS.world.terrain.hashNoise(x, y, seed);
 }
 
 function smoothValueNoise(x, y, scale) {
-  const nx = x / scale;
-  const ny = y / scale;
-  const x0 = Math.floor(nx);
-  const y0 = Math.floor(ny);
-  const x1 = x0 + 1;
-  const y1 = y0 + 1;
-  const fx = nx - x0;
-  const fy = ny - y0;
-
-  const n00 = hashNoise(x0, y0);
-  const n10 = hashNoise(x1, y0);
-  const n01 = hashNoise(x0, y1);
-  const n11 = hashNoise(x1, y1);
-
-  const ix0 = n00 + (n10 - n00) * fx;
-  const ix1 = n01 + (n11 - n01) * fx;
-  return ix0 + (ix1 - ix0) * fy;
+  return OpenRTS.world.terrain.smoothValueNoise(x, y, scale, MAP_SEED);
 }
 
 function fbmNoise(x, y) {
-  const n1 = smoothValueNoise(x, y, 7);
-  const n2 = smoothValueNoise(x + 31, y + 17, 13);
-  const n3 = smoothValueNoise(x + 59, y + 41, 23);
-  return n1 * 0.55 + n2 * 0.3 + n3 * 0.15;
+  return OpenRTS.world.terrain.fbmNoise(x, y, MAP_SEED);
 }
 
 function terrainName(terrainType) {
@@ -122,48 +112,40 @@ function terrainName(terrainType) {
 }
 
 function generateTerrainTile(x, y) {
-  const height = fbmNoise(x + 0.5, y + 0.5);
-  const thresholds = mapConfig.terrain;
-
-  if (height < thresholds.water) return TERRAIN.WATER;
-  if (height < thresholds.sand) return TERRAIN.SAND;
-  if (height < thresholds.grass) return TERRAIN.GRASS;
-  return TERRAIN.DIRT;
+  return OpenRTS.world.terrain.typeAt(x + 0.5, y + 0.5, {
+    seed: MAP_SEED,
+    thresholds: mapConfig.terrain,
+    types: TERRAIN
+  });
 }
 
 function generateVisualTerrainType(worldX, worldY) {
-  const height = fbmNoise(worldX / tileSize, worldY / tileSize);
-  const thresholds = mapConfig.terrain;
-
-  if (height < thresholds.water) return TERRAIN.WATER;
-  if (height < thresholds.sand) return TERRAIN.SAND;
-  if (height < thresholds.grass) return TERRAIN.GRASS;
-  return TERRAIN.DIRT;
+  return OpenRTS.world.terrain.typeAt(worldX / tileSize, worldY / tileSize, {
+    seed: MAP_SEED,
+    thresholds: mapConfig.terrain,
+    types: TERRAIN
+  });
 }
 
-// Shuffles an array in place using Math.random
 function shuffleArray(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
+  return OpenRTS.random.stream('world').shuffle(arr);
 }
 
 // Placeholder arrays - will be regenerated when game starts
-let terrainData = [];
-let obstacleData = [];
-let decorationData = [];
-let sheepData = [];
-let duckData = [];
-let horseData = [];
-let itemData = [];
+let terrainData = replaceWorldCollection('terrain', []);
+let obstacleData = replaceWorldCollection('obstacles', []);
+let decorationData = replaceWorldCollection('decorations', []);
+let sheepData = replaceWorldCollection('sheep', []);
+let duckData = replaceWorldCollection('ducks', []);
+let horseData = replaceWorldCollection('horses', []);
+let itemData = replaceWorldCollection('items', []);
+let nextWildlifeId = 1;
 let nextWorldItemId = 1;
-let obstacleEntityData = [];
-let obstacleEntityGrid = [];
+let obstacleEntityData = replaceWorldCollection('obstacleEntities', []);
+let obstacleEntityGrid = replaceWorldCollection('obstacleEntityGrid', []);
 let obstacleRevision = 0;
 let selectedWorldObject = null;
-var buildingData = [];
+var buildingData = replaceWorldCollection('buildings', []);
 var nextBuildingId = 1;
 let terrainRenderCanvas = null;
 let terrainRenderCtx = null;
@@ -172,49 +154,40 @@ let terrainVisualCols = 0;
 let terrainVisualTypes = [];
 
 function computeTerrainThresholds() {
-  // Collect all noise values and sort them to get accurate percentile-based thresholds
-  const values = [];
-  for (let y = 0; y < MAP_ROWS; y++) {
-    for (let x = 0; x < MAP_COLS; x++) {
-      values.push(fbmNoise(x, y));
-    }
-  }
-  values.sort((a, b) => a - b);
-  const n = values.length;
-
-  const waterPct = mapConfig.waterLevel / 100;
-  // Sand is a fixed 7% band above water, unless there's no water at all
-  const sandPct = waterPct > 0 ? Math.min(waterPct + 0.07, 1) : 0;
-  // All remaining land is grass — no dirt tier
-
-  // Percentile lookup: find noise value at the Nth percentile
-  const pct = (p) => p <= 0 ? -Infinity : p >= 1 ? Infinity : values[Math.min(Math.floor(p * n), n - 1)];
-
-  mapConfig.terrain = {
-    water: pct(waterPct),
-    sand:  pct(sandPct),
-    grass: Infinity  // everything above sand threshold is grass
-  };
+  mapConfig.terrain = OpenRTS.world.terrain.computeThresholds({
+    rows: MAP_ROWS,
+    columns: MAP_COLS,
+    waterLevel: mapConfig.waterLevel,
+    seed: MAP_SEED
+  });
 }
 
 function regenerateMapData() {
+  const seed = mapConfig.seed ?? OpenRTS.random.generateSeed();
+  mapConfig.seed = seed;
+  MAP_SEED = OpenRTS.random.setSeed(seed);
+  worldRuntime.beginGeneration(MAP_SEED);
   clearWorldObjectSelection();
   // Step 1: Compute accurate percentile-based terrain thresholds
   computeTerrainThresholds();
 
   // Step 2: Generate terrain
-  terrainData = Array.from({ length: MAP_ROWS }, (_, y) =>
-    Array.from({ length: MAP_COLS }, (_, x) => generateTerrainTile(x, y))
-  );
+  terrainData = replaceWorldCollection('terrain', OpenRTS.world.terrain.generateGrid({
+    rows: MAP_ROWS,
+    columns: MAP_COLS,
+    seed: MAP_SEED,
+    thresholds: mapConfig.terrain,
+    types: TERRAIN
+  }));
 
   // Step 2: Initialize empty obstacle grid
-  obstacleData = Array.from({ length: MAP_ROWS }, () =>
+  obstacleData = replaceWorldCollection('obstacles', Array.from({ length: MAP_ROWS }, () =>
     Array.from({ length: MAP_COLS }, () => OBSTACLE.NONE)
-  );
+  ));
 
-  decorationData = Array.from({ length: MAP_ROWS }, () =>
+  decorationData = replaceWorldCollection('decorations', Array.from({ length: MAP_ROWS }, () =>
     Array.from({ length: MAP_COLS }, () => DECOR.NONE)
-  );
+  ));
 
   // Step 3: Collect candidate tiles
   const treeCandidates = [];  // trees go on grass only
@@ -254,18 +227,26 @@ function regenerateMapData() {
     }
   }
 
+  nextWildlifeId = 1;
   seedDecorations();
   seedSheep();
+  OpenRTS.systems.cooking.reset();
   seedDucks();
-  horseData = [];
+  horseData = replaceWorldCollection('horses', []);
   window.horseData = horseData;
-  itemData = [];
+  itemData = replaceWorldCollection('items', []);
   nextWorldItemId = 1;
   window.itemData = itemData;
   rebuildObstacleEntities();
-  buildingData = [];
+  buildingData = replaceWorldCollection('buildings', []);
   nextBuildingId = 1;
   buildTerrainRenderCache();
+  OpenRTS.events.emit(OpenRTS.events.types.WORLD_REGENERATED, {
+    seed: MAP_SEED,
+    rows: MAP_ROWS,
+    columns: MAP_COLS,
+    generation: worldRuntime.generation
+  });
 }
 
 function terrainBaseColor(terrainType, shade) {
@@ -382,12 +363,12 @@ function seedDecorations() {
 }
 
 function seedSheep() {
-  sheepData = [];
+  sheepData = replaceWorldCollection('sheep', []);
   const targetCount = Math.max(0, Math.min(mapConfig.sheepCount || 0, 200));
 
   for (let attempt = 0; attempt < targetCount * 120 && sheepData.length < targetCount; attempt++) {
-    const x = Math.floor(Math.random() * MAP_COLS);
-    const y = Math.floor(Math.random() * MAP_ROWS);
+    const x = Math.floor(worldRandom() * MAP_COLS);
+    const y = Math.floor(worldRandom() * MAP_ROWS);
     if (!isInsideMap(x, y)) continue;
     if (terrainData[y][x] !== TERRAIN.GRASS) continue;
     if (obstacleData[y][x] !== OBSTACLE.NONE) continue;
@@ -407,10 +388,10 @@ function seedSheep() {
     const spot = randomSpotOnMap();
     if (terrainData[Math.floor(spot.y / tileSize)][Math.floor(spot.x / tileSize)] !== TERRAIN.GRASS) continue;
     sheepData.push(createSheep(
-      spot.x + (Math.random() - 0.5) * tileSize * 0.5,
-      spot.y + (Math.random() - 0.5) * tileSize * 0.5,
-      Math.random() > 0.5 ? 1 : -1,
-      Math.random() * Math.PI * 2
+      spot.x + (worldRandom() - 0.5) * tileSize * 0.5,
+      spot.y + (worldRandom() - 0.5) * tileSize * 0.5,
+      worldRandom() > 0.5 ? 1 : -1,
+      worldRandom() * Math.PI * 2
     ));
   }
 
@@ -418,12 +399,12 @@ function seedSheep() {
 }
 
 function seedDucks() {
-  duckData = [];
+  duckData = replaceWorldCollection('ducks', []);
   const targetCount = Math.max(0, Math.min(mapConfig.duckCount || 0, 200));
 
   for (let attempt = 0; attempt < targetCount * 160 && duckData.length < targetCount; attempt++) {
-    const x = Math.floor(Math.random() * MAP_COLS);
-    const y = Math.floor(Math.random() * MAP_ROWS);
+    const x = Math.floor(worldRandom() * MAP_COLS);
+    const y = Math.floor(worldRandom() * MAP_ROWS);
     if (!isInsideMap(x, y)) continue;
     if (terrainData[y][x] !== TERRAIN.WATER) continue;
     if (obstacleData[y][x] !== OBSTACLE.NONE) continue;
@@ -444,10 +425,10 @@ function seedDucks() {
     if (!isInsideMap(tileX, tileY)) continue;
     if (terrainData[tileY][tileX] !== TERRAIN.WATER) continue;
     duckData.push(createDuck(
-      spot.x + (Math.random() - 0.5) * tileSize * 0.45,
-      spot.y + (Math.random() - 0.5) * tileSize * 0.45,
-      Math.random() > 0.5 ? 1 : -1,
-      Math.random() * Math.PI * 2
+      spot.x + (worldRandom() - 0.5) * tileSize * 0.45,
+      spot.y + (worldRandom() - 0.5) * tileSize * 0.45,
+      worldRandom() > 0.5 ? 1 : -1,
+      worldRandom() * Math.PI * 2
     ));
   }
 
@@ -457,6 +438,7 @@ function seedDucks() {
 function createSheep(x, y, facing, phase) {
   const wanderAngle = hashNoise(Math.floor(x) + 991, Math.floor(y) + 557) * Math.PI * 2;
   return {
+    id: `wildlife-${nextWildlifeId++}`,
     x,
     y,
     facing,
@@ -494,6 +476,7 @@ function createSheep(x, y, facing, phase) {
 function createDuck(x, y, facing, phase) {
   const wanderAngle = hashNoise(Math.floor(x) + 1201, Math.floor(y) + 1601) * Math.PI * 2;
   return {
+    id: `wildlife-${nextWildlifeId++}`,
     x,
     y,
     facing,
@@ -525,9 +508,10 @@ function createDuck(x, y, facing, phase) {
   };
 }
 
-function createHorse(x, y, facing = 1, phase = Math.random() * Math.PI * 2) {
+function createHorse(x, y, facing = 1, phase = wildlifeRandom() * Math.PI * 2) {
   const wanderAngle = hashNoise(Math.floor(x) + 1709, Math.floor(y) + 2053) * Math.PI * 2;
   return {
+    id: `wildlife-${nextWildlifeId++}`,
     x,
     y,
     facing,
@@ -560,54 +544,12 @@ function createHorse(x, y, facing = 1, phase = Math.random() * Math.PI * 2) {
 }
 
 function createWanderingHorse(x, y, facing = 1) {
-  if (!Array.isArray(horseData)) horseData = [];
+  if (!Array.isArray(horseData)) horseData = replaceWorldCollection('horses', []);
   const spawn = findNearestWalkablePoint(x, y, 28) || { x, y };
-  const horse = createHorse(spawn.x, spawn.y, facing, Math.random() * Math.PI * 2);
+  const horse = createHorse(spawn.x, spawn.y, facing, wildlifeRandom() * Math.PI * 2);
   horseData.push(horse);
   window.horseData = horseData;
   return horse;
-}
-
-function setAnimalHeadingFromMovement(animal, dx, dy) {
-  if (!animal || Math.hypot(dx, dy) < 0.001) return;
-  animal.heading = Math.atan2(dy, dx);
-  animal.facing = dx >= 0 ? 1 : -1;
-}
-
-function updateSheep(dt) {
-  if (!Array.isArray(sheepData) || sheepData.length === 0) return;
-
-  for (const sheep of sheepData) {
-    if (sheep.isDead || sheep.isMounted || sheep.reservedByUnitId) continue;
-
-    sheep.wanderTimer -= dt;
-    sheep.grazeTimer -= dt;
-
-    if (sheep.wanderTimer <= 0) {
-      const turn = (Math.random() - 0.5) * Math.PI * 0.95;
-      sheep.wanderAngle = (sheep.wanderAngle || 0) + turn;
-      sheep.wanderTimer = 0.9 + Math.random() * 2.4;
-      sheep.grazeTimer = Math.random() < 0.38 ? 0.8 + Math.random() * 1.8 : 0;
-    }
-
-    if (sheep.grazeTimer > 0) continue;
-
-    const moveDistance = (sheep.speed || 10) * dt;
-    const nextX = sheep.x + Math.cos(sheep.wanderAngle || 0) * moveDistance;
-    const nextY = sheep.y + Math.sin(sheep.wanderAngle || 0) * moveDistance;
-
-    if (isCommandWalkablePoint(nextX, nextY, sheep.size * 0.55)) {
-      const oldX = sheep.x;
-      const oldY = sheep.y;
-      sheep.x = nextX;
-      sheep.y = nextY;
-      setAnimalHeadingFromMovement(sheep, sheep.x - oldX, sheep.y - oldY);
-    } else {
-      sheep.wanderAngle = (sheep.wanderAngle || 0) + Math.PI * (0.65 + Math.random() * 0.7);
-      sheep.wanderTimer = 0.25 + Math.random() * 0.8;
-      sheep.grazeTimer = 0.2 + Math.random() * 0.8;
-    }
-  }
 }
 
 function isDuckPreferredPoint(worldX, worldY) {
@@ -616,70 +558,6 @@ function isDuckPreferredPoint(worldX, worldY) {
   return isInsideMap(tileX, tileY) &&
     terrainData[tileY][tileX] === TERRAIN.WATER &&
     obstacleData[tileY][tileX] === OBSTACLE.NONE;
-}
-
-function updateDucks(dt) {
-  if (!Array.isArray(duckData) || duckData.length === 0) return;
-
-  for (const duck of duckData) {
-    if (duck.isDead) continue;
-
-    duck.wanderTimer -= dt;
-    if (duck.wanderTimer <= 0) {
-      duck.wanderAngle = (duck.wanderAngle || 0) + (Math.random() - 0.5) * Math.PI * 0.85;
-      duck.wanderTimer = 0.7 + Math.random() * 2.0;
-    }
-
-    const moveDistance = (duck.speed || 14) * dt;
-    const nextX = duck.x + Math.cos(duck.wanderAngle || 0) * moveDistance;
-    const nextY = duck.y + Math.sin(duck.wanderAngle || 0) * moveDistance;
-
-    if (isDuckPreferredPoint(nextX, nextY)) {
-      const oldX = duck.x;
-      const oldY = duck.y;
-      duck.x = nextX;
-      duck.y = nextY;
-      setAnimalHeadingFromMovement(duck, duck.x - oldX, duck.y - oldY);
-    } else {
-      duck.wanderAngle = (duck.wanderAngle || 0) + Math.PI * (0.7 + Math.random() * 0.6);
-      duck.wanderTimer = 0.2 + Math.random() * 0.7;
-    }
-  }
-}
-
-function updateHorses(dt) {
-  if (!Array.isArray(horseData) || horseData.length === 0) return;
-
-  for (const horse of horseData) {
-    if (horse.isDead) continue;
-
-    horse.wanderTimer -= dt;
-    horse.grazeTimer -= dt;
-
-    if (horse.wanderTimer <= 0) {
-      horse.wanderAngle = (horse.wanderAngle || 0) + (Math.random() - 0.5) * Math.PI * 0.8;
-      horse.wanderTimer = 0.8 + Math.random() * 2.5;
-      horse.grazeTimer = Math.random() < 0.3 ? 0.7 + Math.random() * 1.6 : 0;
-    }
-
-    if (horse.grazeTimer > 0) continue;
-
-    const moveDistance = (horse.speed || 20) * dt;
-    const nextX = horse.x + Math.cos(horse.wanderAngle || 0) * moveDistance;
-    const nextY = horse.y + Math.sin(horse.wanderAngle || 0) * moveDistance;
-
-    if (isCommandWalkablePoint(nextX, nextY, horse.size * 0.45)) {
-      const oldX = horse.x;
-      const oldY = horse.y;
-      horse.x = nextX;
-      horse.y = nextY;
-      setAnimalHeadingFromMovement(horse, horse.x - oldX, horse.y - oldY);
-    } else {
-      horse.wanderAngle = (horse.wanderAngle || 0) + Math.PI * (0.6 + Math.random() * 0.8);
-      horse.wanderTimer = 0.3 + Math.random() * 0.8;
-      horse.grazeTimer = 0.2 + Math.random() * 0.8;
-    }
-  }
 }
 
 function getSheepAtPoint(worldX, worldY) {
@@ -866,8 +744,11 @@ function obstacleSpecies(obstacleType, tileX, tileY) {
 }
 
 function rebuildObstacleEntities() {
-  obstacleEntityData = [];
-  obstacleEntityGrid = Array.from({ length: MAP_ROWS }, () => Array(MAP_COLS).fill(null));
+  obstacleEntityData = replaceWorldCollection('obstacleEntities', []);
+  obstacleEntityGrid = replaceWorldCollection(
+    'obstacleEntityGrid',
+    Array.from({ length: MAP_ROWS }, () => Array(MAP_COLS).fill(null))
+  );
 
   if (!Array.isArray(obstacleData) || obstacleData.length === 0) return;
   for (let tileY = 0; tileY < MAP_ROWS; tileY++) {
@@ -1059,6 +940,8 @@ function createBuilding(type, team, tileX, tileY) {
     attackCooldown: stats.attackCooldown || 1,
     projectileSpeed: stats.projectileSpeed || 260,
     projectileColor: stats.projectileColor || null,
+    upgradeLevel: 0,
+    maxUpgradeLevel: 3,
     selected: false,
     isDead: false,
     takeDamage(amount) {
@@ -1183,7 +1066,7 @@ function findBuildingSite(team, type, preferredXRatio, preferredYRatio) {
 }
 
 function placeTeamBuildings(config = window.mapConfig || {}) {
-  buildingData = [];
+  buildingData = replaceWorldCollection('buildings', []);
   nextBuildingId = 1;
 
   const homesPerTeam = Math.max(0, Math.floor(Number(config.homesPerTeam) || 0));
@@ -1551,59 +1434,6 @@ function getCastleTopDefender(building, units) {
   }
 
   return defender;
-}
-
-function updateBuildings(dt, units) {
-  if (!Array.isArray(buildingData) || !Array.isArray(units)) return;
-
-  for (const building of buildingData) {
-    building.rampartUnitId = null;
-    if (building.isDead) continue;
-
-    const rampartDefender = building.type === BUILDING_TYPES.HOME
-      ? getCastleTopDefender(building, units)
-      : null;
-    if (rampartDefender) {
-      building.rampartUnitId = rampartDefender.id;
-    }
-    const canFire = building.type === BUILDING_TYPES.TOWER || !!rampartDefender;
-    if (!canFire) continue;
-
-    building.fireCooldown = Math.max(0, (building.fireCooldown || 0) - dt);
-    if (building.fireCooldown > 0) continue;
-
-    let target = null;
-    let closestDist = Infinity;
-    const range = building.type === BUILDING_TYPES.HOME
-      ? Math.max(building.range || 360, (rampartDefender?.shootRange || 120) + 175)
-      : building.range || 245;
-
-    for (const unit of units) {
-      if (unit.isDead || unit.team === building.team) continue;
-      const dist = Math.hypot(unit.x - building.x, unit.y - building.y);
-      if (dist < range && dist < closestDist) {
-        target = unit;
-        closestDist = dist;
-      }
-    }
-
-    if (target && window.bullets && typeof Bullet !== 'undefined') {
-      building.rampartUnitId = rampartDefender ? rampartDefender.id : null;
-      window.bullets.push(Bullet.obtain(
-        building.x,
-        building.y - tileSize * (building.type === BUILDING_TYPES.HOME ? 1.35 : 0.75),
-        target,
-        building.team,
-        building.type === BUILDING_TYPES.HOME
-          ? Math.max(building.damage || 0, rampartDefender?.damage || 8)
-          : building.damage || 12,
-        building,
-        rampartDefender?.projectileSpeed || building.projectileSpeed,
-        rampartDefender?.projectileColor || building.projectileColor
-      ));
-      building.fireCooldown = building.attackCooldown || 1.15;
-    }
-  }
 }
 
 function isInsideMap(tileX, tileY) {
@@ -2223,6 +2053,63 @@ function drawSheep(sheep) {
   ctx.restore();
 }
 
+function drawRoast(roast) {
+  const flame = 1 + Math.sin(roast.age * 11) * 0.12;
+  ctx.save();
+  ctx.translate(roast.x, roast.y);
+
+  ctx.fillStyle = 'rgba(32, 18, 8, 0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0, 8, 24, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#5a3218';
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(-18, 8);
+  ctx.lineTo(18, -4);
+  ctx.moveTo(-18, -4);
+  ctx.lineTo(18, 8);
+  ctx.stroke();
+
+  ctx.fillStyle = '#e8521b';
+  ctx.beginPath();
+  ctx.moveTo(-10, 5);
+  ctx.quadraticCurveTo(-2, -17 * flame, 0, -2);
+  ctx.quadraticCurveTo(8, -20 * flame, 11, 5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffd35a';
+  ctx.beginPath();
+  ctx.moveTo(-5, 5);
+  ctx.quadraticCurveTo(0, -10 * flame, 5, 5);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#3f2918';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-28, -18);
+  ctx.lineTo(28, -18);
+  ctx.stroke();
+
+  ctx.translate(0, -18);
+  ctx.rotate(roast.rotation);
+  ctx.fillStyle = '#8a3f20';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 15, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#d09255';
+  ctx.lineWidth = 2;
+  for (const x of [-9, -3, 4, 10]) {
+    ctx.beginPath();
+    ctx.moveTo(x, -5);
+    ctx.lineTo(x + 3, 5);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawSheepSkeleton(sheep) {
   ctx.save();
   ctx.translate(sheep.x, sheep.y + 6);
@@ -2734,7 +2621,7 @@ function drawHomeBuildingFront(building) {
   ctx.lineWidth = 2;
   ctx.strokeRect(left + wall * 0.18, bottom - wall * 0.94, w - wall * 0.36, wall * 0.7);
 
-  const gateW = tileSize * 2.8;
+  const gateW = tileSize * 3.2;
   const gateX = -gateW * 0.5;
   const gateY = bottom - wall * 1.02;
   ctx.fillStyle = '#201711';
@@ -2919,6 +2806,11 @@ function renderWorldObjects(units, ctx, debug = {}) {
     drawList.push({ type: 'sheep', sortY: sheep.y + 12, sheep });
   }
 
+  for (const roast of OpenRTS.systems.cooking.getRoasts()) {
+    if (roast.x < camX - 50 || roast.x > camX + viewWidth + 50 || roast.y < camY - 50 || roast.y > camY + viewHeight + 50) continue;
+    drawList.push({ type: 'roast', sortY: roast.y + 18, roast });
+  }
+
   for (const duck of duckData) {
     if (duck.x < camX - 40 || duck.x > camX + viewWidth + 40 || duck.y < camY - 40 || duck.y > camY + viewHeight + 40) continue;
     drawList.push({ type: 'duck', sortY: duck.y + 8, duck });
@@ -2975,6 +2867,8 @@ function renderWorldObjects(units, ctx, debug = {}) {
       drawBuilding(item.building, item.layer || 'full');
     } else if (item.type === 'sheep') {
       drawSheep(item.sheep);
+    } else if (item.type === 'roast') {
+      drawRoast(item.roast);
     } else if (item.type === 'duck') {
       drawDuck(item.duck);
     } else if (item.type === 'horse') {
@@ -3101,8 +2995,8 @@ function findNearestWalkablePoint(worldX, worldY, unitSize = 20, maxRadius = 16)
 
 function randomSpotOnMap() {
   for (let attempt = 0; attempt < 400; attempt++) {
-    const tileX = Math.floor(Math.random() * terrainData[0].length);
-    const tileY = Math.floor(Math.random() * terrainData.length);
+    const tileX = Math.floor(worldRandom() * terrainData[0].length);
+    const tileY = Math.floor(worldRandom() * terrainData.length);
 
     if (isWalkableTile(tileX, tileY)) {
       return {

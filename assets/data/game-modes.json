@@ -6,7 +6,7 @@
     "playable": true,
     "startLabel": "Create Versus Room",
     "teams": ["red", "blue"],
-    "allowedUnits": ["soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan"],
+    "allowedUnits": ["king", "soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan"],
     "defaults": {
       "mapStyle": "coastal_grassland",
       "waterLevel": 10,
@@ -15,10 +15,11 @@
       "sheepCount": 12,
       "duckCount": 5,
       "playersPerTeam": 1,
-      "startingUnitsPerTeam": 7,
+      "startingUnitsPerTeam": 8,
       "towersPerTeam": 0,
       "homesPerTeam": 1,
       "unitRoster": {
+        "king": 1,
         "soldier": 1,
         "archer": 1,
         "knight": 1,
@@ -37,7 +38,7 @@
     "playable": false,
     "startLabel": "Tower Defense Coming Soon",
     "teams": ["red"],
-    "allowedUnits": ["soldier", "archer", "gunman", "crossbowman", "grenademan"],
+    "allowedUnits": ["king", "soldier", "archer", "gunman", "crossbowman", "grenademan"],
     "defaults": {
       "mapStyle": "defense_pass",
       "waterLevel": 4,
@@ -59,7 +60,7 @@
     "playable": true,
     "startLabel": "Begin Comparison",
     "teams": ["red", "blue"],
-    "allowedUnits": ["soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan"],
+    "allowedUnits": ["king", "soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan"],
     "defaults": {
       "mapStyle": "arena",
       "waterLevel": 0,

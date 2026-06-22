@@ -585,6 +585,7 @@ body {
 
 .inventory-actions {
   margin-top: 7px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .command-action {

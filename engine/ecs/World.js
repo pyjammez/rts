@@ -1,3 +1,5 @@
+import Entity from './Entity.js';
+
 export default class World {
   constructor() {
     this.entities = new Map();
@@ -6,7 +8,6 @@ export default class World {
   }
 
   createEntity() {
-    const Entity = require('./Entity').default;
     const e = new Entity(this.nextId++);
     this.entities.set(e.id, e);
     return e;

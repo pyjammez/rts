@@ -2,7 +2,17 @@
 
 This repository is a lightweight, extensible RTS platform intended for building and modding RTS-style matches.
 
-See `engine/`, `game/`, `generators/`, and `ui/` for core components.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the active runtime, ownership boundaries, public API, and migration roadmap.
+
+## Development
+
+```bash
+npm run serve
+npm run validate
+npm run check
+```
+
+The authoritative modding files live under `assets/data/`. The game remains build-free and deploys directly to static hosting.
 
 ## 3D Rendering
 

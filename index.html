@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>open rts</title>
-  <link rel="stylesheet" href="ui/style.css?v=southscroll1" />
+  <link rel="stylesheet" href="ui/style.css?v=king1" />
 </head>
 <body>
   <div id="titleScreen" class="title-screen">
@@ -62,6 +62,8 @@
         <div class="inventory-actions">
           <button id="pickUpItemAction" class="command-action" type="button">Pick Up Item</button>
           <button id="dropItemAction" class="command-action" type="button">Drop Item</button>
+          <button id="cookAction" class="command-action cook-action" type="button" aria-pressed="false">Cook</button>
+          <button id="upgradeCastleAction" class="command-action" type="button" aria-pressed="false">Upgrade Castle</button>
         </div>
         <div id="unitActionStatus" class="unit-action-status">Select a unit</div>
       </section>
@@ -76,6 +78,23 @@
 
   <script src="engine/three-runtime/open-rts-three.js?v=three7"></script>
   <script src="world/threeBootstrap.js?v=three5"></script>
+  <script src="core/openRts.js?v=runtime6"></script>
+  <script src="core/events/eventBus.js?v=runtime6"></script>
+  <script src="core/random/randomService.js?v=infrastructure1"></script>
+  <script src="core/runtime/GameRuntime.js?v=runtime1"></script>
+  <script src="core/runtime/SimulationSnapshot.js?v=runtime5"></script>
+  <script src="game/commands/CommandBus.js?v=runtime6"></script>
+  <script src="world/runtime/WorldRuntime.js?v=runtime1"></script>
+  <script src="world/terrain/TerrainGenerator.js?v=runtime2"></script>
+  <script src="core/rendering/RendererRegistry.js?v=runtime1"></script>
+  <script src="world/rendering/three/MaterialFactory.js?v=runtime3"></script>
+  <script src="world/rendering/three/OverlayPass.js?v=runtime4"></script>
+  <script src="game/systems/cookingSystem.js?v=infrastructure1"></script>
+  <script src="game/systems/castleUpgradeSystem.js?v=infrastructure1"></script>
+  <script src="game/systems/wildlifeSystem.js?v=runtime3"></script>
+  <script src="game/systems/buildingCombatSystem.js?v=runtime4"></script>
+  <script src="game/systems/projectileSystem.js?v=runtime5"></script>
+  <script src="game/rules/matchRules.js?v=architecture2"></script>
 
   <script>
     const canvas3d = document.getElementById('gameCanvas3d');
@@ -93,8 +112,8 @@
     window.addEventListener('resize', resizeCanvas);
   </script>
 
-  <script src="ui/gameModes.js?v=versus1"></script>
-  <script src="ui/config.js?v=versus1"></script>
+  <script src="game/config/definitionRegistry.js?v=architecture2"></script>
+  <script src="ui/config.js?v=king1"></script>
   <script src="ui/screens/TitleScreen.js?v=three1"></script>
   <script src="ui/screens/ModeSelectScreen.js?v=three1"></script>
   <script src="ui/screens/GameSetupScreen.js?v=three1"></script>
@@ -103,20 +122,20 @@
   <script src="ui/screens/bootstrap.js?v=three1"></script>
   <script src="ecs/entityManager.js?v=three1"></script>
   <script src="ecs/unitComponents.js?v=three1"></script>
-  <script src="entities/unit.js?v=carryobjects1"></script>
-  <script src="systems/processors/unitMovementProcessor.js?v=animalheading1"></script>
+  <script src="entities/unit.js?v=runtime5"></script>
+  <script src="systems/processors/unitMovementProcessor.js?v=itemtarget1"></script>
   <script src="systems/processors/unitCombatProcessor.js?v=commandbar1"></script>
-  <script src="systems/processors/unitRenderProcessor.js?v=three1"></script>
+  <script src="systems/processors/unitRenderProcessor.js?v=king1"></script>
   <script src="systems/unitMovement.js?v=three1"></script>
   <script src="systems/unitCombat.js?v=three1"></script>
   <script src="systems/unitRender.js?v=three1"></script>
   <script src="systems/physics.js?v=three1"></script>
-  <script src="world/map.js?v=castlegateflow1"></script>
-  <script src="world/gameState.js?v=newunits1"></script>
-  <script src="ui/hud.js?v=trackpad1"></script>
-  <script src="world/renderer3d.js?v=castlegateflow1"></script>
+  <script src="world/map.js?v=runtime6"></script>
+  <script src="world/gameState.js?v=king1"></script>
+  <script src="ui/hud.js?v=runtime6"></script>
+  <script src="world/renderer3d.js?v=runtime5"></script>
   <script src="core/gameLoop.js?v=three1"></script>
-  <script src="systems/input.js?v=trackpad1"></script>
-  <script src="core/main.js?v=southscroll1"></script>
+  <script src="systems/input.js?v=runtime6"></script>
+  <script src="core/main.js?v=runtime6"></script>
 </body>
 </html>

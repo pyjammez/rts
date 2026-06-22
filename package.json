@@ -1,0 +1,12 @@
+{
+  "name": "open-rts",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.spec.js",
+    "validate": "node tools/validate-config.mjs",
+    "check": "npm run validate && npm test",
+    "serve": "python3 -m http.server 8000"
+  }
+}

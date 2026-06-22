@@ -10,10 +10,11 @@ var mapConfig = {
   treeCount: 30,
   sheepCount: 12,
   duckCount: 5,
-  startingUnitsPerTeam: 7,
+  startingUnitsPerTeam: 8,
   towersPerTeam: 0,
   homesPerTeam: 1,
   unitRoster: {
+    king: 1,
     soldier: 1,
     archer: 1,
     knight: 1,
@@ -213,14 +214,22 @@ function createUnitRosterControl(field) {
     name.textContent = option.label;
 
     const input = document.createElement('input');
+    const unitDefinition = getUnitDefinition(option.value);
+    const requiredCount = unitDefinition.requiredPerTeam ? 1 : 0;
+    const maximumCount = Number.isFinite(Number(unitDefinition.maxPerTeam))
+      ? Math.max(requiredCount, Math.floor(Number(unitDefinition.maxPerTeam)))
+      : 80;
     input.id = `setting-${field.key}-${option.value}`;
     input.type = 'number';
-    input.min = '0';
-    input.max = '80';
+    input.min = String(requiredCount);
+    input.max = String(maximumCount);
     input.step = '1';
-    input.value = String(Math.max(0, Math.floor(Number(roster[option.value]) || 0)));
+    const initialCount = Math.max(requiredCount, Math.min(maximumCount, Math.floor(Number(roster[option.value]) || 0)));
+    roster[option.value] = initialCount;
+    input.value = String(initialCount);
+    input.disabled = !!unitDefinition.requiredPerTeam && maximumCount === requiredCount;
     input.addEventListener('input', event => {
-      roster[option.value] = Math.max(0, Math.floor(Number(event.target.value) || 0));
+      roster[option.value] = Math.max(requiredCount, Math.min(maximumCount, Math.floor(Number(event.target.value) || 0)));
       mapConfig[field.key] = roster;
     });
 

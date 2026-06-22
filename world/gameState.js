@@ -5,7 +5,8 @@ const gameSession = {
   active: false,
   finished: false,
   teams: [],
-  initialHomesByTeam: {}
+  initialHomesByTeam: {},
+  initialKingsByTeam: {}
 };
 
 const DEFAULT_UNIT_STATS = {
@@ -14,6 +15,10 @@ const DEFAULT_UNIT_STATS = {
     damage: 8,
     movingDamage: 4
 };
+
+function simulationRandom() {
+  return OpenRTS.random.stream('simulation').next();
+}
 
 function createUnit(team, unitType = 'soldier') {
     const definition = typeof getUnitDefinition === 'function' ? getUnitDefinition(unitType) : DEFAULT_UNIT_STATS;
@@ -61,8 +66,17 @@ function getConfiguredUnitRoster(config = getActiveModeConfig()) {
   if (config.unitRoster && typeof config.unitRoster === 'object') {
     const roster = {};
     for (const [unitType, count] of Object.entries(config.unitRoster)) {
-      const parsed = Math.max(0, Math.floor(Number(count) || 0));
+      const definition = typeof getUnitDefinition === 'function' ? getUnitDefinition(unitType) : {};
+      const maximum = Number.isFinite(Number(definition.maxPerTeam))
+        ? Math.max(0, Math.floor(Number(definition.maxPerTeam)))
+        : Infinity;
+      const parsed = Math.min(maximum, Math.max(0, Math.floor(Number(count) || 0)));
       if (parsed > 0) roster[unitType] = parsed;
+    }
+    const mode = typeof getGameModeDefinition === 'function' ? getGameModeDefinition(config.modeId) : null;
+    for (const unitType of mode?.allowedUnits || []) {
+      const definition = typeof getUnitDefinition === 'function' ? getUnitDefinition(unitType) : {};
+      if (definition.requiredPerTeam) roster[unitType] = Math.max(1, Math.floor(Number(definition.requiredPerTeam) || 1));
     }
     if (Object.keys(roster).length > 0) return roster;
   }
@@ -73,7 +87,9 @@ function getConfiguredUnitRoster(config = getActiveModeConfig()) {
 
 function createConfiguredUnit(team, unitType = null) {
     const config = getActiveModeConfig();
-    return createUnit(team, unitType || config.unitType || 'soldier');
+    const requestedType = unitType || config.unitType || 'soldier';
+    if (requestedType === 'king' && units.some(unit => unit.team === team && unit.unitType === 'king')) return null;
+    return createUnit(team, requestedType);
 }
 
 function createLegacyUnit(team) {
@@ -113,6 +129,7 @@ function spawnInitialUnits() {
     for (const [unitType, count] of Object.entries(unitRoster)) {
       for (let i = 0; i < count; i++) {
         const unit = createConfiguredUnit(team, unitType);
+        if (!unit) continue;
         if (!spawnUnitInsideTeamCastle(unit, team, spawnIndex, unitsPerTeam)) {
           spawnUnitToRandomSpot(unit, team);
         }
@@ -124,8 +141,12 @@ function spawnInitialUnits() {
 }
 
 function spawnComparisonUnits(config) {
-  const redCount = Math.max(1, Math.floor(Number(config.redUnitCount) || 5));
-  const blueCount = Math.max(1, Math.floor(Number(config.blueUnitCount) || 5));
+  const redDefinition = getUnitDefinition(config.redUnitType || 'soldier');
+  const blueDefinition = getUnitDefinition(config.blueUnitType || 'soldier');
+  const redMaximum = Number.isFinite(Number(redDefinition.maxPerTeam)) ? Number(redDefinition.maxPerTeam) : Infinity;
+  const blueMaximum = Number.isFinite(Number(blueDefinition.maxPerTeam)) ? Number(blueDefinition.maxPerTeam) : Infinity;
+  const redCount = Math.min(redMaximum, Math.max(1, Math.floor(Number(config.redUnitCount) || 5)));
+  const blueCount = Math.min(blueMaximum, Math.max(1, Math.floor(Number(config.blueUnitCount) || 5)));
 
   for (let i = 0; i < redCount; i++) {
     const unit = createUnit('red', config.redUnitType || 'soldier');
@@ -215,12 +236,21 @@ function startGameSession(config = getActiveModeConfig()) {
   gameSession.finished = false;
   gameSession.teams = teams.length >= 2 ? teams : ['red', 'blue'];
   gameSession.initialHomesByTeam = {};
+  gameSession.initialKingsByTeam = {};
 
   for (const team of gameSession.teams) {
     gameSession.initialHomesByTeam[team] = buildings.filter(building =>
       building.team === team && building.type === 'home'
     ).length;
+    gameSession.initialKingsByTeam[team] = units.filter(unit =>
+      unit.team === team && unit.unitType === 'king'
+    ).length;
   }
+  OpenRTS.events.emit(OpenRTS.events.types.MATCH_STARTED, {
+    modeId: config.modeId,
+    teams: [...gameSession.teams],
+    seed: OpenRTS.random.getSeed()
+  });
 }
 
 function resetGameSession() {
@@ -228,10 +258,8 @@ function resetGameSession() {
   gameSession.finished = false;
   gameSession.teams = [];
   gameSession.initialHomesByTeam = {};
-}
-
-function getOpponentTeam(team) {
-  return gameSession.teams.find(candidate => candidate !== team) || null;
+  gameSession.initialKingsByTeam = {};
+  OpenRTS.events.emit(OpenRTS.events.types.MATCH_RESET);
 }
 
 function finishGame(result) {
@@ -246,52 +274,17 @@ function finishGame(result) {
     unit.attackOrderTarget = null;
   });
   if (typeof clearBuildingSelection === 'function') clearBuildingSelection();
+  OpenRTS.events.emit(OpenRTS.events.types.MATCH_ENDED, result);
   if (typeof showGameOverScreen === 'function') showGameOverScreen(result);
 }
 
 function evaluateGameFinishRules(aliveUnits = units.filter(unit => !unit.isDead)) {
-  if (!gameSession.active || gameSession.finished) return null;
-
-  const teams = gameSession.teams;
-  if (!Array.isArray(teams) || teams.length < 2) return null;
-
   const buildings = typeof getBuildings === 'function' ? getBuildings() : [];
-
-  for (const team of teams) {
-    const startedWithHome = (gameSession.initialHomesByTeam[team] || 0) > 0;
-    if (!startedWithHome) continue;
-
-    const hasLiveHome = buildings.some(building =>
-      !building.isDead && building.team === team && building.type === 'home'
-    );
-
-    if (!hasLiveHome) {
-      const winner = getOpponentTeam(team);
-      const defeated = `${team.charAt(0).toUpperCase()}${team.slice(1)}`;
-      const victorious = winner ? `${winner.charAt(0).toUpperCase()}${winner.slice(1)}` : 'The attacker';
-      return {
-        winner,
-        loser: team,
-        reason: `${defeated}'s castle was destroyed. ${victorious} wins.`
-      };
-    }
-  }
-
-  for (const team of teams) {
-    const hasLiveUnit = aliveUnits.some(unit => unit.team === team && !unit.isDead);
-    if (!hasLiveUnit) {
-      const winner = getOpponentTeam(team);
-      const defeated = `${team.charAt(0).toUpperCase()}${team.slice(1)}`;
-      const victorious = winner ? `${winner.charAt(0).toUpperCase()}${winner.slice(1)}` : 'The opposing team';
-      return {
-        winner,
-        loser: team,
-        reason: `${defeated} has no units left. ${victorious} wins.`
-      };
-    }
-  }
-
-  return null;
+  return OpenRTS.rules.match.evaluate({
+    ...gameSession,
+    aliveUnits,
+    buildings
+  });
 }
 
 function updateGameFinishRules(aliveUnits) {
@@ -338,8 +331,8 @@ function spawnUnitToRandomSpot(unit, preferredTeam = unit.team) {
 
   if (home) {
     for (let attempt = 0; attempt < 160; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 70 + Math.random() * 120;
+      const angle = simulationRandom() * Math.PI * 2;
+      const radius = 70 + simulationRandom() * 120;
       unit.x = home.x + Math.cos(angle) * radius;
       unit.y = home.y + Math.sin(angle) * radius;
 
@@ -365,6 +358,7 @@ function spawnUnitToRandomSpot(unit, preferredTeam = unit.team) {
 function spawnUnitForTeam(team) {
   if (team !== 'red' && team !== 'blue') return;
   const unit = createConfiguredUnit(team);
+  if (!unit) return;
   spawnUnitToRandomSpot(unit, team);
 }
 
@@ -374,8 +368,8 @@ function randomSpotOnTeamHalf(team) {
   const maxX = team === 'red' ? mapWidth * 0.5 : mapWidth;
 
   for (let attempt = 0; attempt < 400; attempt++) {
-    const x = minX + Math.random() * (maxX - minX);
-    const y = Math.random() * getMapHeightPx();
+    const x = minX + simulationRandom() * (maxX - minX);
+    const y = simulationRandom() * getMapHeightPx();
     const tileX = Math.floor(x / tileSize);
     const tileY = Math.floor(y / tileSize);
 

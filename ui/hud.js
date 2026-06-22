@@ -9,9 +9,12 @@ let attackAtWillAction = null;
 let holdFireAction = null;
 let pickUpItemAction = null;
 let dropItemAction = null;
+let cookAction = null;
+let upgradeCastleAction = null;
 let unitActionStatus = null;
 let actionMessage = '';
 let actionMessageUntil = 0;
+let itemActionTargetMode = null;
 
 function initHUD() {
   hudRoot = document.getElementById('hud');
@@ -24,6 +27,8 @@ function initHUD() {
   holdFireAction = document.getElementById('holdFireAction');
   pickUpItemAction = document.getElementById('pickUpItemAction');
   dropItemAction = document.getElementById('dropItemAction');
+  cookAction = document.getElementById('cookAction');
+  upgradeCastleAction = document.getElementById('upgradeCastleAction');
   unitActionStatus = document.getElementById('unitActionStatus');
   const bottomEdgeScrollZone = document.getElementById('bottomEdgeScrollZone');
 
@@ -49,8 +54,10 @@ function initHUD() {
 
   attackAtWillAction?.addEventListener('click', () => setSelectedUnitsFireStance('attack_at_will'));
   holdFireAction?.addEventListener('click', () => setSelectedUnitsFireStance('hold_fire'));
-  pickUpItemAction?.addEventListener('click', pickUpNearbyItems);
-  dropItemAction?.addEventListener('click', dropSelectedUnitItems);
+  pickUpItemAction?.addEventListener('click', () => toggleItemActionTargeting('pickup'));
+  dropItemAction?.addEventListener('click', () => toggleItemActionTargeting('drop'));
+  cookAction?.addEventListener('click', () => toggleItemActionTargeting('cook'));
+  upgradeCastleAction?.addEventListener('click', () => toggleItemActionTargeting('upgrade-castle'));
 
   if (miniMapCanvas) {
     miniMapCtx = miniMapCanvas.getContext('2d');
@@ -264,32 +271,146 @@ function setSelectedUnitsFireStance(stance) {
   const selectedUnits = getSelectedLivingUnits();
   if (selectedUnits.length === 0) return;
   selectedUnits.forEach(unit => {
-    if (typeof unit.setFireStance === 'function') unit.setFireStance(stance);
-    else unit.fireStance = stance;
+    OpenRTS.commands.enqueue({
+      type: OpenRTS.commands.types.FIRE_STANCE,
+      payload: { unitId: unit.id, stance }
+    });
   });
   setActionMessage(stance === 'hold_fire' ? 'Selected units will hold fire' : 'Selected units will attack at will');
   updateUnitActions();
 }
 
-function pickUpNearbyItems() {
-  let pickedUp = 0;
-  for (const unit of getSelectedLivingUnits()) {
-    if (unit.inventoryItem || typeof getNearestCarryableObject !== 'function') continue;
-    const item = getNearestCarryableObject(unit.x, unit.y, 90);
-    if (item && typeof unit.pickUpItem === 'function' && unit.pickUpItem(item)) pickedUp++;
+function toggleItemActionTargeting(mode) {
+  if (itemActionTargetMode === mode) {
+    cancelItemActionTargeting();
+    return;
   }
-  setActionMessage(pickedUp > 0 ? `${pickedUp} item${pickedUp === 1 ? '' : 's'} picked up` : 'No tree, rock, or item close enough');
+  const selectedUnits = getSelectedLivingUnits();
+  const eligible = mode === 'pickup'
+    ? selectedUnits.some(unit => !unit.inventoryItem)
+    : mode === 'drop'
+      ? selectedUnits.some(unit => !!unit.inventoryItem)
+      : mode === 'upgrade-castle'
+        ? selectedUnits.some(unit => unit.unitType === 'king')
+        : selectedUnits.length > 0;
+  if (!eligible) return;
+  itemActionTargetMode = mode;
+  actionMessageUntil = 0;
   updateUnitActions();
 }
 
-function dropSelectedUnitItems() {
-  let dropped = 0;
-  for (const unit of getSelectedLivingUnits()) {
-    if (typeof unit.dropItem === 'function' && unit.dropItem()) dropped++;
-  }
-  setActionMessage(dropped > 0 ? `${dropped} item${dropped === 1 ? '' : 's'} dropped` : 'No carried item to drop');
+function cancelItemActionTargeting(message = 'Item action cancelled') {
+  if (!itemActionTargetMode) return;
+  itemActionTargetMode = null;
+  if (message) setActionMessage(message);
   updateUnitActions();
 }
+
+function getItemActionTargetMode() {
+  return itemActionTargetMode;
+}
+
+function handleItemActionTarget(worldX, worldY) {
+  if (!itemActionTargetMode) return false;
+  const selectedUnits = getSelectedLivingUnits();
+
+  if (itemActionTargetMode === 'upgrade-castle') {
+    const king = selectedUnits.find(unit => unit.unitType === 'king');
+    const building = typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(worldX, worldY) : null;
+    if (!king || !building || building.type !== 'home' || building.team !== king.team) {
+      setActionMessage('Click your king\'s castle');
+      return true;
+    }
+    if (building.upgradeLevel >= building.maxUpgradeLevel) {
+      setActionMessage('That castle is fully upgraded');
+      return true;
+    }
+    OpenRTS.commands.enqueue({
+      type: OpenRTS.commands.types.CASTLE_UPGRADE,
+      payload: { kingId: king.id, buildingId: building.id }
+    });
+    itemActionTargetMode = null;
+    setActionMessage('Castle upgrade ordered');
+    if (typeof addCommandClickMarker === 'function') addCommandClickMarker(building.x, building.y, 'green');
+    updateUnitActions();
+    return true;
+  }
+
+  if (itemActionTargetMode === 'cook') {
+    const sheep = typeof getSheepAtPoint === 'function' ? getSheepAtPoint(worldX, worldY) : null;
+    if (!sheep) {
+      setActionMessage('Click a living sheep');
+      return true;
+    }
+    const team = selectedUnits[0]?.team;
+    if (!team) return true;
+    OpenRTS.commands.enqueue({
+      type: OpenRTS.commands.types.COOK,
+      payload: { sheepId: sheep.id, team }
+    });
+    itemActionTargetMode = null;
+    setActionMessage('Roast cooking for 10 seconds');
+    if (typeof addCommandClickMarker === 'function') addCommandClickMarker(sheep.x, sheep.y, 'green');
+    updateUnitActions();
+    return true;
+  }
+
+  if (itemActionTargetMode === 'pickup') {
+    const item = (typeof getWorldItemAtPoint === 'function' && getWorldItemAtPoint(worldX, worldY)) ||
+      (typeof getObstacleAtPoint === 'function' && getObstacleAtPoint(worldX, worldY));
+    if (!item || !item.pickupable || item.isDead || item.isPickedUp) {
+      setActionMessage('Click a tree, rock, or item');
+      return true;
+    }
+    const unit = selectedUnits.find(candidate => !candidate.inventoryItem);
+    if (!unit) {
+      setActionMessage('No selected unit can pick that up');
+      return true;
+    }
+    OpenRTS.commands.enqueue({
+      type: OpenRTS.commands.types.PICK_UP,
+      payload: {
+        unitId: unit.id,
+        targetId: item.id,
+        targetKind: item.objectType === 'obstacle' ? 'obstacle' : 'item'
+      }
+    });
+    itemActionTargetMode = null;
+    setActionMessage(`${unit.displayName || 'Unit'} moving to pick up ${item.displayName || 'item'}`);
+    if (typeof addCommandClickMarker === 'function') addCommandClickMarker(item.x, item.y, 'green');
+    updateUnitActions();
+    return true;
+  }
+
+  const carryingUnits = selectedUnits.filter(unit => unit.inventoryItem);
+  let ordered = 0;
+  carryingUnits.forEach((unit, index) => {
+    const angle = carryingUnits.length > 1 ? index / carryingUnits.length * Math.PI * 2 : 0;
+    const radius = carryingUnits.length > 1 ? tileSize * 0.85 : 0;
+    OpenRTS.commands.enqueue({
+      type: OpenRTS.commands.types.DROP,
+      payload: {
+        unitId: unit.id,
+        x: worldX + Math.cos(angle) * radius,
+        y: worldY + Math.sin(angle) * radius
+      }
+    });
+    ordered++;
+  });
+  if (ordered === 0) {
+    setActionMessage('No selected unit can drop an item there');
+    return true;
+  }
+  itemActionTargetMode = null;
+  setActionMessage(`${ordered} unit${ordered === 1 ? '' : 's'} moving to the drop location`);
+  if (typeof addCommandClickMarker === 'function') addCommandClickMarker(worldX, worldY, 'green');
+  updateUnitActions();
+  return true;
+}
+
+window.getItemActionTargetMode = getItemActionTargetMode;
+window.handleItemActionTarget = handleItemActionTarget;
+window.cancelItemActionTargeting = cancelItemActionTargeting;
 
 function updateUnitActions() {
   if (!unitActionsEl) return;
@@ -300,18 +421,37 @@ function updateUnitActions() {
   const canDrop = selectedUnits.some(unit => !!unit.inventoryItem);
   const canPickUp = selectedUnits.some(unit => !unit.inventoryItem);
 
-  for (const button of [attackAtWillAction, holdFireAction, pickUpItemAction, dropItemAction]) {
+  if (!hasUnits && itemActionTargetMode) itemActionTargetMode = null;
+
+  for (const button of [attackAtWillAction, holdFireAction, pickUpItemAction, dropItemAction, cookAction, upgradeCastleAction]) {
     if (button) button.disabled = !hasUnits;
   }
   if (pickUpItemAction) pickUpItemAction.disabled = !canPickUp;
   if (dropItemAction) dropItemAction.disabled = !canDrop;
+  if (upgradeCastleAction) upgradeCastleAction.disabled = !selectedUnits.some(unit => unit.unitType === 'king');
   attackAtWillAction?.classList.toggle('is-active', allAttack);
   holdFireAction?.classList.toggle('is-active', allHold);
+  pickUpItemAction?.classList.toggle('is-active', itemActionTargetMode === 'pickup');
+  dropItemAction?.classList.toggle('is-active', itemActionTargetMode === 'drop');
+  cookAction?.classList.toggle('is-active', itemActionTargetMode === 'cook');
+  upgradeCastleAction?.classList.toggle('is-active', itemActionTargetMode === 'upgrade-castle');
   attackAtWillAction?.setAttribute('aria-pressed', String(allAttack));
   holdFireAction?.setAttribute('aria-pressed', String(allHold));
+  pickUpItemAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'pickup'));
+  dropItemAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'drop'));
+  cookAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'cook'));
+  upgradeCastleAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'upgrade-castle'));
 
   if (!unitActionStatus) return;
-  if (performance.now() < actionMessageUntil) {
+  if (itemActionTargetMode === 'pickup') {
+    unitActionStatus.textContent = 'Click a tree, rock, or item';
+  } else if (itemActionTargetMode === 'drop') {
+    unitActionStatus.textContent = 'Click a map location to drop items';
+  } else if (itemActionTargetMode === 'cook') {
+    unitActionStatus.textContent = 'Click a living sheep to start cooking';
+  } else if (itemActionTargetMode === 'upgrade-castle') {
+    unitActionStatus.textContent = 'Click your castle to upgrade it';
+  } else if (performance.now() < actionMessageUntil) {
     unitActionStatus.textContent = actionMessage;
   } else if (!hasUnits) {
     unitActionStatus.textContent = 'Select a unit';
@@ -364,6 +504,7 @@ function updateSelectedInfo() {
         ${createInfoStat('Hit Points', `${Math.ceil(building.hp)} / ${building.maxHp}`)}
         ${createInfoStat('Attack', building.damage ? building.damage : 'None')}
         ${createInfoStat('Range', building.range ? Math.round(building.range) : 'None')}
+        ${building.type === 'home' ? createInfoStat('Upgrade Level', `${building.upgradeLevel || 0} / ${building.maxUpgradeLevel || 3}`) : ''}
         ${createInfoStat('Team', building.team)}
       </div>
     `;

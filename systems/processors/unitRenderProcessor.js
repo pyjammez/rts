@@ -241,6 +241,25 @@ function processUnitRender(unit, ctx) {
     drawSwordWeapon(unit, ctx, facing, unit.x + facing * 7, unit.y - 2, 18);
   }
 
+  if (unit.unitType === 'king') {
+    const facing = unit.spriteDirectionRow === 1 ? -1 : 1;
+    drawSwordWeapon(unit, ctx, facing, unit.x + facing * 7, unit.y - 2, 19);
+    ctx.fillStyle = '#e6b83f';
+    ctx.strokeStyle = '#6e4b12';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(unit.x - 8, unit.y - 13);
+    ctx.lineTo(unit.x - 7, unit.y - 22);
+    ctx.lineTo(unit.x - 2, unit.y - 17);
+    ctx.lineTo(unit.x, unit.y - 24);
+    ctx.lineTo(unit.x + 3, unit.y - 17);
+    ctx.lineTo(unit.x + 8, unit.y - 22);
+    ctx.lineTo(unit.x + 8, unit.y - 13);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
   if (unit.unitType === 'scout' && !unit.mountType) {
     ctx.fillStyle = '#704521';
     ctx.fillRect(unit.x - 10, unit.y + 1, 20, 3);

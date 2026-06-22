@@ -1,7 +1,9 @@
 const COMMAND_TYPE = Object.freeze({
   MOVE: 'move',
   ATTACK_UNIT: 'attack-unit',
-  MOUNT_SHEEP: 'mount-sheep'
+  MOUNT_SHEEP: 'mount-sheep',
+  PICK_UP_ITEM: 'pick-up-item',
+  DROP_ITEM: 'drop-item'
 });
 const MAX_COMMAND_QUEUE = 16;
 
@@ -53,6 +55,8 @@ class Unit {
         this.mountedSpeedBonus = 0;
         this.baseSpeed = speed;
         this.inventoryItem = null;
+        this.pendingPickupItem = null;
+        this.pendingDropPoint = null;
     }
 
     setFacingFromVector(dx, dy) {
@@ -90,13 +94,78 @@ class Unit {
 
     dropItem() {
       if (!this.inventoryItem || typeof dropCarriedItem !== 'function') return false;
-      const item = this.inventoryItem;
       const distance = this.size + 14;
       const dropX = this.x + Math.cos(this.heading || 0) * distance;
       const dropY = this.y + Math.sin(this.heading || 0) * distance;
+      return this.dropItemAt(dropX, dropY);
+    }
+
+    dropItemAt(dropX, dropY) {
+      if (!this.inventoryItem || typeof dropCarriedItem !== 'function') return false;
+      const item = this.inventoryItem;
       if (!dropCarriedItem(item, dropX, dropY)) return false;
       this.inventoryItem = null;
       return true;
+    }
+
+    clearPendingItemAction() {
+      this.pendingPickupItem = null;
+      this.pendingDropPoint = null;
+    }
+
+    issuePickupCommand(item) {
+      if (!item || item.isDead || item.isPickedUp || !item.pickupable || this.inventoryItem) return false;
+      this.commandQueue = [];
+      this.clearMovementState();
+      this.clearMountTarget();
+      this.attackOrderTarget = null;
+      this.currentEnemy = null;
+      this.executeCommand({ type: COMMAND_TYPE.PICK_UP_ITEM, item });
+      return true;
+    }
+
+    issueDropItemCommand(worldX, worldY) {
+      if (!this.inventoryItem || !this.isValidDestination(worldX, worldY)) return false;
+      const destination = findNearestWalkablePoint(worldX, worldY, this.size);
+      if (!destination) return false;
+      this.commandQueue = [];
+      this.clearMovementState();
+      this.clearMountTarget();
+      this.attackOrderTarget = null;
+      this.currentEnemy = null;
+      this.executeCommand({ type: COMMAND_TYPE.DROP_ITEM, x: destination.x, y: destination.y });
+      return true;
+    }
+
+    processPendingItemAction() {
+      const item = this.pendingPickupItem;
+      if (item) {
+        if (item.isDead || item.isPickedUp || !item.pickupable || this.inventoryItem) {
+          this.pendingPickupItem = null;
+          return false;
+        }
+        const pickupRange = this.size * 0.5 + (item.size || 20) * 0.55 + 8;
+        if (Math.hypot(item.x - this.x, item.y - this.y) <= pickupRange) {
+          this.pendingPickupItem = null;
+          this.clearMovementState();
+          return this.pickUpItem(item);
+        }
+        if (!this.target && !this.hasActivePath()) this.setDestination(item.x, item.y);
+      }
+
+      const dropPoint = this.pendingDropPoint;
+      if (dropPoint && this.inventoryItem) {
+        const dropRange = Math.max(tileSize * 0.8, this.size);
+        if (Math.hypot(dropPoint.x - this.x, dropPoint.y - this.y) <= dropRange) {
+          this.pendingDropPoint = null;
+          this.clearMovementState();
+          return this.dropItemAt(dropPoint.x, dropPoint.y);
+        }
+        if (!this.target && !this.hasActivePath()) this.setDestination(dropPoint.x, dropPoint.y);
+      } else if (dropPoint) {
+        this.pendingDropPoint = null;
+      }
+      return false;
     }
 
     updateWalkAnimation(dt, isMoving) {
@@ -210,6 +279,7 @@ class Unit {
       if (!append) {
         this.commandQueue = [];
         this.clearMovementState();
+        this.clearPendingItemAction();
         this.attackOrderTarget = null;
         this.currentEnemy = null;
         this.castleTopBuildingId = null;
@@ -241,6 +311,7 @@ class Unit {
       if (!append) {
         this.commandQueue = [];
         this.clearMovementState();
+        this.clearPendingItemAction();
         this.castleTopBuildingId = null;
         this.castleTopStairPoint = null;
         this.castleTopReached = false;
@@ -270,6 +341,7 @@ class Unit {
       if (!append) {
         this.commandQueue = [];
         this.clearMovementState();
+        this.clearPendingItemAction();
         this.attackOrderTarget = null;
         this.currentEnemy = null;
         this.castleTopBuildingId = null;
@@ -308,6 +380,18 @@ class Unit {
         this.currentEnemy = null;
         command.sheep.reservedByUnitId = this.id;
         this.setDestination(command.sheep.x, command.sheep.y);
+      }
+
+      if (command.type === COMMAND_TYPE.PICK_UP_ITEM) {
+        this.pendingDropPoint = null;
+        this.pendingPickupItem = command.item;
+        this.setDestination(command.item.x, command.item.y);
+      }
+
+      if (command.type === COMMAND_TYPE.DROP_ITEM) {
+        this.pendingPickupItem = null;
+        this.pendingDropPoint = { x: command.x, y: command.y };
+        this.setDestination(command.x, command.y);
       }
     }
 
@@ -356,18 +440,18 @@ class Unit {
         this.fireCooldown = 1 / this.fireRate;
         return;
       }
-      bullets.push(Bullet.obtain(
-        this.x,
-        this.y,
+      OpenRTS.systems.projectiles.spawn({
+        x: this.x,
+        y: this.y,
         target,
-        this.team,
+        team: this.team,
         damage,
-        this,
-        this.projectileSpeed,
-        this.projectileColor,
-        this.projectileType,
-        this.splashRadius
-      ));
+        shooter: this,
+        speed: this.projectileSpeed,
+        color: this.projectileColor,
+        projectileType: this.projectileType,
+        splashRadius: this.splashRadius
+      });
       this.fireCooldown = 1 / this.fireRate;
     }
 
@@ -399,10 +483,10 @@ class Unit {
       this.selected = false;
       const deathNoise = typeof hashNoise === 'function'
         ? hashNoise(this.id + 31, Math.floor(this.y))
-        : Math.random();
+        : OpenRTS.random.stream('effects').next();
       const deathNoiseB = typeof hashNoise === 'function'
         ? hashNoise(this.id + 17, Math.floor(this.x))
-        : Math.random();
+        : OpenRTS.random.stream('effects').next();
       this.deathRotation = Math.atan2(
         deathNoise - 0.5,
         deathNoiseB - 0.5
@@ -412,6 +496,7 @@ class Unit {
       this.commandQueue = [];
       this.target = null;
       this.currentEnemy = null;
+      this.clearPendingItemAction();
       this.clearMountTarget();
     }
 
@@ -519,186 +604,6 @@ class Unit {
 }
 
 // --- Bullets ---
-window.bullets = window.bullets || [];
-const bullets = window.bullets;
-window.impactEffects = window.impactEffects || [];
-const impactEffects = window.impactEffects;
-
-
-class Bullet {
-  constructor(x, y, target, team, damage = 8, shooter = null, speed = 200, color = null, projectileType = 'arrow', splashRadius = 0) {
-    this.reset(x, y, target, team, damage, shooter, speed, color, projectileType, splashRadius);
-  }
-
-  reset(x, y, target, team, damage = 8, shooter = null, speed = 200, color = null, projectileType = 'arrow', splashRadius = 0) {
-    this.x = x;
-    this.y = y;
-    this.startX = x;
-    this.startY = y;
-    this.team = team;
-    this.damage = damage;
-    this.color = color;
-    this.projectileType = projectileType || 'arrow';
-    this.splashRadius = Math.max(0, Number(splashRadius) || 0);
-    this.dead = false;
-    this.radius = 6; // larger for visibility
-    this.maxRange = 1200; // px (increased for visibility)
-    this.distanceTraveled = 0;
-    // Fixed direction toward target's position at fire time
-    const dx = target.x - x;
-    const dy = target.y - y;
-    const dist = Math.hypot(dx, dy) || 1;
-    this.targetDistance = dist;
-    this.dirX = dx / dist;
-    this.dirY = dy / dist;
-    this.speed = speed || 200;
-    this.shooter = shooter;
-    // Store the intended target for possible special effects, but do not home in
-    this.intendedTarget = target;
-  }
-
-  static obtain(x, y, target, team, damage = 8, shooter = null, speed = 200, color = null, projectileType = 'arrow', splashRadius = 0) {
-    const pooled = Bullet.pool.pop();
-    if (pooled) {
-      pooled.reset(x, y, target, team, damage, shooter, speed, color, projectileType, splashRadius);
-      return pooled;
-    }
-    return new Bullet(x, y, target, team, damage, shooter, speed, color, projectileType, splashRadius);
-  }
-
-  static release(bullet) {
-    if (!bullet) return;
-    Bullet.pool.push(bullet);
-  }
-
-  update(dt) {
-    if (this.dead) return;
-
-    const moveDist = this.speed * dt;
-    this.x += this.dirX * moveDist;
-    this.y += this.dirY * moveDist;
-    this.distanceTraveled += moveDist;
-
-    const candidates = typeof getUnitsNearPoint === 'function'
-      ? getUnitsNearPoint(this.x, this.y, this.radius + tileSize)
-      : units;
-    const sheepCandidates = typeof getLiveSheepNearPoint === 'function'
-      ? getLiveSheepNearPoint(this.x, this.y, this.radius + tileSize)
-      : [];
-    const duckCandidates = typeof getLiveDucksNearPoint === 'function'
-      ? getLiveDucksNearPoint(this.x, this.y, this.radius + tileSize)
-      : [];
-    const horseCandidates = typeof getLiveHorsesNearPoint === 'function'
-      ? getLiveHorsesNearPoint(this.x, this.y, this.radius + tileSize)
-      : [];
-    const buildingCandidates = typeof getLiveBuildingsNearPoint === 'function'
-      ? getLiveBuildingsNearPoint(this.x, this.y, this.radius + tileSize)
-      : [];
-
-    for (const unit of candidates.concat(sheepCandidates, duckCandidates, horseCandidates, buildingCandidates)) {
-      if (unit.isDead) continue;
-      // Never collide with shooter or same-team units.
-      if (unit === this.shooter) continue;
-      if (unit.team === this.team) continue;
-
-      const dx = unit.x - this.x;
-      const dy = unit.y - this.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < unit.size * 0.5 + this.radius) {
-        this.applyImpactDamage(unit);
-        this.dead = true;
-        return;
-      }
-    }
-
-    // Remove bullet if out of range or off screen
-    // Use global canvas if available, else fallback to large default
-    const cW = typeof getMapWidthPx === 'function' ? getMapWidthPx() : 1920;
-    const cH = typeof getMapHeightPx === 'function' ? getMapHeightPx() : 1080;
-    if (this.distanceTraveled > this.maxRange ||
-        this.x < 0 || this.x > cW ||
-        this.y < 0 || this.y > cH) {
-      this.dead = true;
-    }
-  }
-
-  applyImpactDamage(directTarget) {
-    if (this.splashRadius <= 0) {
-      directTarget.takeDamage(this.damage);
-      return;
-    }
-
-    const nearby = [];
-    impactEffects.push({
-      type: 'explosion',
-      x: this.x,
-      y: this.y,
-      radius: this.splashRadius,
-      age: 0,
-      duration: 0.42
-    });
-    if (typeof getUnitsNearPoint === 'function') nearby.push(...getUnitsNearPoint(this.x, this.y, this.splashRadius));
-    else nearby.push(...units);
-    if (typeof getLiveSheepNearPoint === 'function') nearby.push(...getLiveSheepNearPoint(this.x, this.y, this.splashRadius));
-    if (typeof getLiveDucksNearPoint === 'function') nearby.push(...getLiveDucksNearPoint(this.x, this.y, this.splashRadius));
-    if (typeof getLiveHorsesNearPoint === 'function') nearby.push(...getLiveHorsesNearPoint(this.x, this.y, this.splashRadius));
-    if (typeof getLiveBuildingsNearPoint === 'function') nearby.push(...getLiveBuildingsNearPoint(this.x, this.y, this.splashRadius));
-    nearby.push(directTarget);
-
-    for (const target of new Set(nearby)) {
-      if (!target || target.isDead || target === this.shooter || target.team === this.team) continue;
-      const distance = Math.hypot(target.x - this.x, target.y - this.y);
-      const targetRadius = Math.max(0, Number(target.size) || 0) * 0.5;
-      if (distance > this.splashRadius + targetRadius) continue;
-      const falloff = Math.max(0.45, 1 - distance / Math.max(1, this.splashRadius));
-      target.takeDamage(Math.max(1, Math.round(this.damage * falloff)));
-    }
-  }
-
-  render(ctx) {
-    if (this.dead) return;
-    ctx.save();
-    ctx.beginPath();
-    const drawRadius = this.projectileType === 'grenade' ? 7 : this.projectileType === 'bullet' ? 3 : 5;
-    ctx.arc(this.x, this.y, drawRadius, 0, Math.PI * 2);
-    ctx.fillStyle = this.color || (this.team === 'red' ? '#ff6600' : '#00ccff');
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#111';
-    ctx.stroke();
-    ctx.restore();
-  }
-}
-Bullet.pool = [];
-
-function updateBullets(dt) {
-  for (let i = bullets.length - 1; i >= 0; i--) {
-    const b = bullets[i];
-    b.update(dt);
-    if (!b.dead) continue;
-    bullets.splice(i, 1);
-    Bullet.release(b);
-  }
-  for (let i = impactEffects.length - 1; i >= 0; i--) {
-    impactEffects[i].age += dt;
-    if (impactEffects[i].age >= impactEffects[i].duration) impactEffects.splice(i, 1);
-  }
-}
-
-function renderBullets(ctx) {
-  for (const b of bullets) b.render(ctx);
-  for (const effect of impactEffects) {
-    const progress = effect.age / effect.duration;
-    ctx.save();
-    ctx.strokeStyle = `rgba(255, 151, 52, ${1 - progress})`;
-    ctx.lineWidth = 4 * (1 - progress) + 1;
-    ctx.beginPath();
-    ctx.arc(effect.x, effect.y, effect.radius * progress, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-}
-
 function renderUnits(debug = {}) {
   units.forEach(unit => {
     processUnitRender(unit, ctx);

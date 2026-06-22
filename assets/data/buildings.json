@@ -1,10 +1,10 @@
 {
   "home": {
     "name": "Castle",
-    "width": 7,
-    "height": 7,
+    "width": 9,
+    "height": 9,
     "hp": 1250,
-    "size": 260,
+    "size": 340,
     "range": 360,
     "damage": 11,
     "attackCooldown": 1.05,

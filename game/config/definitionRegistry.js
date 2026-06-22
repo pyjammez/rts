@@ -110,6 +110,18 @@ const DEFAULT_WEAPON_DEFINITIONS = {
 };
 
 const DEFAULT_UNIT_DEFINITIONS = {
+  king: {
+    id: 'king',
+    name: 'King',
+    hp: 180,
+    speed: 88,
+    size: 24,
+    weapon: 'sword',
+    role: 'Royal commander and castle upgrader',
+    model: 'king',
+    maxPerTeam: 1,
+    requiredPerTeam: true
+  },
   soldier: {
     id: 'soldier',
     name: 'Soldier',
@@ -186,10 +198,10 @@ const DEFAULT_BUILDING_DEFINITIONS = {
   home: {
     id: 'home',
     name: 'Castle',
-    width: 7,
-    height: 7,
+    width: 9,
+    height: 9,
     hp: 1250,
-    size: 260,
+    size: 340,
     range: 360,
     damage: 11,
     attackCooldown: 1.05,
@@ -246,7 +258,7 @@ const DEFAULT_GAME_MODES = {
     playable: true,
     startLabel: 'Create Versus Room',
     teams: ['red', 'blue'],
-    allowedUnits: ['soldier', 'archer', 'knight', 'scout', 'gunman', 'crossbowman', 'grenademan'],
+    allowedUnits: ['king', 'soldier', 'archer', 'knight', 'scout', 'gunman', 'crossbowman', 'grenademan'],
     defaults: {
       mapStyle: 'coastal_grassland',
       waterLevel: 10,
@@ -255,10 +267,11 @@ const DEFAULT_GAME_MODES = {
       sheepCount: 12,
       duckCount: 5,
       playersPerTeam: 1,
-      startingUnitsPerTeam: 7,
+      startingUnitsPerTeam: 8,
       towersPerTeam: 0,
       homesPerTeam: 1,
       unitRoster: {
+        king: 1,
         soldier: 1,
         archer: 1,
         knight: 1,
@@ -278,7 +291,7 @@ const DEFAULT_GAME_MODES = {
     playable: false,
     startLabel: 'Tower Defense Coming Soon',
     teams: ['red'],
-    allowedUnits: ['soldier', 'archer', 'gunman', 'crossbowman', 'grenademan'],
+    allowedUnits: ['king', 'soldier', 'archer', 'gunman', 'crossbowman', 'grenademan'],
     defaults: {
       mapStyle: 'defense_pass',
       waterLevel: 4,
@@ -300,7 +313,7 @@ const DEFAULT_GAME_MODES = {
     playable: true,
     startLabel: 'Begin Comparison',
     teams: ['red', 'blue'],
-    allowedUnits: ['soldier', 'archer', 'knight', 'scout', 'gunman', 'crossbowman', 'grenademan'],
+    allowedUnits: ['king', 'soldier', 'archer', 'knight', 'scout', 'gunman', 'crossbowman', 'grenademan'],
     defaults: {
       mapStyle: 'arena',
       waterLevel: 0,
@@ -358,6 +371,16 @@ async function loadJsonConfig(key, fallback, label) {
 }
 
 function publishGameDefinitions() {
+  const registry = OpenRTS.config.definitions || {};
+  registry.weapons = WEAPON_DEFINITIONS;
+  registry.units = UNIT_DEFINITIONS;
+  registry.buildings = BUILDING_DEFINITIONS;
+  registry.terrainPresets = TERRAIN_PRESETS;
+  registry.modes = GAME_MODES;
+  registry.loadState = configLoadState;
+  OpenRTS.config.definitions = registry;
+
+  // Compatibility adapters for systems that have not migrated to OpenRTS yet.
   window.WEAPON_DEFINITIONS = WEAPON_DEFINITIONS;
   window.UNIT_DEFINITIONS = UNIT_DEFINITIONS;
   window.BUILDING_DEFINITIONS = BUILDING_DEFINITIONS;
@@ -392,6 +415,10 @@ async function loadGameDefinitions() {
 
   configLoadState.loaded = true;
   publishGameDefinitions();
+  OpenRTS.events.emit(OpenRTS.events.types.CONFIG_LOADED, {
+    usedFallback: configLoadState.usedFallback,
+    errors: [...configLoadState.errors]
+  });
   return configLoadState;
 }
 
@@ -454,3 +481,11 @@ window.getTerrainPreset = getTerrainPreset;
 window.getWeaponDefinition = getWeaponDefinition;
 window.getUnitDefinition = getUnitDefinition;
 window.getBuildingDefinition = getBuildingDefinition;
+
+OpenRTS.config.loadDefinitions = loadGameDefinitions;
+OpenRTS.config.getMode = getGameModeDefinition;
+OpenRTS.config.getModeDefaults = getDefaultModeSettings;
+OpenRTS.config.getTerrainPreset = getTerrainPreset;
+OpenRTS.config.getWeapon = getWeaponDefinition;
+OpenRTS.config.getUnit = getUnitDefinition;
+OpenRTS.config.getBuilding = getBuildingDefinition;

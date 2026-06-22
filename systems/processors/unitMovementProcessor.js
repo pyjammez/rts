@@ -12,6 +12,11 @@ function processUnitMovement(unit, dt) {
     unit.repathCooldown = Math.max(0, unit.repathCooldown - dt);
   }
 
+  if (typeof unit.processPendingItemAction === 'function' && unit.processPendingItemAction()) {
+    unit.updateWalkAnimation(dt, false);
+    return;
+  }
+
   if (!unit.path || unit.pathIndex >= unit.path.length) {
     unit.stuckTime = 0;
     unit.updateWalkAnimation(dt, false);

@@ -1,4 +1,15 @@
 {
+  "king": {
+    "name": "King",
+    "hp": 180,
+    "speed": 88,
+    "size": 24,
+    "weapon": "sword",
+    "role": "Royal commander and castle upgrader",
+    "model": "king",
+    "maxPerTeam": 1,
+    "requiredPerTeam": true
+  },
   "soldier": {
     "name": "Soldier",
     "hp": 100,

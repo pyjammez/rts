@@ -1,4 +1,0 @@
-{
-  "soldier": { "hp": 100, "attack": 10, "speed": 1.2 },
-  "archer": { "hp": 70, "attack": 12, "speed": 1.0 }
-}
