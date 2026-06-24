@@ -1,28 +1,54 @@
 const DEFAULT_MODE_ID = 'versus';
+const PLAYER_FLAG_OPTIONS = [
+  { id: 'red', name: 'Red', color: '#c63c3c' },
+  { id: 'blue', name: 'Blue', color: '#3e69d7' },
+  { id: 'green', name: 'Green', color: '#3f9b55' },
+  { id: 'yellow', name: 'Yellow', color: '#d8b235' },
+  { id: 'purple', name: 'Purple', color: '#8a58c8' },
+  { id: 'orange', name: 'Orange', color: '#d77a32' },
+  { id: 'teal', name: 'Teal', color: '#2e9fa0' },
+  { id: 'black', name: 'Black', color: '#34302a' }
+];
 
 let selectedModeId = DEFAULT_MODE_ID;
 
 var mapConfig = {
   modeId: DEFAULT_MODE_ID,
   modeName: getGameModeDefinition(DEFAULT_MODE_ID).name,
+  mapSize: 'default_large',
   waterLevel: 10,
-  rockCount: 15,
+  rockCount: 20,
   treeCount: 30,
-  sheepCount: 12,
+  sheepCount: 10,
   duckCount: 5,
+  goldMineCount: 5,
+  houseCount: 1,
+  startingGold: 140,
+  startingWood: 160,
+  startingFood: 0,
   startingUnitsPerTeam: 8,
   towersPerTeam: 0,
   homesPerTeam: 1,
+  enabledUnits: ['king', 'worker', 'soldier', 'archer', 'knight', 'scout', 'gunman', 'crossbowman', 'grenademan', 'balloon'],
+  unitOverrides: {},
+  unitCatalogFilters: {
+    query: '',
+    era: 'all'
+  },
   unitRoster: {
     king: 1,
-    soldier: 1,
-    archer: 1,
-    knight: 1,
-    scout: 1,
-    gunman: 1,
-    crossbowman: 1,
-    grenademan: 1
+    worker: 5,
+    soldier: 0,
+    archer: 0,
+    knight: 0,
+    scout: 0,
+    gunman: 0,
+    crossbowman: 0,
+    grenademan: 0,
+    balloon: 0
   },
+  playerCount: 2,
+  playerSlots: createDefaultPlayerSlots(2),
   mapStyle: 'coastal_grassland',
   terrain: {}
 };
@@ -31,17 +57,21 @@ window.mapConfig = mapConfig;
 
 const SETTING_FIELDS = {
   map: [
+    { key: 'savedMapId', label: 'Saved Map', type: 'select', options: getSavedMapOptions },
     { key: 'mapStyle', label: 'Terrain Preset', type: 'select', options: getTerrainPresetOptions },
-    { key: 'waterLevel', label: 'Water Coverage', type: 'range', min: 0, max: 100, suffix: '%', hint: 'Sand auto-surrounds water edges' },
+    { key: 'waterLevel', label: 'Water/Lava Coverage', type: 'range', min: 0, max: 100, suffix: '%', hint: 'Some presets render water areas as lava' },
     { key: 'rockCount', label: 'Rocks', type: 'range', min: 0, max: 150 },
-    { key: 'treeCount', label: 'Trees', type: 'range', min: 0, max: 300 }
+    { key: 'treeCount', label: 'Trees', type: 'range', min: 0, max: 300 },
+    { key: 'goldMineCount', label: 'Gold Mounds', type: 'range', min: 0, max: 20 },
+    { key: 'houseCount', label: 'Neutral Houses', type: 'range', min: 0, max: 30 }
   ],
   wildlife: [
     { key: 'sheepCount', label: 'Sheep', type: 'range', min: 0, max: 80 },
     { key: 'duckCount', label: 'Ducks', type: 'range', min: 0, max: 80 }
   ],
   forces: [
-    { key: 'unitRoster', label: 'Starting Units Per Team', type: 'unitRoster' }
+    { key: 'unitCatalog', label: 'Unit Catalog', type: 'unitCatalog' },
+    { key: 'unitLoadout', label: 'Unit Stats And Starting Counts', type: 'unitLoadout' }
   ],
   defense: [
     { key: 'startingGold', label: 'Starting Gold', type: 'range', min: 0, max: 1000, step: 25 },
@@ -55,6 +85,20 @@ const SETTING_FIELDS = {
     { key: 'redUnitType', label: 'Red Unit Type', type: 'select', options: getUnitOptions },
     { key: 'blueUnitType', label: 'Blue Unit Type', type: 'select', options: getUnitOptions },
     { key: 'arenaSize', label: 'Arena Size', type: 'range', min: 20, max: 100, suffix: '%' }
+  ],
+  comparison_left: [
+    { key: 'leftUnitRoster', label: 'Left Team Units', type: 'unitRoster', allowZeroRequired: true }
+  ],
+  comparison_right: [
+    { key: 'rightUnitRoster', label: 'Right Team Units', type: 'unitRoster', allowZeroRequired: true }
+  ],
+  map_builder: [
+    { key: 'mapBuilderSize', label: 'Map Size', type: 'select', options: getMapBuilderSizeOptions },
+    { key: 'mapStyle', label: 'Starting Terrain', type: 'select', options: getTerrainPresetOptions },
+    { key: 'waterLevel', label: 'Water Coverage', type: 'range', min: 0, max: 100, suffix: '%' },
+    { key: 'rockCount', label: 'Starting Rocks', type: 'range', min: 0, max: 150 },
+    { key: 'treeCount', label: 'Starting Trees', type: 'range', min: 0, max: 300 },
+    { key: 'houseCount', label: 'Starting Houses', type: 'range', min: 0, max: 30 }
   ]
 };
 
@@ -62,8 +106,13 @@ const SECTION_TITLES = {
   map: 'Map',
   wildlife: 'Wildlife',
   forces: 'Starting Forces',
+  forces_available: 'Available Units',
+  forces_loadout: 'Unit Stats And Starting Counts',
   defense: 'Defense Rules',
-  comparison: 'Comparison Rules'
+  comparison: 'Comparison Rules',
+  comparison_left: 'Left Team',
+  comparison_right: 'Right Team',
+  map_builder: 'Builder Setup'
 };
 
 const SECTION_COLUMNS = {
@@ -71,12 +120,17 @@ const SECTION_COLUMNS = {
   wildlife: 'map',
   forces: 'players',
   defense: 'players',
-  comparison: 'players'
+  comparison: 'players',
+  comparison_left: 'left',
+  comparison_right: 'right',
+  map_builder: 'map'
 };
 
 const COLUMN_TITLES = {
   map: 'Map Settings',
-  players: 'Player Settings'
+  players: 'Player Settings',
+  left: 'Left Team',
+  right: 'Right Team'
 };
 
 function getSelectedModeId() {
@@ -89,11 +143,13 @@ function setSelectedModeId(modeId) {
 
 function getUnitOptions(modeId = selectedModeId) {
   const mode = getGameModeDefinition(modeId);
-  const allowedUnits = Array.isArray(mode.allowedUnits) && mode.allowedUnits.length
-    ? mode.allowedUnits
-    : Object.keys(UNIT_DEFINITIONS);
+  const selectedUnits = Array.isArray(mapConfig.enabledUnits) && mapConfig.enabledUnits.length
+    ? mapConfig.enabledUnits
+    : Array.isArray(mode.allowedUnits) && mode.allowedUnits.length
+      ? mode.allowedUnits
+      : Object.keys(UNIT_DEFINITIONS);
 
-  return allowedUnits
+  return selectedUnits
     .map(unitId => getUnitDefinition(unitId))
     .filter(Boolean)
     .map(unit => ({ value: unit.id, label: unit.name }));
@@ -103,6 +159,136 @@ function getTerrainPresetOptions() {
   return Object.values(TERRAIN_PRESETS).map(preset => ({ value: preset.id, label: preset.name }));
 }
 
+function getMapBuilderSizeOptions() {
+  return [
+    { value: 'small', label: 'Small' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'large', label: 'Large' }
+  ];
+}
+
+const SAVED_MAPS_STORAGE_KEY = 'open-rts.savedMaps.v1';
+
+function getSavedMaps() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SAVED_MAPS_STORAGE_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveCustomMap(mapData) {
+  const maps = getSavedMaps().filter(map => map.id !== mapData.id);
+  maps.push(mapData);
+  localStorage.setItem(SAVED_MAPS_STORAGE_KEY, JSON.stringify(maps.slice(-30)));
+  return mapData;
+}
+
+function getSavedMapById(id) {
+  return getSavedMaps().find(map => String(map.id) === String(id)) || null;
+}
+
+function getSavedMapOptions() {
+  return [
+    { value: '', label: 'Generated Map' },
+    ...getSavedMaps().map(map => ({
+      value: map.id,
+      label: `${map.name} (${map.columns}x${map.rows})`
+    }))
+  ];
+}
+
+function getFlagOption(flagId) {
+  return PLAYER_FLAG_OPTIONS.find(flag => flag.id === flagId) || PLAYER_FLAG_OPTIONS[0];
+}
+
+function getTeamColor(team) {
+  return getFlagOption(team).color;
+}
+
+function createDefaultPlayerSlots(count = 2) {
+  const playerCount = Math.max(2, Math.min(8, Math.floor(Number(count) || 2)));
+  return Array.from({ length: playerCount }, (_, index) => ({
+    id: `slot-${index + 1}`,
+    name: index === 0 ? 'You' : index === 1 ? 'AI Opponent' : `Open Slot ${index + 1}`,
+    controller: index === 0 ? 'human' : index === 1 ? 'ai' : 'open',
+    flag: PLAYER_FLAG_OPTIONS[index]?.id || PLAYER_FLAG_OPTIONS[0].id,
+    ready: index < 2
+  }));
+}
+
+function normalizePlayerSlots(config = mapConfig) {
+  const requestedCount = Math.max(2, Math.min(8, Math.floor(Number(config.playerCount) || 2)));
+  const sourceSlots = Array.isArray(config.playerSlots) ? config.playerSlots : [];
+  const usedFlags = new Set();
+  const slots = [];
+
+  for (let index = 0; index < requestedCount; index++) {
+    const source = sourceSlots[index] || {};
+    const fallback = PLAYER_FLAG_OPTIONS[index] || PLAYER_FLAG_OPTIONS[0];
+    let flag = PLAYER_FLAG_OPTIONS.some(option => option.id === source.flag) ? source.flag : fallback.id;
+    if (usedFlags.has(flag)) {
+      flag = PLAYER_FLAG_OPTIONS.find(option => !usedFlags.has(option.id))?.id || fallback.id;
+    }
+    usedFlags.add(flag);
+
+    const controller = ['human', 'ai', 'open'].includes(source.controller)
+      ? source.controller
+      : index === 0 ? 'human' : index === 1 ? 'ai' : 'open';
+
+    slots.push({
+      id: source.id || `slot-${index + 1}`,
+      name: source.name || (index === 0 ? 'You' : controller === 'ai' ? `AI ${index + 1}` : `Open Slot ${index + 1}`),
+      controller,
+      flag,
+      ready: controller !== 'open'
+    });
+  }
+
+  config.playerCount = requestedCount;
+  config.playerSlots = slots;
+  config.teams = slots
+    .filter(slot => slot.controller !== 'open')
+    .map(slot => slot.flag);
+  return slots;
+}
+
+function setPlayerCount(count) {
+  mapConfig.playerCount = Math.max(2, Math.min(8, Math.floor(Number(count) || 2)));
+  normalizePlayerSlots(mapConfig);
+  window.mapConfig = mapConfig;
+}
+
+function setPlayerSlotController(slotIndex, controller) {
+  normalizePlayerSlots(mapConfig);
+  const slot = mapConfig.playerSlots[slotIndex];
+  if (!slot || !['human', 'ai', 'open'].includes(controller)) return;
+  if (slotIndex === 0 && controller === 'open') controller = 'human';
+  slot.controller = controller;
+  slot.ready = controller !== 'open';
+  if (controller === 'human') {
+    slot.name = slotIndex === 0 ? 'You' : `Human ${slotIndex + 1}`;
+  } else if (controller === 'ai') {
+    slot.name = `AI ${slotIndex + 1}`;
+  } else {
+    slot.name = `Open Slot ${slotIndex + 1}`;
+  }
+  normalizePlayerSlots(mapConfig);
+}
+
+function setPlayerSlotFlag(slotIndex, flag) {
+  normalizePlayerSlots(mapConfig);
+  const slot = mapConfig.playerSlots[slotIndex];
+  if (!slot || !PLAYER_FLAG_OPTIONS.some(option => option.id === flag)) return;
+  slot.flag = flag;
+  normalizePlayerSlots(mapConfig);
+}
+
+function getActivePlayerSlots(config = mapConfig) {
+  return normalizePlayerSlots(config).filter(slot => slot.controller !== 'open');
+}
+
 function setPanelVisible(panel, visible) {
   if (panel) panel.style.display = visible ? 'block' : 'none';
 }
@@ -110,13 +296,28 @@ function setPanelVisible(panel, visible) {
 function mergeModeDefaults(modeId) {
   const mode = getGameModeDefinition(modeId);
   const defaults = getDefaultModeSettings(modeId);
+  const enabledUnits = Array.isArray(defaults.enabledUnits)
+    ? structuredClone(defaults.enabledUnits)
+    : Array.isArray(mode.allowedUnits) ? structuredClone(mode.allowedUnits) : [];
   mapConfig = {
     ...defaults,
     modeId: mode.id,
     modeName: mode.name,
     teams: [...mode.teams],
+    enabledUnits,
+    unitOverrides: structuredClone(defaults.unitOverrides || {}),
+    unitCatalogFilters: {
+      query: '',
+      era: 'all',
+      ...(defaults.unitCatalogFilters || {})
+    },
+    playerCount: defaults.playerCount || mode.teams.length || 2,
+    playerSlots: Array.isArray(defaults.playerSlots)
+      ? structuredClone(defaults.playerSlots)
+      : createDefaultPlayerSlots(defaults.playerCount || mode.teams.length || 2),
     terrain: {}
   };
+  normalizePlayerSlots(mapConfig);
   window.mapConfig = mapConfig;
 }
 
@@ -137,6 +338,18 @@ function createSettingControl(field) {
   if (field.type === 'unitRoster') {
     valueText.textContent = '';
     row.appendChild(createUnitRosterControl(field));
+    return row;
+  }
+
+  if (field.type === 'unitCatalog') {
+    valueText.textContent = '';
+    row.appendChild(createUnitCatalogControl(field));
+    return row;
+  }
+
+  if (field.type === 'unitLoadout') {
+    valueText.textContent = '';
+    row.appendChild(createUnitLoadoutControl(field));
     return row;
   }
 
@@ -161,6 +374,8 @@ function createSettingControl(field) {
       if (field.key === 'mapStyle') {
         applyTerrainPreset(event.target.value);
         renderConfigPanel(mapConfig.modeId);
+      } else if (field.key === 'savedMapId') {
+        mapConfig.loadedMap = event.target.value ? getSavedMapById(event.target.value) : null;
       }
     });
 
@@ -215,7 +430,7 @@ function createUnitRosterControl(field) {
 
     const input = document.createElement('input');
     const unitDefinition = getUnitDefinition(option.value);
-    const requiredCount = unitDefinition.requiredPerTeam ? 1 : 0;
+    const requiredCount = unitDefinition.requiredPerTeam && !field.allowZeroRequired ? 1 : 0;
     const maximumCount = Number.isFinite(Number(unitDefinition.maxPerTeam))
       ? Math.max(requiredCount, Math.floor(Number(unitDefinition.maxPerTeam)))
       : 80;
@@ -241,6 +456,294 @@ function createUnitRosterControl(field) {
   return list;
 }
 
+function createUnitLoadoutControl(field) {
+  const rosterKey = field.rosterKey || 'unitRoster';
+  const roster = mapConfig[rosterKey] && typeof mapConfig[rosterKey] === 'object'
+    ? { ...mapConfig[rosterKey] }
+    : {};
+  const options = getUnitOptions(mapConfig.modeId);
+  const list = document.createElement('div');
+  list.className = 'unit-loadout-grid';
+  mapConfig[rosterKey] = roster;
+  mapConfig.unitOverrides = mapConfig.unitOverrides && typeof mapConfig.unitOverrides === 'object'
+    ? mapConfig.unitOverrides
+    : {};
+
+  for (const option of options) {
+    const unit = getUnitDefinition(option.value);
+    if (!unit) continue;
+    if (!Number.isFinite(Number(roster[option.value]))) roster[option.value] = 0;
+    list.appendChild(createUnitLoadoutCard(unit, roster, field));
+  }
+
+  if (options.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'spectrum-hint';
+    empty.textContent = 'Choose units from the available catalog first.';
+    list.appendChild(empty);
+  }
+
+  return list;
+}
+
+function createUnitLoadoutCard(unit, roster, field) {
+  const overrides = mapConfig.unitOverrides[unit.id] || {};
+  const card = document.createElement('div');
+  card.className = 'unit-loadout-card';
+
+  const header = document.createElement('div');
+  header.className = 'unit-loadout-header';
+  const title = document.createElement('strong');
+  title.textContent = unit.name || unit.id;
+  const meta = document.createElement('span');
+  meta.textContent = `${titleCase(unit.era || 'core')} / ${unit.weaponName || unit.weapon || 'Weapon'}`;
+  header.appendChild(title);
+  header.appendChild(meta);
+  card.appendChild(header);
+
+  const controls = document.createElement('div');
+  controls.className = 'unit-loadout-controls';
+  controls.appendChild(createStartingCountInput(unit, roster, field));
+  controls.appendChild(createUnitOverrideNumber(unit.id, 'hp', 'HP', overrides.hp ?? unit.hp, 1, 5000));
+  controls.appendChild(createUnitOverrideNumber(unit.id, 'damage', 'Damage', overrides.damage ?? unit.damage, 0, 1000));
+  controls.appendChild(createUnitOverrideText(unit.id, 'abilities', 'Abilities', overrides.abilities ?? (unit.abilities || []).join(', ')));
+  card.appendChild(controls);
+
+  if (unit.role) {
+    const role = document.createElement('div');
+    role.className = 'unit-catalog-role';
+    role.textContent = unit.role;
+    card.appendChild(role);
+  }
+
+  return card;
+}
+
+function createStartingCountInput(unit, roster, field) {
+  const label = document.createElement('label');
+  label.className = 'unit-override-field';
+  const text = document.createElement('span');
+  text.textContent = 'Start';
+  const input = document.createElement('input');
+  const requiredCount = unit.requiredPerTeam && !field.allowZeroRequired ? 1 : 0;
+  const maximumCount = Number.isFinite(Number(unit.maxPerTeam))
+    ? Math.max(requiredCount, Math.floor(Number(unit.maxPerTeam)))
+    : 80;
+  const initialCount = Math.max(requiredCount, Math.min(maximumCount, Math.floor(Number(roster[unit.id]) || 0)));
+  roster[unit.id] = initialCount;
+  input.type = 'number';
+  input.min = String(requiredCount);
+  input.max = String(maximumCount);
+  input.step = '1';
+  input.value = String(initialCount);
+  input.disabled = !!unit.requiredPerTeam && maximumCount === requiredCount;
+  input.addEventListener('input', event => {
+    roster[unit.id] = Math.max(requiredCount, Math.min(maximumCount, Math.floor(Number(event.target.value) || 0)));
+    mapConfig[field.rosterKey || 'unitRoster'] = roster;
+  });
+  label.appendChild(text);
+  label.appendChild(input);
+  return label;
+}
+
+function normalizeEnabledUnits() {
+  const mode = getGameModeDefinition(mapConfig.modeId);
+  const fallback = Array.isArray(mode.allowedUnits) ? mode.allowedUnits : Object.keys(UNIT_DEFINITIONS || {});
+  const enabled = new Set(Array.isArray(mapConfig.enabledUnits) && mapConfig.enabledUnits.length ? mapConfig.enabledUnits : fallback);
+
+  for (const unit of typeof getUnitCatalog === 'function' ? getUnitCatalog() : []) {
+    if (unit.requiredPerTeam) enabled.add(unit.id);
+  }
+
+  mapConfig.enabledUnits = [...enabled].filter(unitId => !!(window.UNIT_DEFINITIONS || {})[unitId]);
+  mapConfig.unitOverrides = mapConfig.unitOverrides && typeof mapConfig.unitOverrides === 'object'
+    ? mapConfig.unitOverrides
+    : {};
+  mapConfig.unitCatalogFilters = {
+    query: '',
+    era: 'all',
+    ...(mapConfig.unitCatalogFilters || {})
+  };
+  delete mapConfig.unitCatalogFilters.pack;
+  return new Set(mapConfig.enabledUnits);
+}
+
+function createUnitCatalogControl() {
+  const selectedUnits = normalizeEnabledUnits();
+  const filters = mapConfig.unitCatalogFilters;
+  const facets = typeof getUnitCatalogFacets === 'function'
+    ? getUnitCatalogFacets()
+    : { eras: [] };
+  const wrapper = document.createElement('div');
+  wrapper.className = 'unit-catalog';
+
+  const controls = document.createElement('div');
+  controls.className = 'unit-catalog-controls';
+
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.id = 'unit-catalog-search';
+  search.placeholder = 'Search units, eras, weapons, abilities...';
+  search.value = filters.query || '';
+  search.addEventListener('input', event => {
+    mapConfig.unitCatalogFilters.query = event.target.value;
+    rerenderConfigPreservingFocus(search.id, event.target.selectionStart);
+  });
+  controls.appendChild(search);
+
+  const eraSelect = createCatalogSelect('Era', filters.era || 'all', [
+    { value: 'all', label: 'All eras' },
+    ...facets.eras.map(era => ({ value: era, label: titleCase(era) }))
+  ], value => {
+    mapConfig.unitCatalogFilters.era = value;
+    renderConfigPanel(mapConfig.modeId);
+  });
+  controls.appendChild(eraSelect);
+  wrapper.appendChild(controls);
+
+  const units = typeof searchUnitCatalog === 'function'
+    ? searchUnitCatalog(filters)
+    : Object.keys(UNIT_DEFINITIONS || {}).map(unitId => getUnitDefinition(unitId));
+  const visibleUnits = units.slice(0, 80);
+  const list = document.createElement('div');
+  list.className = 'unit-catalog-list';
+
+  for (const unit of visibleUnits) {
+    list.appendChild(createUnitCatalogCard(unit, selectedUnits));
+  }
+
+  wrapper.appendChild(list);
+
+  const summary = document.createElement('div');
+  summary.className = 'spectrum-hint';
+  summary.textContent = `${selectedUnits.size} selected for this match. Showing ${visibleUnits.length} of ${units.length} catalog units.`;
+  wrapper.appendChild(summary);
+
+  return wrapper;
+}
+
+function rerenderConfigPreservingFocus(elementId, cursorIndex = null) {
+  renderConfigPanel(mapConfig.modeId);
+  requestAnimationFrame(() => {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    element.focus();
+    if (Number.isFinite(Number(cursorIndex)) && typeof element.setSelectionRange === 'function') {
+      element.setSelectionRange(cursorIndex, cursorIndex);
+    }
+  });
+}
+
+function createCatalogSelect(labelText, value, options, onChange) {
+  const label = document.createElement('label');
+  label.className = 'unit-catalog-filter';
+  const text = document.createElement('span');
+  text.textContent = labelText;
+  const select = document.createElement('select');
+  for (const option of options) {
+    const optionEl = document.createElement('option');
+    optionEl.value = option.value;
+    optionEl.textContent = option.label;
+    optionEl.selected = option.value === value;
+    select.appendChild(optionEl);
+  }
+  select.addEventListener('change', event => onChange(event.target.value));
+  label.appendChild(text);
+  label.appendChild(select);
+  return label;
+}
+
+function createUnitCatalogCard(unit, selectedUnits) {
+  const selected = selectedUnits.has(unit.id) || !!unit.requiredPerTeam;
+  const card = document.createElement('div');
+  card.className = `unit-catalog-card${selected ? ' is-selected' : ''}`;
+
+  const header = document.createElement('label');
+  header.className = 'unit-catalog-card-header';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = selected;
+  checkbox.disabled = !!unit.requiredPerTeam;
+  checkbox.addEventListener('change', event => {
+    const next = normalizeEnabledUnits();
+    if (event.target.checked) {
+      next.add(unit.id);
+      if (!mapConfig.unitRoster) mapConfig.unitRoster = {};
+      mapConfig.unitRoster[unit.id] = Math.max(0, Math.floor(Number(mapConfig.unitRoster[unit.id]) || 0));
+    } else {
+      next.delete(unit.id);
+      if (mapConfig.unitRoster) mapConfig.unitRoster[unit.id] = 0;
+      if (mapConfig.leftUnitRoster) mapConfig.leftUnitRoster[unit.id] = 0;
+      if (mapConfig.rightUnitRoster) mapConfig.rightUnitRoster[unit.id] = 0;
+    }
+    mapConfig.enabledUnits = [...next];
+    renderConfigPanel(mapConfig.modeId);
+  });
+
+  const title = document.createElement('span');
+  title.textContent = unit.name || unit.id;
+  header.appendChild(checkbox);
+  header.appendChild(title);
+  card.appendChild(header);
+
+  const meta = document.createElement('div');
+  meta.className = 'unit-catalog-meta';
+  meta.textContent = `${titleCase(unit.era || 'core')} / ${unit.weaponName || unit.weapon || 'Weapon'} / HP ${unit.hp} / DMG ${unit.damage}`;
+  card.appendChild(meta);
+
+  const role = document.createElement('div');
+  role.className = 'unit-catalog-role';
+  role.textContent = unit.role || 'Custom unit';
+  card.appendChild(role);
+
+  return card;
+}
+
+function createUnitOverrideNumber(unitId, key, labelText, value, min, max) {
+  const label = document.createElement('label');
+  label.className = 'unit-override-field';
+  const text = document.createElement('span');
+  text.textContent = labelText;
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = String(min);
+  input.max = String(max);
+  input.step = '1';
+  input.value = String(value);
+  input.addEventListener('input', event => {
+    const parsed = Math.max(min, Math.min(max, Math.floor(Number(event.target.value) || 0)));
+    mapConfig.unitOverrides[unitId] = { ...(mapConfig.unitOverrides[unitId] || {}), [key]: parsed };
+  });
+  label.appendChild(text);
+  label.appendChild(input);
+  return label;
+}
+
+function createUnitOverrideText(unitId, key, labelText, value) {
+  const label = document.createElement('label');
+  label.className = 'unit-override-field unit-override-field-wide';
+  const text = document.createElement('span');
+  text.textContent = labelText;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = Array.isArray(value) ? value.join(', ') : String(value || '');
+  input.addEventListener('input', event => {
+    mapConfig.unitOverrides[unitId] = {
+      ...(mapConfig.unitOverrides[unitId] || {}),
+      [key]: event.target.value.split(',').map(item => item.trim()).filter(Boolean)
+    };
+  });
+  label.appendChild(text);
+  label.appendChild(input);
+  return label;
+}
+
+function titleCase(value) {
+  return String(value || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
 function applyTerrainPreset(presetId) {
   const preset = getTerrainPreset(presetId);
   mapConfig.mapStyle = preset.id;
@@ -249,6 +752,8 @@ function applyTerrainPreset(presetId) {
   mapConfig.treeCount = preset.treeCount;
   mapConfig.sheepCount = preset.sheepCount;
   mapConfig.duckCount = preset.duckCount || 0;
+  if (Number.isFinite(Number(preset.goldMineCount))) mapConfig.goldMineCount = preset.goldMineCount;
+  if (Number.isFinite(Number(preset.houseCount))) mapConfig.houseCount = preset.houseCount;
   window.mapConfig = mapConfig;
 }
 
@@ -267,6 +772,15 @@ Object.assign(window, {
   setSelectedModeId,
   getUnitOptions,
   getTerrainPresetOptions,
+  PLAYER_FLAG_OPTIONS,
+  getFlagOption,
+  getTeamColor,
+  createDefaultPlayerSlots,
+  normalizePlayerSlots,
+  setPlayerCount,
+  setPlayerSlotController,
+  setPlayerSlotFlag,
+  getActivePlayerSlots,
   setPanelVisible,
   mergeModeDefaults,
   createSettingControl,

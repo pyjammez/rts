@@ -1,0 +1,950 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { loadOpenRTSScript } from './helpers/openRtsHarness.js';
+
+test('canvas render list service culls and sorts world drawables by depth', () => {
+  const context = loadOpenRTSScript('../../world/rendering/canvas/CanvasRenderListService.js');
+  const drawList = context.OpenRTS.rendering.canvas.renderLists.createWorldObjectDrawList({
+    camera: { x: 0, y: 0, zoom: 1, viewportWidth: 320, viewportHeight: 240 },
+    canvasWidth: 320,
+    canvasHeight: 240,
+    tileSize: 32,
+    rows: 5,
+    columns: 5,
+    obstacleNone: 0,
+    obstacleTree: 1,
+    obstacleData: [
+      [0, 0, 0, 0, 0],
+      [0, 1, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0]
+    ],
+    sheep: [{ id: 'sheep', x: 40, y: 20 }],
+    ducks: [{ id: 'duck-offscreen', x: 1000, y: 1000 }],
+    buildings: [{ id: 'castle', type: 'home', x: 96, y: 96, width: 3, height: 3 }],
+    units: [{ id: 'unit', x: 80, y: 80, size: 16 }, { id: 'hidden', hiddenInHouse: true, x: 60, y: 60, size: 16 }]
+  });
+
+  assert.ok(drawList.some(item => item.type === 'obstacle'));
+  assert.ok(drawList.some(item => item.type === 'sheep'));
+  assert.ok(drawList.some(item => item.type === 'building' && item.layer === 'base'));
+  assert.ok(drawList.some(item => item.type === 'building' && item.layer === 'front'));
+  assert.ok(drawList.some(item => item.type === 'unit' && item.unit.id === 'unit'));
+  assert.equal(drawList.some(item => item.type === 'duck'), false);
+  assert.equal(drawList.some(item => item.type === 'unit' && item.unit.id === 'hidden'), false);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify([...drawList].sort((a, b) => a.sortY - b.sortY).map(item => item.sortY))),
+    JSON.parse(JSON.stringify(drawList.map(item => item.sortY)))
+  );
+});
+
+test('geometry cache creates each geometry once and exposes diagnostics helpers', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/GeometryCache.js');
+  const cache = context.OpenRTS.rendering.geometryCaches.createGeometryCache();
+  let created = 0;
+
+  const first = cache.get('box', () => ({ id: ++created }));
+  const second = cache.get('box', () => ({ id: ++created }));
+
+  assert.equal(first, second);
+  assert.equal(created, 1);
+  assert.equal(cache.has('box'), true);
+  assert.equal(cache.size(), 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(cache.keys())), ['box']);
+});
+
+test('canvas minimap renderer draws terrain entities buildings and viewport', () => {
+  const context = loadOpenRTSScript('../../world/rendering/canvas/CanvasMinimapRenderer.js');
+  const calls = [];
+  const ctx = new Proxy({}, {
+    get(target, prop) {
+      if (prop in target) return target[prop];
+      return (...args) => calls.push([prop, ...args]);
+    },
+    set(target, prop, value) {
+      calls.push(['set', prop, value]);
+      target[prop] = value;
+      return true;
+    }
+  });
+
+  const rendered = context.OpenRTS.rendering.canvas.minimap.render(ctx, {
+    canvas: { width: 100, height: 50 },
+    terrainData: [[1, 2], [3, 4]],
+    obstacleData: [[0, 1], [0, 0]],
+    rows: 2,
+    columns: 2,
+    tileSize: 32,
+    dimensions: { width: 64, height: 64 },
+    terrain: { WATER: 1, SAND: 2, GRASS: 3 },
+    obstacle: { NONE: 0, TREE: 1 },
+    units: [{ x: 16, y: 16, team: 'red' }],
+    sheep: [{ x: 24, y: 24 }],
+    horses: [{ x: 28, y: 28 }],
+    items: [{ x: 30, y: 30 }],
+    goldMines: [{ x: 40, y: 40 }],
+    houses: [{ x: 48, y: 40 }],
+    buildings: [{ x: 50, y: 42, width: 2, height: 2, team: 'blue' }],
+    camera: { x: 0, y: 0, zoom: 1, viewportWidth: 32, viewportHeight: 32 },
+    teamColor: team => team === 'red' ? '#r' : '#b'
+  });
+
+  assert.equal(rendered, true);
+  assert.ok(calls.some(call => call[0] === 'clearRect'));
+  assert.ok(calls.filter(call => call[0] === 'fillRect').length >= 10);
+  assert.ok(calls.some(call => call[0] === 'strokeRect'));
+  assert.equal(context.OpenRTS.rendering.canvas.minimap.terrainColor(1, { WATER: 1 }), '#2f78b7');
+});
+
+test('canvas terrain painter owns tile accents transitions and water ripples', () => {
+  const context = loadOpenRTSScript('../../world/rendering/canvas/CanvasTerrainPainter.js');
+  const painter = context.OpenRTS.rendering.canvas.terrainPainter;
+  const calls = [];
+  const ctx = new Proxy({}, {
+    get(target, prop) {
+      if (prop in target) return target[prop];
+      return (...args) => calls.push([prop, ...args]);
+    },
+    set(target, prop, value) {
+      calls.push(['set', prop, value]);
+      target[prop] = value;
+      return true;
+    }
+  });
+  const terrain = { WATER: 0, SAND: 1, GRASS: 2, DIRT: 3 };
+  const tileSprites = {
+    grass: { complete: false, naturalWidth: 0 },
+    sand: { complete: false, naturalWidth: 0 },
+    dirt: { complete: false, naturalWidth: 0 }
+  };
+
+  painter.drawTerrainTile(ctx, terrain.GRASS, 0, 0, {
+    terrain,
+    tileSize: 32,
+    tileSprites
+  });
+  painter.drawTerrainAccents(ctx, terrain.WATER, 0, 0, 0, 0, {
+    terrain,
+    tileSize: 32,
+    noise: () => 0.9
+  });
+  painter.drawTransitions(ctx, 0, 0, terrain.WATER, 0, 0, {
+    terrain,
+    terrainData: [[terrain.WATER, terrain.SAND]],
+    tileSize: 32,
+    isInsideMap: (x, y) => x >= 0 && y >= 0 && x < 2 && y < 1
+  });
+  painter.renderWaterRipples(ctx, {
+    camX: 0,
+    camY: 0,
+    viewWidth: 32,
+    viewHeight: 32,
+    terrainData: [[terrain.WATER]],
+    rows: 1,
+    columns: 1,
+    terrain,
+    tileSize: 32,
+    timeSeconds: 1,
+    noise: () => 0.95
+  });
+
+  assert.ok(calls.some(call => call[0] === 'fillRect'));
+  assert.ok(calls.some(call => call[0] === 'quadraticCurveTo'));
+  assert.ok(calls.some(call => call[0] === 'ellipse'));
+  assert.ok(calls.some(call => call[0] === 'stroke'));
+});
+
+test('three scene bootstrap creates renderer scene groups and ray helpers', () => {
+  const added = [];
+  class FakeRenderer {
+    constructor(options) {
+      this.options = options;
+      this.shadowMap = {};
+    }
+    setPixelRatio(value) { this.pixelRatio = value; }
+    setSize(width, height) { this.size = { width, height }; }
+  }
+  class FakeScene {
+    constructor() { this.children = []; }
+    add(...items) { this.children.push(...items); added.push(...items); }
+  }
+  class FakeCamera {
+    constructor() { this.up = { set: (...args) => { this.upValue = args; } }; }
+  }
+  class FakeLight {
+    constructor() {
+      this.position = { set: (...args) => { this.positionValue = args; } };
+      this.shadow = { mapSize: { set: (...args) => { this.shadowSize = args; } }, camera: {} };
+      this.target = { kind: 'target' };
+    }
+  }
+  class FakeGroup {
+    constructor() { this.children = []; this.name = ''; }
+  }
+  class FakeRaycaster {}
+  class FakePlane {
+    constructor(vector, constant) { this.vector = vector; this.constant = constant; }
+  }
+  class FakeVector3 {
+    constructor(x, y, z) { this.x = x; this.y = y; this.z = z; }
+  }
+  const context = loadOpenRTSScript('../../world/rendering/three/ThreeSceneBootstrap.js');
+  const runtime = context.OpenRTS.rendering.threeSceneBootstrap.createSceneRuntime({
+    canvas: { width: 640, height: 360, clientWidth: 640, clientHeight: 360 },
+    devicePixelRatio: 3,
+    THREE: {
+      WebGLRenderer: FakeRenderer,
+      Scene: FakeScene,
+      Color: class { constructor(value) { this.value = value; } },
+      FogExp2: class { constructor(color, density) { this.color = color; this.density = density; } },
+      PerspectiveCamera: FakeCamera,
+      HemisphereLight: FakeLight,
+      DirectionalLight: FakeLight,
+      Group: FakeGroup,
+      Raycaster: FakeRaycaster,
+      Plane: FakePlane,
+      Vector3: FakeVector3,
+      SRGBColorSpace: 'srgb',
+      ACESFilmicToneMapping: 'aces',
+      PCFShadowMap: 'pcf'
+    }
+  });
+
+  assert.equal(runtime.renderer.pixelRatio, 1.5);
+  assert.deepEqual(runtime.renderer.size, { width: 640, height: 360 });
+  assert.equal(runtime.staticGroup.name, 'static-world');
+  assert.equal(runtime.dynamicGroup.name, 'dynamic-entities');
+  assert.ok(runtime.raycaster instanceof FakeRaycaster);
+  assert.ok(runtime.groundPlane instanceof FakePlane);
+  assert.ok(added.includes(runtime.staticGroup));
+  assert.ok(added.includes(runtime.dynamicGroup));
+});
+
+test('three coordinate service converts world scene and screen positions', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/ThreeCoordinateService.js');
+  const coordinates = context.OpenRTS.rendering.threeCoordinates;
+  const scene = coordinates.worldToScene(75, 25, { scale: 0.1, mapWidth: 100, mapHeight: 100 });
+  const world = coordinates.sceneToWorld({ x: scene.x, z: scene.z }, { scale: 0.1, mapWidth: 100, mapHeight: 100 });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(scene)), { x: 2.5, z: -2.5 });
+  assert.deepEqual(JSON.parse(JSON.stringify(world)), { x: 75, y: 25 });
+
+  class Vector2 {
+    constructor(x, y) { this.x = x; this.y = y; }
+  }
+  class Vector3 {
+    constructor(x, y, z) { this.x = x; this.y = y; this.z = z; }
+    project() { this.x = 0.25; this.y = -0.5; this.z = 0; return this; }
+  }
+  const screen = coordinates.projectWorldToScreen(50, 50, 1, {
+    THREE: { Vector3 },
+    camera: {},
+    canvas: { width: 200, height: 100 },
+    scale: 1,
+    mapWidth: 100,
+    mapHeight: 100
+  });
+  const raycaster = {
+    pointer: null,
+    setFromCamera(pointer) { this.pointer = pointer; },
+    ray: { intersectPlane(_plane, target) { target.x = 10; target.z = -10; return true; } }
+  };
+  const picked = coordinates.screenToWorld(100, 50, {
+    THREE: { Vector2, Vector3 },
+    raycaster,
+    camera: {},
+    canvas: { width: 200, height: 100 },
+    groundPlane: {},
+    scale: 0.1,
+    mapWidth: 100,
+    mapHeight: 100
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(screen)), { x: 125, y: 75 });
+  assert.deepEqual(JSON.parse(JSON.stringify(picked)), { x: 150, y: -50 });
+  assert.equal(raycaster.pointer.x, 0);
+  assert.equal(raycaster.pointer.y, 0);
+});
+
+test('three terrain mesh factory owns terrain sampling color and geometry output', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/ThreeTerrainMeshFactory.js');
+  class Color {
+    constructor(r, g, b) {
+      this.r = r;
+      this.g = g;
+      this.b = b;
+    }
+    clone() {
+      return new Color(this.r, this.g, this.b);
+    }
+    lerp(other, alpha) {
+      this.r += (other.r - this.r) * alpha;
+      this.g += (other.g - this.g) * alpha;
+      this.b += (other.b - this.b) * alpha;
+      return this;
+    }
+  }
+  class BufferGeometry {
+    constructor() {
+      this.attributes = {};
+      this.normalsComputed = false;
+    }
+    setAttribute(name, value) {
+      this.attributes[name] = value;
+    }
+    computeVertexNormals() {
+      this.normalsComputed = true;
+    }
+  }
+  class Float32BufferAttribute {
+    constructor(values, itemSize) {
+      this.values = values;
+      this.itemSize = itemSize;
+    }
+  }
+  class Mesh {
+    constructor(geometry, material) {
+      this.geometry = geometry;
+      this.material = material;
+    }
+  }
+  const factory = context.OpenRTS.rendering.threeTerrainMeshes.createFactory({
+    THREE: { Color, BufferGeometry, Float32BufferAttribute, Mesh },
+    materials: { ground: 'ground-material' },
+    tileSize: 32,
+    getRows: () => 2,
+    getColumns: () => 3,
+    getMapConfig: () => ({ terrain: { water: 0.2, sand: 0.3 } }),
+    hashNoise: () => 0.5,
+    smoothValueNoise: () => 0.5,
+    fbmNoise: (x, y) => (x + y) / 8,
+    getWorldElevation: () => 0.1
+  });
+
+  const meshes = factory.createTerrainMeshes({ subdivisions: 1 });
+  const sample = factory.sampleTerrain(1, 1);
+
+  assert.equal(meshes.length, 1);
+  assert.equal(meshes[0].material, 'ground-material');
+  assert.equal(meshes[0].receiveShadow, true);
+  assert.equal(meshes[0].geometry.attributes.position.values.length, 3 * 2 * 6 * 3);
+  assert.equal(meshes[0].geometry.attributes.color.values.length, 3 * 2 * 6 * 3);
+  assert.equal(meshes[0].geometry.normalsComputed, true);
+  assert.equal(Number.isFinite(sample.waterBlend), true);
+  assert.equal(Number.isFinite(factory.terrainHeight(1, 1, sample)), true);
+  assert.ok(factory.terrainColor(1, 1, sample) instanceof Color);
+});
+
+test('three building model factory owns castle and tower fallback models', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/ThreeBuildingModelFactory.js');
+  class Group {
+    constructor() {
+      this.children = [];
+      this.position = { set: (x, y, z) => { this.positionValue = { x, y, z }; } };
+    }
+    add(item) { this.children.push(item); }
+    traverse(callback) { this.children.forEach(callback); }
+  }
+  class Mesh {
+    constructor(geometry, material) {
+      this.geometry = geometry;
+      this.material = material;
+      this.position = { set: (x, y, z) => { this.positionValue = { x, y, z }; } };
+      this.rotation = {};
+      this.isMesh = true;
+    }
+  }
+  const calls = [];
+  const materials = {
+    courtyard: 'courtyard',
+    slit: 'slit',
+    stone: 'stone',
+    stoneDark: 'stone-dark',
+    stoneLight: 'stone-light',
+    wood: 'wood'
+  };
+  const addPrimitive = (parent, item) => {
+    item.rotation = item.rotation || {};
+    item.isMesh = true;
+    parent.add(item);
+    calls.push(item);
+    return item;
+  };
+  const factory = context.OpenRTS.rendering.threeBuildingModels.createFactory({
+    THREE: {
+      Group,
+      Mesh,
+      PlaneGeometry: class { constructor(width, height) { this.width = width; this.height = height; } }
+    },
+    geometry: (key, factoryFn) => ({ key, value: factoryFn() }),
+    addBox(parent, x, y, z, width, height, depth, material) {
+      return addPrimitive(parent, { kind: 'box', x, y, z, width, height, depth, material });
+    },
+    addCylinder(parent, x, y, z, radiusTop, radiusBottom, height, material, segments) {
+      return addPrimitive(parent, { kind: 'cylinder', x, y, z, radiusTop, radiusBottom, height, material, segments });
+    },
+    materials,
+    worldToScene: (x, y) => ({ x: x / 32, z: y / 32 }),
+    getTeamMaterial: team => `team:${team}`,
+    rampartHeight: 1.25
+  });
+
+  const castle = factory.createCastle({ x: 64, y: 96, width: 8, height: 8, team: 'red' });
+  const tower = factory.createDefenseTower({ x: 32, y: 64, team: 'blue' });
+
+  assert.deepEqual(castle.positionValue, { x: 2, y: 0, z: 3 });
+  assert.deepEqual(tower.positionValue, { x: 1, y: 0, z: 2 });
+  assert.ok(castle.children.length > tower.children.length);
+  assert.ok(calls.some(call => call.material === 'team:red'));
+  assert.ok(calls.some(call => call.material === 'team:blue'));
+  assert.ok([...castle.children, ...tower.children].some(child => child.material === 'slit'));
+  assert.ok(calls.some(call => call.kind === 'cylinder' && call.segments === 20));
+});
+
+test('mesh primitive factory centralizes primitive creation and positioning', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/MeshPrimitiveFactory.js');
+  class Mesh {
+    constructor(geometry, material) {
+      this.geometry = geometry;
+      this.material = material;
+      this.position = { set: (x, y, z) => { this.positionValue = { x, y, z }; } };
+      this.scale = { set: (x, y, z) => { this.scaleValue = { x, y, z }; } };
+    }
+  }
+  const parent = { children: [], add(mesh) { this.children.push(mesh); } };
+  const geometryCache = {
+    values: new Map(),
+    get(key, factory) {
+      if (!this.values.has(key)) this.values.set(key, factory());
+      return this.values.get(key);
+    }
+  };
+  const primitives = context.OpenRTS.rendering.meshPrimitives.createFactory({
+    geometryCache,
+    THREE: {
+      Mesh,
+      BoxGeometry: class { constructor(width, height, depth) { this.kind = 'box'; this.width = width; this.height = height; this.depth = depth; } },
+      CylinderGeometry: class { constructor() { this.kind = 'cylinder'; } },
+      SphereGeometry: class { constructor() { this.kind = 'sphere'; } }
+    }
+  });
+
+  const box = primitives.addBox(parent, 1, 2, 3, 4, 6, 8, 'mat');
+  const sphere = primitives.addSphere(parent, 0, 1, 2, 3, 'mat2', { x: 1, y: 2, z: 3 });
+
+  assert.equal(box.geometry.kind, 'box');
+  assert.deepEqual(box.positionValue, { x: 1, y: 5, z: 3 });
+  assert.deepEqual(sphere.scaleValue, { x: 1, y: 2, z: 3 });
+  assert.equal(parent.children.length, 2);
+});
+
+test('three unit attachment factory owns weapon and carried item model pieces', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/ThreeUnitAttachmentFactory.js');
+  class Group {
+    constructor() {
+      this.children = [];
+      this.position = {};
+    }
+    add(item) { this.children.push(item); }
+  }
+  class Mesh {
+    constructor(geometry, material) {
+      this.geometry = geometry;
+      this.material = material;
+      this.scale = { set: (x, y, z) => { this.scaleValue = { x, y, z }; } };
+      this.rotation = { set: (x, y, z) => { this.rotationValue = { x, y, z }; } };
+    }
+  }
+  class Vector3 {
+    constructor(x, y, z) { this.x = x; this.y = y; this.z = z; }
+  }
+  const calls = [];
+  const factory = context.OpenRTS.rendering.threeUnitAttachments.createFactory({
+    THREE: {
+      Group,
+      Mesh,
+      Vector3,
+      CatmullRomCurve3: class { constructor(points) { this.points = points; } },
+      TubeGeometry: class { constructor(curve) { this.curve = curve; } },
+      DodecahedronGeometry: class {}
+    },
+    geometry: (key, factoryFn) => ({ key, value: factoryFn() }),
+    addBox(parent, x, y, z, width, height, depth, material) {
+      const item = { kind: 'box', x, y, z, width, height, depth, material, rotation: {} };
+      parent.add(item);
+      calls.push(item);
+      return item;
+    },
+    addCylinder(parent, x, y, z, radiusTop, radiusBottom, height, material) {
+      const item = { kind: 'cylinder', x, y, z, radiusTop, radiusBottom, height, material, rotation: {} };
+      parent.add(item);
+      calls.push(item);
+      return item;
+    },
+    addSphere(parent, x, y, z, radius, material) {
+      const item = { kind: 'sphere', x, y, z, radius, material };
+      parent.add(item);
+      calls.push(item);
+      return item;
+    },
+    addMesh(parent, mesh, x, y, z) {
+      mesh.positionValue = { x, y, z };
+      parent.add(mesh);
+      calls.push(mesh);
+      return mesh;
+    },
+    materials: {
+      wood: 'wood',
+      bone: 'bone',
+      leather: 'leather',
+      iron: 'iron',
+      steel: 'steel',
+      grenade: 'grenade',
+      trunk: 'trunk',
+      foliage: 'foliage',
+      foliageLight: 'foliage-light',
+      rock: 'rock',
+      supply: 'supply'
+    },
+    obstacleTypes: { TREE: 1, ROCK: 2 }
+  });
+
+  const parent = new Group();
+  factory.addLongbow(parent);
+  factory.addPistol(parent);
+  factory.addCrossbow(parent);
+  factory.addGrenadeWeapon(parent);
+  factory.addCarriedObject(parent, { inventoryItem: { carryType: 'obstacle', obstacleType: 2 } });
+
+  assert.ok(parent.children.length >= 5);
+  assert.ok(calls.some(call => call.material === 'grenade'));
+  assert.ok(parent.children.some(child => child.material === 'rock'));
+});
+
+test('three unit model factory owns procedural unit body construction', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/ThreeUnitModelFactory.js');
+  class Group {
+    constructor() {
+      this.children = [];
+      this.position = { set: (x, y, z) => { this.positionValue = { x, y, z }; } };
+      this.rotation = {};
+    }
+    add(item) { this.children.push(item); }
+  }
+  class Mesh {
+    constructor(geometry, material) {
+      this.geometry = geometry;
+      this.material = material;
+      this.position = { set: (x, y, z) => { this.positionValue = { x, y, z }; } };
+      this.rotation = {};
+      this.castShadow = false;
+    }
+  }
+  const calls = [];
+  const parentAdd = (parent, item) => {
+    parent.add(item);
+    calls.push(item);
+    return item;
+  };
+  const materials = {
+    bone: 'bone',
+    gold: 'gold',
+    horse: 'horse',
+    iron: 'iron',
+    leather: 'leather',
+    sheep: 'sheep',
+    sheepFace: 'sheep-face',
+    skin: 'skin',
+    steel: 'steel',
+    wood: 'wood'
+  };
+  const factory = context.OpenRTS.rendering.threeUnitModels.createFactory({
+    THREE: {
+      Group,
+      Mesh,
+      ConeGeometry: class { constructor(radius, height, sides) { this.radius = radius; this.height = height; this.sides = sides; } }
+    },
+    geometry: (key, factoryFn) => ({ key, value: factoryFn() }),
+    addBox(parent, x, y, z, width, height, depth, material) {
+      return parentAdd(parent, { kind: 'box', x, y, z, width, height, depth, material, rotation: {} });
+    },
+    addCylinder(parent, x, y, z, radiusTop, radiusBottom, height, material) {
+      return parentAdd(parent, { kind: 'cylinder', x, y, z, radiusTop, radiusBottom, height, material, rotation: {} });
+    },
+    addSphere(parent, x, y, z, radius, material) {
+      return parentAdd(parent, { kind: 'sphere', x, y, z, radius, material });
+    },
+    materials,
+    attachments: {
+      addLongbow(parent, riderY) { parentAdd(parent, { kind: 'longbow', riderY }); },
+      addPistol(parent, riderY) { parentAdd(parent, { kind: 'pistol', riderY }); },
+      addCrossbow(parent, riderY) { parentAdd(parent, { kind: 'crossbow', riderY }); },
+      addGrenadeWeapon(parent, riderY) { parentAdd(parent, { kind: 'grenade', riderY }); },
+      addCarriedObject(parent, unit, riderY) { parentAdd(parent, { kind: 'carried', unitId: unit.id, riderY }); }
+    },
+    worldToScene: (x, y) => ({ x: x / 32, z: y / 32 }),
+    getWorldElevation: () => 0.5,
+    getTeamMaterial: team => `team:${team}`,
+    addSelectionRing(parent, radius) { parentAdd(parent, { kind: 'selection-ring', radius }); },
+    entityElevation: {
+      unitElevation: ({ terrainElevation, castleElevation }) => terrainElevation + castleElevation
+    },
+    rampartHeight: 1.4,
+    clamp: (value, min, max) => Math.max(min, Math.min(max, value)),
+    smoothStep: (_min, _max, value) => value
+  });
+
+  const model = factory.create({
+    id: 'archer-1',
+    x: 64,
+    y: 96,
+    team: 'red',
+    unitType: 'archer',
+    selected: true,
+    hasActivePath: () => false
+  });
+
+  assert.deepEqual(model.positionValue, { x: 2, y: 0.5, z: 3 });
+  assert.ok(calls.some(call => call.kind === 'selection-ring'));
+  assert.ok(calls.some(call => call.kind === 'longbow'));
+  assert.ok(calls.some(call => call.material === 'team:red'));
+  assert.equal(factory.getCastleElevation({}), 0);
+});
+
+test('three camera sync owns renderer resize and camera placement', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/ThreeCoordinateService.js');
+  loadOpenRTSScript('../../world/rendering/three/ThreeCameraSyncService.js', context);
+  const sceneCamera = {
+    position: { set: (x, y, z) => { sceneCamera.positionValue = { x, y, z }; } },
+    lookAt(x, y, z) { this.lookAtValue = { x, y, z }; },
+    updateProjectionMatrix() { this.projectionUpdated = true; },
+    updateMatrixWorld() { this.matrixUpdated = true; }
+  };
+  const renderer = {
+    getPixelRatio() { return 2; },
+    setSize(width, height, updateStyle) { this.size = { width, height, updateStyle }; }
+  };
+
+  const synced = context.OpenRTS.rendering.threeCameraSync.syncCamera({
+    sceneCamera,
+    renderer,
+    canvas: { width: 1, height: 1, clientWidth: 400, clientHeight: 200 },
+    gameCamera: { x: 100, y: 50, zoom: 2, viewportWidth: 200, viewportHeight: 100, minZoom3D: 0.2 },
+    scale: 0.1,
+    mapWidth: 1000,
+    mapHeight: 1000
+  });
+
+  assert.equal(synced, true);
+  assert.deepEqual(renderer.size, { width: 400, height: 200, updateStyle: false });
+  assert.equal(sceneCamera.aspect, 2);
+  assert.equal(sceneCamera.positionValue.y, 12.5);
+  assert.equal(sceneCamera.projectionUpdated, true);
+  assert.equal(sceneCamera.matrixUpdated, true);
+});
+
+test('static world signatures centralize renderer rebuild invalidation', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/StaticWorldSignatureService.js');
+  const signatures = context.OpenRTS.rendering.staticWorldSignatures;
+  const base = signatures.createSignature({
+    seed: 'abc',
+    columns: 40,
+    rows: 32,
+    buildings: [{ id: 'castle-red', isDead: false, upgradeLevel: 1 }],
+    obstacleRevision: 2,
+    goldMineRevision: 3,
+    houseRevision: 4,
+    mapConfig: { terrainPreset: 'green', waterPercent: 20, rockCount: 8, treeCount: 12 }
+  });
+  const same = signatures.createSignature({
+    seed: 'abc',
+    columns: 40,
+    rows: 32,
+    buildings: [{ id: 'castle-red', isDead: false, upgradeLevel: 1 }],
+    obstacleRevision: 2,
+    goldMineRevision: 3,
+    houseRevision: 4,
+    mapConfig: { terrainPreset: 'green', waterPercent: 20, rockCount: 8, treeCount: 12 }
+  });
+  const changed = signatures.createSignature({
+    seed: 'abc',
+    columns: 40,
+    rows: 32,
+    buildings: [{ id: 'castle-red', isDead: false, upgradeLevel: 2 }],
+    obstacleRevision: 2,
+    goldMineRevision: 3,
+    houseRevision: 4,
+    mapConfig: { terrainPreset: 'green', waterPercent: 20, rockCount: 8, treeCount: 12 }
+  });
+
+  assert.equal(base, same);
+  assert.notEqual(base, changed);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(signatures.summarizeMapConfig({ mapStyle: 'mustafar', terrain: { lava: true } }))),
+    {
+      terrainPreset: '',
+      mapStyle: 'mustafar',
+      terrain: { lava: true }
+    }
+  );
+});
+
+test('static world composer owns static scene assembly and lifecycle filters', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/StaticWorldComposer.js');
+  const group = {
+    cleared: false,
+    children: [],
+    clear() { this.cleared = true; this.children = []; },
+    add(item) { this.children.push(item); }
+  };
+  let reset = false;
+  const item = id => ({ id });
+
+  const composed = context.OpenRTS.rendering.staticWorldComposer.compose({
+    group,
+    onReset: () => { reset = true; },
+    createTerrainMeshes: () => [item('terrain-a'), item('terrain-b')],
+    obstacleData: [[1, 2], [0, 0]],
+    decorationData: [[0, 0], [0, 9]],
+    obstacle: { TREE: 1, ROCK: 2 },
+    rows: 2,
+    columns: 2,
+    createTree: (x, y) => item(`tree:${x}:${y}`),
+    createRock: (x, y) => item(`rock:${x}:${y}`),
+    createMapDecoration: (x, y, value) => value ? item(`decor:${x}:${y}`) : null,
+    buildings: [
+      { id: 'castle', type: 'home', isDead: false },
+      { id: 'tower', type: 'tower', isDead: false },
+      { id: 'dead-tower', type: 'tower', isDead: true }
+    ],
+    homeType: 'home',
+    createCastle: building => item(`castle:${building.id}`),
+    createDefenseTower: building => item(`tower:${building.id}`),
+    goldMines: [{ id: 'gold', isDead: false }, { id: 'dead-gold', isDead: true }],
+    createGoldMine: mine => item(`gold:${mine.id}`),
+    houses: [{ id: 'house', isDead: false }, { id: 'wreck', isDead: true, isWreck: true }, { id: 'gone', isDead: true }],
+    createNeutralHouse: house => item(`house:${house.id}`)
+  });
+
+  assert.equal(composed, true);
+  assert.equal(group.cleared, true);
+  assert.equal(reset, true);
+  assert.deepEqual(group.children.map(child => child.id), [
+    'terrain-a',
+    'terrain-b',
+    'tree:0:0',
+    'rock:1:0',
+    'decor:1:1',
+    'castle:castle',
+    'tower:tower',
+    'gold:gold',
+    'house:house',
+    'house:wreck'
+  ]);
+});
+
+test('tree wind animator keeps ambient tree movement out of renderer state', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/TreeWindAnimator.js');
+  const crown = {
+    rotation: { x: 1, z: 2 },
+    userData: {
+      windPhase: 0.5,
+      windStrength: 0.2,
+      baseRotationX: 0.1,
+      baseRotationZ: -0.3
+    }
+  };
+
+  context.OpenRTS.rendering.treeWind.updateCrowns([crown, null], 3);
+
+  assert.equal(Number.isFinite(crown.rotation.x), true);
+  assert.equal(Number.isFinite(crown.rotation.z), true);
+  assert.notEqual(crown.rotation.x, 1);
+  assert.notEqual(crown.rotation.z, 2);
+});
+
+test('entity elevation service combines terrain castle and flight height', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/EntityElevationService.js');
+  const elevation = context.OpenRTS.rendering.entityElevation;
+
+  assert.equal(elevation.unitElevation({
+    unit: { movementType: 'ground' },
+    terrainElevation: 0.4,
+    castleElevation: 1.2
+  }), 1.6);
+  assert.equal(elevation.unitElevation({
+    unit: { movementType: 'air', flightHeight: 3.5 },
+    terrainElevation: 0.4,
+    castleElevation: 1.2
+  }), 5.1);
+});
+
+test('projectile visual factory creates projectile and impact renderables', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/ProjectileVisualFactory.js');
+  class Group {
+    constructor() {
+      this.children = [];
+      this.position = { set: (x, y, z) => { this.positionValue = { x, y, z }; } };
+      this.rotation = {};
+    }
+    add(item) { this.children.push(item); }
+  }
+  class Mesh {
+    constructor(geometry, material) {
+      this.geometry = geometry;
+      this.material = material;
+      this.position = { set: (x, y, z) => { this.positionValue = { x, y, z }; } };
+      this.rotation = {};
+      this.scale = { setScalar: value => { this.scaleValue = value; } };
+    }
+  }
+  const deps = {
+    THREE: {
+      Group,
+      Mesh,
+      RingGeometry: class { constructor(inner, outer) { this.inner = inner; this.outer = outer; } }
+    },
+    worldToScene: (x, y) => ({ x: x / 10, z: y / -10 }),
+    addSphere(parent, x, y, z, radius, material) { parent.add({ kind: 'sphere', x, y, z, radius, material }); },
+    addBox(parent, x, y, z, width, height, depth, material) { parent.add({ kind: 'box', x, y, z, width, height, depth, material }); },
+    geometry: (key, factory) => ({ key, value: factory() }),
+    materials: {
+      grenade: 'grenade',
+      bolt: 'bolt',
+      pistolRound: 'bullet',
+      projectile: 'arrow',
+      explosion: 'explosion'
+    },
+    scale: 0.1
+  };
+
+  const grenade = context.OpenRTS.rendering.projectileVisuals.createProjectileVisual({
+    projectileType: 'grenade',
+    x: 40,
+    y: 20,
+    distanceTraveled: 5,
+    targetDistance: 10
+  }, deps);
+  const bolt = context.OpenRTS.rendering.projectileVisuals.createProjectileVisual({
+    projectileType: 'bolt',
+    x: 10,
+    y: 10,
+    dirX: 1,
+    dirY: 0
+  }, deps);
+  const ring = context.OpenRTS.rendering.projectileVisuals.createImpactEffectVisual({
+    type: 'explosion',
+    x: 20,
+    y: 30,
+    age: 0.5,
+    duration: 1,
+    radius: 12
+  }, deps);
+
+  assert.equal(grenade.children[0].material, 'grenade');
+  assert.equal(grenade.positionValue.y > 1, true);
+  assert.equal(bolt.children[0].material, 'bolt');
+  assert.equal(ring.material, 'explosion');
+  assert.equal(ring.scaleValue, 0.6000000000000001);
+});
+
+test('dynamic world composer owns dynamic scene filters and assembly counts', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/DynamicWorldComposer.js');
+  const group = {
+    cleared: false,
+    children: [],
+    clear() { this.cleared = true; this.children = []; },
+    add(item) { this.children.push(item); }
+  };
+  const item = id => ({ id });
+
+  const counts = context.OpenRTS.rendering.dynamicWorldComposer.compose({
+    group,
+    sources: {
+      units: [{ id: 'u1' }, { id: 'hidden', hiddenInHouse: true }],
+      sheep: [{ id: 's1' }, { id: 'mounted', isMounted: true }],
+      ducks: [{ id: 'd1' }],
+      horses: [{ id: 'h1' }, { id: 'dead-horse', isDead: true }],
+      items: [{ id: 'i1' }, { id: 'picked', isPickedUp: true }],
+      projectiles: [{ id: 'p1' }, { id: 'dead-projectile', dead: true }]
+    },
+    roasts: [{ id: 'r1' }],
+    impactEffects: [{ id: 'e1' }],
+    selectedObject: { objectType: 'obstacle', id: 'tree' },
+    factories: {
+      createUnit: value => item(`unit:${value.id}`),
+      createSheep: value => item(`sheep:${value.id}`),
+      createRoast: value => item(`roast:${value.id}`),
+      createDuck: value => item(`duck:${value.id}`),
+      createHorse: value => item(`horse:${value.id}`),
+      createWorldItem: value => item(`item:${value.id}`),
+      createProjectile: value => item(`projectile:${value.id}`),
+      createImpactEffect: value => item(`effect:${value.id}`),
+      createSelectedObjectMarker: value => value ? item(`selected:${value.id}`) : null
+    }
+  });
+
+  assert.equal(group.cleared, true);
+  assert.deepEqual(group.children.map(child => child.id), [
+    'unit:u1',
+    'sheep:s1',
+    'roast:r1',
+    'duck:d1',
+    'horse:h1',
+    'item:i1',
+    'selected:tree',
+    'projectile:p1',
+    'effect:e1'
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(counts)), {
+    units: 1,
+    sheep: 1,
+    roasts: 1,
+    ducks: 1,
+    horses: 1,
+    items: 1,
+    selectionMarkers: 1,
+    projectiles: 1,
+    impactEffects: 1
+  });
+});
+
+test('model factory resolver bridges logical model assets to registered render factories', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/ThreeRenderDomains.js', {
+    OpenRTS: {
+      config: {
+        assets: {
+          resolveModel: id => id === 'unit.worker'
+            ? { id, kind: 'procedural', factory: 'worker' }
+            : null
+        }
+      }
+    }
+  });
+  loadOpenRTSScript('../../world/rendering/three/RendererFactoryRegistry.js', context);
+  loadOpenRTSScript('../../world/rendering/three/ModelFactoryResolver.js', context);
+
+  context.OpenRTS.rendering.factoryRegistry.register(
+    'unit.worker',
+    (source, resolved, extra) => ({ id: resolved.id, unitType: source.unitType, extra }),
+    { category: 'unit' }
+  );
+
+  const created = context.OpenRTS.rendering.modelFactoryResolver.create(
+    { unitType: 'worker' },
+    { category: 'unit' },
+    'payload'
+  );
+  const fallback = context.OpenRTS.rendering.modelFactoryResolver.create(
+    { unitType: 'unknown' },
+    {
+      category: 'unit',
+      fallback: (_source, resolved) => ({ fallbackId: resolved.id })
+    }
+  );
+
+  assert.deepEqual(created, { id: 'unit.worker', unitType: 'worker', extra: 'payload' });
+  assert.deepEqual(fallback, { fallbackId: 'unit.unknown' });
+  assert.equal(context.OpenRTS.rendering.modelFactoryResolver.resolve({ displayName: 'Sheep' }, { category: 'wildlife' }).id, 'wildlife.sheep');
+});

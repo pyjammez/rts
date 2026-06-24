@@ -6,27 +6,38 @@
     "playable": true,
     "startLabel": "Create Versus Room",
     "teams": ["red", "blue"],
-    "allowedUnits": ["king", "soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan"],
+    "allowedUnits": ["king", "worker", "soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan", "balloon"],
     "defaults": {
+      "enabledUnits": ["king", "worker", "soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan", "balloon"],
+      "unitOverrides": {},
+      "unitCatalogFilters": { "query": "", "era": "all" },
       "mapStyle": "coastal_grassland",
+      "mapSize": "default_large",
       "waterLevel": 10,
-      "rockCount": 15,
+      "rockCount": 20,
       "treeCount": 30,
-      "sheepCount": 12,
+      "sheepCount": 10,
       "duckCount": 5,
+      "goldMineCount": 5,
+      "houseCount": 1,
+      "startingGold": 140,
+      "startingWood": 160,
+      "startingFood": 0,
       "playersPerTeam": 1,
       "startingUnitsPerTeam": 8,
       "towersPerTeam": 0,
       "homesPerTeam": 1,
       "unitRoster": {
         "king": 1,
-        "soldier": 1,
-        "archer": 1,
-        "knight": 1,
-        "scout": 1,
-        "gunman": 1,
-        "crossbowman": 1,
-        "grenademan": 1
+        "worker": 5,
+        "soldier": 0,
+        "archer": 0,
+        "knight": 0,
+        "scout": 0,
+        "gunman": 0,
+        "crossbowman": 0,
+        "grenademan": 0,
+        "balloon": 0
       }
     },
     "sections": ["map", "forces", "wildlife"]
@@ -34,22 +45,34 @@
   "tower_defense": {
     "shortName": "TD",
     "name": "Tower Defense",
-    "summary": "Defend a base from waves. Setup is scaffolded; wave gameplay comes next.",
-    "playable": false,
-    "startLabel": "Tower Defense Coming Soon",
-    "teams": ["red"],
-    "allowedUnits": ["king", "soldier", "archer", "gunman", "crossbowman", "grenademan"],
+    "summary": "Defend your castle from simple timed enemy waves.",
+    "playable": true,
+    "startLabel": "Create Defense Room",
+    "teams": ["red", "blue"],
+    "allowedUnits": ["king", "worker", "soldier", "archer", "gunman", "crossbowman", "grenademan", "balloon"],
     "defaults": {
+      "enabledUnits": ["king", "worker", "soldier", "archer", "gunman", "crossbowman", "grenademan", "balloon"],
       "mapStyle": "defense_pass",
       "waterLevel": 4,
       "rockCount": 24,
       "treeCount": 65,
       "sheepCount": 4,
       "duckCount": 3,
+      "houseCount": 8,
       "startingGold": 250,
+      "startingWood": 220,
+      "startingFood": 0,
       "waveCount": 10,
       "pathComplexity": 55,
-      "towerSlots": 6
+      "towerSlots": 6,
+      "homesPerTeam": 1,
+      "towersPerTeam": 2,
+      "unitRoster": {
+        "king": 1,
+        "worker": 2,
+        "soldier": 2,
+        "archer": 2
+      }
     },
     "sections": ["map", "defense"]
   },
@@ -60,22 +83,47 @@
     "playable": true,
     "startLabel": "Begin Comparison",
     "teams": ["red", "blue"],
-    "allowedUnits": ["king", "soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan"],
+    "allowedUnits": ["king", "worker", "soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan", "balloon"],
     "defaults": {
+      "enabledUnits": ["king", "worker", "soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan", "balloon"],
       "mapStyle": "arena",
       "waterLevel": 0,
       "rockCount": 0,
       "treeCount": 8,
       "sheepCount": 0,
       "duckCount": 0,
-      "redUnitCount": 5,
-      "blueUnitCount": 5,
-      "redUnitType": "soldier",
-      "blueUnitType": "soldier",
+      "leftUnitRoster": {
+        "soldier": 5
+      },
+      "rightUnitRoster": {
+        "soldier": 5
+      },
       "homesPerTeam": 0,
       "towersPerTeam": 0,
       "arenaSize": 50
     },
-    "sections": ["map", "comparison"]
+    "sections": ["comparison_left", "comparison_right"]
+  },
+  "map_builder": {
+    "shortName": "Builder",
+    "name": "Map Builder",
+    "summary": "Paint terrain, resources, cliffs, houses, and other map objects, then save the map for reuse.",
+    "playable": true,
+    "startLabel": "Open Map Builder",
+    "teams": ["red"],
+    "allowedUnits": [],
+    "defaults": {
+      "mapStyle": "coastal_grassland",
+      "mapBuilderSize": "medium",
+      "waterLevel": 10,
+      "rockCount": 8,
+      "treeCount": 20,
+      "sheepCount": 0,
+      "duckCount": 0,
+      "houseCount": 4,
+      "homesPerTeam": 0,
+      "towersPerTeam": 0
+    },
+    "sections": ["map_builder"]
   }
 }

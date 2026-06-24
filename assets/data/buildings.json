@@ -10,7 +10,9 @@
     "attackCooldown": 1.05,
     "projectileSpeed": 300,
     "projectileColor": "#f0cf68",
-    "model": "castle"
+    "model": "castle",
+    "canTargetGround": true,
+    "canTargetAir": true
   },
   "tower": {
     "name": "Arrow Tower",
@@ -19,6 +21,8 @@
     "hp": 260,
     "size": 70,
     "weapon": "tower_arrow",
-    "model": "arrow_tower"
+    "model": "arrow_tower",
+    "canTargetGround": true,
+    "canTargetAir": true
   }
 }

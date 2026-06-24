@@ -4,6 +4,9 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 function loadUnitClass() {
+  const commandTypesSource = fs.readFileSync(new URL('../entities/UnitCommandTypes.js', import.meta.url), 'utf8');
+  const stateFactorySource = fs.readFileSync(new URL('../entities/UnitStateFactory.js', import.meta.url), 'utf8');
+  const commandStateSource = fs.readFileSync(new URL('../entities/UnitCommandStateService.js', import.meta.url), 'utf8');
   const source = fs.readFileSync(new URL('../entities/unit.js', import.meta.url), 'utf8');
   const unitSource = source.split('// --- Bullets ---')[0];
   let dropped = null;
@@ -25,7 +28,7 @@ function loadUnitClass() {
     }
   };
   context.globalThis = context;
-  vm.runInNewContext(`${unitSource}\nglobalThis.UnitForTest = Unit;`, context);
+  vm.runInNewContext(`${commandTypesSource}\n${stateFactorySource}\n${commandStateSource}\n${unitSource}\nglobalThis.UnitForTest = Unit;`, context);
   return { Unit: context.UnitForTest, getDropped: () => dropped };
 }
 

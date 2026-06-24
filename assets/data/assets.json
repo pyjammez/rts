@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "models": {
+    "unit.king": { "kind": "procedural", "renderer": "three", "factory": "king" },
+    "unit.worker": { "kind": "procedural", "renderer": "three", "factory": "worker" },
+    "unit.soldier": { "kind": "procedural", "renderer": "three", "factory": "soldier" },
+    "unit.archer": { "kind": "procedural", "renderer": "three", "factory": "archer" },
+    "unit.knight": { "kind": "procedural", "renderer": "three", "factory": "knight" },
+    "unit.scout": { "kind": "procedural", "renderer": "three", "factory": "scout" },
+    "unit.gunman": { "kind": "procedural", "renderer": "three", "factory": "gunman" },
+    "unit.crossbowman": { "kind": "procedural", "renderer": "three", "factory": "crossbowman" },
+    "unit.grenademan": { "kind": "procedural", "renderer": "three", "factory": "grenademan" },
+    "unit.balloon": { "kind": "procedural", "renderer": "three", "factory": "balloon" },
+    "building.castle": { "kind": "procedural", "renderer": "three", "factory": "castle" },
+    "building.arrow_tower": { "kind": "procedural", "renderer": "three", "factory": "arrow_tower" },
+    "wildlife.sheep": { "kind": "procedural", "renderer": "three", "factory": "sheep" },
+    "wildlife.duck": { "kind": "procedural", "renderer": "three", "factory": "duck" },
+    "wildlife.horse": { "kind": "procedural", "renderer": "three", "factory": "horse" }
+  },
+  "textures": {
+    "terrain.grass": { "url": "assets/grass.png" },
+    "terrain.sand": { "url": "assets/sand.png" },
+    "terrain.dirt": { "url": "assets/dirt.png" },
+    "terrain.stone": { "url": "assets/stone.png" },
+    "terrain.cobblestone": { "url": "assets/cobblestone.png" },
+    "terrain.wall": { "url": "assets/wall.png" },
+    "terrain.wall_dark": { "url": "assets/wall_dark.png" },
+    "sprites.units": { "url": "assets/unit_sprites.svg" }
+  },
+  "sounds": {}
+}

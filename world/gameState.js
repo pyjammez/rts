@@ -6,7 +6,8 @@ const gameSession = {
   finished: false,
   teams: [],
   initialHomesByTeam: {},
-  initialKingsByTeam: {}
+  initialKingsByTeam: {},
+  initialUnitsByTeam: {}
 };
 
 const DEFAULT_UNIT_STATS = {
@@ -21,7 +22,12 @@ function simulationRandom() {
 }
 
 function createUnit(team, unitType = 'soldier') {
-    const definition = typeof getUnitDefinition === 'function' ? getUnitDefinition(unitType) : DEFAULT_UNIT_STATS;
+    const baseDefinition = typeof getUnitDefinition === 'function' ? getUnitDefinition(unitType) : DEFAULT_UNIT_STATS;
+    const overrideSource = getActiveModeConfig()?.unitOverrides?.[baseDefinition.id || unitType] || {};
+    const definition = {
+        ...baseDefinition,
+        ...sanitizeUnitStatOverrides(overrideSource, baseDefinition)
+    };
     const hp = definition.hp ?? DEFAULT_UNIT_STATS.hp;
     const speed = definition.speed ?? DEFAULT_UNIT_STATS.speed;
     const unit = new Unit({
@@ -41,6 +47,7 @@ function createUnit(team, unitType = 'soldier') {
     unit.role = definition.role || '';
     unit.shootRange = definition.shootRange ?? unit.shootRange;
     unit.stopShootRange = definition.stopShootRange ?? unit.stopShootRange;
+    unit.aggroRange = definition.aggroRange ?? Math.max(unit.stopShootRange + tileSize * 2.5, unit.shootRange + tileSize * 3, 190);
     unit.fireRate = definition.fireRate ?? unit.fireRate;
     unit.projectileSpeed = definition.projectileSpeed || 200;
     unit.projectileColor = definition.projectileColor || null;
@@ -49,7 +56,32 @@ function createUnit(team, unitType = 'soldier') {
     unit.melee = !!definition.melee;
     unit.weaponName = definition.weaponName || definition.weapon || '';
     unit.weaponId = definition.weaponId || definition.weapon || null;
+    unit.abilities = Array.isArray(definition.abilities) ? [...definition.abilities] : [];
+    unit.abilityDefinitions = Array.isArray(definition.abilityDefinitions) ? structuredClone(definition.abilityDefinitions) : [];
+    unit.pack = definition.pack || 'core';
+    unit.era = definition.era || 'core';
+    unit.movementType = definition.movementType || 'ground';
+    unit.airborne = unit.movementType === 'air';
+    unit.flightHeight = Number(definition.flightHeight) || (unit.airborne ? 2.2 : 0);
+    unit.canTargetGround = definition.canTargetGround !== false;
+    unit.canTargetAir = !!definition.canTargetAir;
     return unit;
+}
+
+function sanitizeUnitStatOverrides(overrides, baseDefinition = {}) {
+    if (!overrides || typeof overrides !== 'object') return {};
+    const sanitized = {};
+    const hp = Number(overrides.hp);
+    if (Number.isFinite(hp) && hp > 0) sanitized.hp = Math.floor(hp);
+    const damage = Number(overrides.damage);
+    if (Number.isFinite(damage) && damage >= 0) {
+        sanitized.damage = Math.floor(damage);
+        sanitized.movingDamage = overrides.movingDamage ?? baseDefinition.movingDamage ?? Math.max(1, Math.round(sanitized.damage * 0.5));
+    }
+    if (Array.isArray(overrides.abilities)) {
+        sanitized.abilities = overrides.abilities.filter(Boolean).map(String);
+    }
+    return sanitized;
 }
 
 function getActiveModeConfig() {
@@ -85,6 +117,15 @@ function getConfiguredUnitRoster(config = getActiveModeConfig()) {
   return { [fallbackType]: getStartingUnitsPerTeam() };
 }
 
+function getConfiguredTeams(config = getActiveModeConfig()) {
+  if (typeof getActivePlayerSlots === 'function') {
+    const slotTeams = getActivePlayerSlots(config).map(slot => slot.flag).filter(Boolean);
+    if (slotTeams.length >= 2) return slotTeams;
+  }
+
+  return Array.isArray(config.teams) && config.teams.length >= 2 ? [...config.teams] : ['red', 'blue'];
+}
+
 function createConfiguredUnit(team, unitType = null) {
     const config = getActiveModeConfig();
     const requestedType = unitType || config.unitType || 'soldier';
@@ -114,14 +155,17 @@ function spawnInitialUnits() {
     placeTeamBuildings(config);
   }
 
+  if (config.modeId === 'map_builder') {
+    return;
+  }
+
   if (config.modeId === 'unit_comparison') {
     spawnComparisonUnits(config);
     return;
   }
 
   const unitRoster = getConfiguredUnitRoster(config);
-  const teams = Array.isArray(config.teams) ? config.teams : ['red', 'blue'];
-  const playableTeams = teams.includes('red') && teams.includes('blue') ? teams : ['red', 'blue'];
+  const playableTeams = config.modeId === 'tower_defense' ? ['red'] : getConfiguredTeams(config);
   const unitsPerTeam = Object.values(unitRoster).reduce((total, count) => total + count, 0);
 
   for (const team of playableTeams) {
@@ -130,7 +174,9 @@ function spawnInitialUnits() {
       for (let i = 0; i < count; i++) {
         const unit = createConfiguredUnit(team, unitType);
         if (!unit) continue;
-        if (!spawnUnitInsideTeamCastle(unit, team, spawnIndex, unitsPerTeam)) {
+        if (config.modeId === 'tower_defense') {
+          spawnTowerDefenseDefender(unit, team, spawnIndex, unitsPerTeam);
+        } else if (!spawnUnitInsideTeamCastle(unit, team, spawnIndex, unitsPerTeam)) {
           spawnUnitToRandomSpot(unit, team);
         }
         spawnIndex++;
@@ -140,31 +186,77 @@ function spawnInitialUnits() {
 
 }
 
-function spawnComparisonUnits(config) {
-  const redDefinition = getUnitDefinition(config.redUnitType || 'soldier');
-  const blueDefinition = getUnitDefinition(config.blueUnitType || 'soldier');
-  const redMaximum = Number.isFinite(Number(redDefinition.maxPerTeam)) ? Number(redDefinition.maxPerTeam) : Infinity;
-  const blueMaximum = Number.isFinite(Number(blueDefinition.maxPerTeam)) ? Number(blueDefinition.maxPerTeam) : Infinity;
-  const redCount = Math.min(redMaximum, Math.max(1, Math.floor(Number(config.redUnitCount) || 5)));
-  const blueCount = Math.min(blueMaximum, Math.max(1, Math.floor(Number(config.blueUnitCount) || 5)));
+function spawnTowerDefenseDefender(unit, team, index, total) {
+  const home = typeof getTeamHome === 'function' ? getTeamHome(team) : null;
+  if (!home) {
+    spawnUnitToRandomSpot(unit, team);
+    return;
+  }
 
-  for (let i = 0; i < redCount; i++) {
-    const unit = createUnit('red', config.redUnitType || 'soldier');
-    const point = findComparisonSpawnPoint('red', i, redCount, unit.size);
+  const columns = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, total))));
+  const row = Math.floor(index / columns);
+  const col = index % columns;
+  const centerOffset = (col - (columns - 1) * 0.5) * tileSize * 0.9;
+  const preferred = {
+    x: home.x + centerOffset,
+    y: (home.tileY + home.height + 1.5 + row * 0.85) * tileSize
+  };
+  const movementOptions = unit.getMovementOptions ? unit.getMovementOptions() : {};
+  const point = findNearestWalkablePoint(preferred.x, preferred.y, unit.size, 16, movementOptions) ||
+    findNearestWalkablePoint(home.x, home.y + home.height * tileSize * 0.75, unit.size, 16, movementOptions);
+
+  if (point) {
+    unit.x = point.x;
+    unit.y = point.y;
+    units.push(unit);
+    return;
+  }
+
+  spawnUnitToRandomSpot(unit, team);
+}
+
+function spawnComparisonUnits(config) {
+  const leftRoster = getComparisonUnitList(config.leftUnitRoster, {
+    [config.redUnitType || 'soldier']: config.redUnitCount || 5
+  });
+  const rightRoster = getComparisonUnitList(config.rightUnitRoster, {
+    [config.blueUnitType || 'soldier']: config.blueUnitCount || 5
+  });
+
+  for (let i = 0; i < leftRoster.length; i++) {
+    const unit = createUnit('red', leftRoster[i]);
+    const point = findComparisonSpawnPoint('red', i, leftRoster.length, unit.size);
     unit.x = point.x;
     unit.y = point.y;
     units.push(unit);
   }
 
-  for (let i = 0; i < blueCount; i++) {
-    const unit = createUnit('blue', config.blueUnitType || 'soldier');
-    const point = findComparisonSpawnPoint('blue', i, blueCount, unit.size);
+  for (let i = 0; i < rightRoster.length; i++) {
+    const unit = createUnit('blue', rightRoster[i]);
+    const point = findComparisonSpawnPoint('blue', i, rightRoster.length, unit.size);
     unit.x = point.x;
     unit.y = point.y;
     units.push(unit);
   }
 
   issueComparisonAttackOrders();
+}
+
+function getComparisonUnitList(roster, fallbackRoster) {
+  const source = roster && typeof roster === 'object' ? roster : fallbackRoster;
+  const allowedUnits = getGameModeDefinition('unit_comparison').allowedUnits || Object.keys(window.UNIT_DEFINITIONS || {});
+  const unitTypes = [];
+
+  for (const unitType of allowedUnits) {
+    const definition = getUnitDefinition(unitType);
+    const maximum = Number.isFinite(Number(definition.maxPerTeam))
+      ? Math.max(0, Math.floor(Number(definition.maxPerTeam)))
+      : 80;
+    const count = Math.min(maximum, Math.max(0, Math.floor(Number(source?.[unitType]) || 0)));
+    for (let i = 0; i < count; i++) unitTypes.push(unitType);
+  }
+
+  return unitTypes.length > 0 ? unitTypes : ['soldier'];
 }
 
 function findComparisonSpawnPoint(team, index, count, size) {
@@ -196,6 +288,7 @@ function findNearestEnemyForUnit(unit) {
   let closestDist = Infinity;
 
   for (const other of units) {
+    if (other.hiddenInHouse) continue;
     if (!unit.isEnemyValid(other)) continue;
     const dist = Math.hypot(other.x - unit.x, other.y - unit.y);
     if (dist < closestDist) {
@@ -209,13 +302,21 @@ function findNearestEnemyForUnit(unit) {
 
 function issueComparisonAttackOrders() {
   for (const unit of units) {
-    if (unit.isDead) continue;
+    if (unit.isDead || unit.hiddenInHouse) continue;
     const target = findNearestEnemyForUnit(unit);
     if (target) unit.issueAttackCommand(target);
   }
 }
 
 function updateActiveGameMode(dt, aliveUnits) {
+  const modeResult = OpenRTS.modes?.runtime?.update(dt, {
+    aliveUnits,
+    units,
+    buildings: typeof getBuildings === 'function' ? getBuildings() : [],
+    config: getActiveModeConfig()
+  });
+  if (modeResult) return modeResult;
+
   const config = getActiveModeConfig();
   if (config.modeId !== 'unit_comparison') return;
 
@@ -227,16 +328,22 @@ function updateActiveGameMode(dt, aliveUnits) {
 }
 
 function startGameSession(config = getActiveModeConfig()) {
-  const teams = Array.isArray(config.teams) && config.teams.length
-    ? config.teams.filter(team => team === 'red' || team === 'blue')
-    : ['red', 'blue'];
+  const teams = getConfiguredTeams(config);
   const buildings = typeof getBuildings === 'function' ? getBuildings() : [];
+
+  if (OpenRTS.modes?.runtime) {
+    OpenRTS.modes.runtime.activate(config.modeId || 'versus', config, {
+      frame: OpenRTS.runtime?.frame ?? 0,
+      seed: OpenRTS.random.getSeed()
+    });
+  }
 
   gameSession.active = true;
   gameSession.finished = false;
   gameSession.teams = teams.length >= 2 ? teams : ['red', 'blue'];
   gameSession.initialHomesByTeam = {};
   gameSession.initialKingsByTeam = {};
+  gameSession.initialUnitsByTeam = {};
 
   for (const team of gameSession.teams) {
     gameSession.initialHomesByTeam[team] = buildings.filter(building =>
@@ -245,6 +352,7 @@ function startGameSession(config = getActiveModeConfig()) {
     gameSession.initialKingsByTeam[team] = units.filter(unit =>
       unit.team === team && unit.unitType === 'king'
     ).length;
+    gameSession.initialUnitsByTeam[team] = units.filter(unit => unit.team === team).length;
   }
   OpenRTS.events.emit(OpenRTS.events.types.MATCH_STARTED, {
     modeId: config.modeId,
@@ -259,6 +367,7 @@ function resetGameSession() {
   gameSession.teams = [];
   gameSession.initialHomesByTeam = {};
   gameSession.initialKingsByTeam = {};
+  gameSession.initialUnitsByTeam = {};
   OpenRTS.events.emit(OpenRTS.events.types.MATCH_RESET);
 }
 
@@ -319,7 +428,7 @@ function spawnUnitInsideTeamCastle(unit, team, index, total) {
   const x = left + ((column + 0.5) / columns) * (right - left);
   const y = top + ((row + 0.5) / rows) * (bottom - top);
 
-  if (!canSpawnAt(x, y, unit.size)) return false;
+  if (!canSpawnAt(x, y, unit.size, unit.getMovementOptions ? unit.getMovementOptions() : {})) return false;
   unit.x = x;
   unit.y = y;
   units.push(unit);
@@ -336,7 +445,7 @@ function spawnUnitToRandomSpot(unit, preferredTeam = unit.team) {
       unit.x = home.x + Math.cos(angle) * radius;
       unit.y = home.y + Math.sin(angle) * radius;
 
-      if (canSpawnAt(unit.x, unit.y, unit.size)) {
+      if (canSpawnAt(unit.x, unit.y, unit.size, unit.getMovementOptions ? unit.getMovementOptions() : {})) {
         units.push(unit);
         return;
       }
@@ -348,7 +457,7 @@ function spawnUnitToRandomSpot(unit, preferredTeam = unit.team) {
     unit.x = spot.x;
     unit.y = spot.y;
 
-    if (canSpawnAt(unit.x, unit.y, unit.size)) {
+    if (canSpawnAt(unit.x, unit.y, unit.size, unit.getMovementOptions ? unit.getMovementOptions() : {})) {
       units.push(unit);
       return;
     }
@@ -356,16 +465,39 @@ function spawnUnitToRandomSpot(unit, preferredTeam = unit.team) {
 }
 
 function spawnUnitForTeam(team) {
-  if (team !== 'red' && team !== 'blue') return;
   const unit = createConfiguredUnit(team);
   if (!unit) return;
   spawnUnitToRandomSpot(unit, team);
 }
 
+function spawnTowerDefenseEnemy({ team = 'blue', unitType = 'soldier', laneOffset = 0 } = {}) {
+  const unit = createUnit(team, unitType);
+  const targetHome = typeof getTeamHome === 'function' ? getTeamHome('red') : null;
+  const spawnX = getMapWidthPx() - tileSize * 2.5;
+  const spawnY = targetHome
+    ? targetHome.y + laneOffset
+    : getMapHeightPx() * 0.5 + laneOffset;
+  const point = findNearestWalkablePoint(spawnX, Math.max(tileSize, Math.min(getMapHeightPx() - tileSize, spawnY)), unit.size, 16, unit.getMovementOptions ? unit.getMovementOptions() : {}) ||
+    randomSpotOnTeamHalf(team);
+  unit.x = point.x;
+  unit.y = point.y;
+  units.push(unit);
+  if (targetHome) unit.issueAttackCommand(targetHome);
+  return unit;
+}
+
 function randomSpotOnTeamHalf(team) {
   const mapWidth = getMapWidthPx();
-  const minX = team === 'red' ? 0 : mapWidth * 0.5;
-  const maxX = team === 'red' ? mapWidth * 0.5 : mapWidth;
+  const teams = getConfiguredTeams();
+  const teamIndex = Math.max(0, teams.indexOf(team));
+  const teamCount = Math.max(2, teams.length);
+  const sliceWidth = mapWidth / teamCount;
+  const minX = teamCount === 2
+    ? (teamIndex === 0 ? 0 : mapWidth * 0.5)
+    : teamIndex * sliceWidth;
+  const maxX = teamCount === 2
+    ? (teamIndex === 0 ? mapWidth * 0.5 : mapWidth)
+    : Math.min(mapWidth, minX + sliceWidth);
 
   for (let attempt = 0; attempt < 400; attempt++) {
     const x = minX + simulationRandom() * (maxX - minX);
@@ -373,7 +505,7 @@ function randomSpotOnTeamHalf(team) {
     const tileX = Math.floor(x / tileSize);
     const tileY = Math.floor(y / tileSize);
 
-    if (isWalkableTile(tileX, tileY)) {
+    if (isWalkableTile(tileX, tileY, unit.getMovementOptions ? unit.getMovementOptions() : {})) {
       return { x, y };
     }
   }

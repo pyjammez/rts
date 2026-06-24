@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "modern_warlord",
+  "name": "ModernWarlord",
+  "description": "Original modern RTS sample package showing how a C&C Generals-like supply economy can be expressed as static data.",
+  "version": "0.1.0",
+  "engineVersion": "0.2.0",
+  "author": "Open RTS",
+  "license": "CC0-1.0",
+  "homepage": "https://example.com/open-rts/modern-warlord",
+  "mergeMode": "merge",
+  "dependencies": [],
+  "conflicts": [],
+  "provides": ["modern_combined_arms_rts"],
+  "tags": ["modern", "combined-arms", "desert", "sample"],
+  "files": {
+    "rulesets": "rulesets.json",
+    "factions": "factions.json",
+    "units": "units.json",
+    "buildings": "buildings.json",
+    "weapons": "weapons.json",
+    "terrainPresets": "terrain-presets.json",
+    "modes": "game-modes.json"
+  }
+}

@@ -1,0 +1,155 @@
+{
+  "open_rts_core": {
+    "name": "Open RTS Core Rules",
+    "summary": "Default flexible rules vocabulary for medieval, modern, fantasy, and sci-fi RTS variants.",
+    "resources": {
+      "gold": {
+        "name": "Gold",
+        "storage": "stockpile",
+        "defaultStartingAmount": 140,
+        "gatherable": true
+      },
+      "wood": {
+        "name": "Wood",
+        "storage": "stockpile",
+        "defaultStartingAmount": 160,
+        "gatherable": true
+      },
+      "stone": {
+        "name": "Stone",
+        "storage": "stockpile",
+        "defaultStartingAmount": 0,
+        "gatherable": true
+      },
+      "food": {
+        "name": "Food",
+        "storage": "stockpile",
+        "defaultStartingAmount": 0,
+        "gatherable": true
+      },
+      "supply": {
+        "name": "Supply",
+        "storage": "capacity",
+        "defaultStartingAmount": 0,
+        "gatherable": false
+      }
+    },
+    "damageTypes": {
+      "normal": {
+        "name": "Normal",
+        "modifiers": {}
+      },
+      "piercing": {
+        "name": "Piercing",
+        "modifiers": {
+          "light": 1.15,
+          "armored": 0.85
+        }
+      },
+      "explosive": {
+        "name": "Explosive",
+        "modifiers": {
+          "structure": 1.25,
+          "light": 0.75
+        }
+      },
+      "energy": {
+        "name": "Energy",
+        "modifiers": {
+          "mechanical": 1.1,
+          "biological": 0.95
+        }
+      }
+    },
+    "armorTags": {
+      "light": { "name": "Light" },
+      "armored": { "name": "Armored" },
+      "biological": { "name": "Biological" },
+      "mechanical": { "name": "Mechanical" },
+      "structure": { "name": "Structure" },
+      "air": { "name": "Air" },
+      "heroic": { "name": "Heroic" }
+    },
+    "effectTypes": {
+      "damage": { "name": "Damage" },
+      "heal": { "name": "Heal" },
+      "buff": { "name": "Buff" },
+      "debuff": { "name": "Debuff" },
+      "summon": { "name": "Summon" },
+      "transform": { "name": "Transform" },
+      "research": { "name": "Research" },
+      "cloak": { "name": "Cloak" },
+      "detect": { "name": "Detect" }
+    }
+  },
+  "spacecraft_like": {
+    "name": "SpaceCraft-Like Rules",
+    "summary": "Example sci-fi RTS rules vocabulary with crystals, gas, supply, shields, energy weapons, and asymmetric factions.",
+    "extends": "open_rts_core",
+    "resources": {
+      "crystals": {
+        "name": "Crystals",
+        "storage": "stockpile",
+        "defaultStartingAmount": 50,
+        "gatherable": true
+      },
+      "gas": {
+        "name": "Gas",
+        "storage": "stockpile",
+        "defaultStartingAmount": 0,
+        "gatherable": true
+      },
+      "supply": {
+        "name": "Supply",
+        "storage": "capacity",
+        "defaultStartingAmount": 10,
+        "gatherable": false
+      },
+      "energy": {
+        "name": "Energy",
+        "storage": "unit_pool",
+        "defaultStartingAmount": 0,
+        "gatherable": false
+      }
+    },
+    "damageTypes": {
+      "kinetic": {
+        "name": "Kinetic",
+        "modifiers": {
+          "light": 1.05
+        }
+      },
+      "plasma": {
+        "name": "Plasma",
+        "modifiers": {
+          "armored": 1.15,
+          "shielded": 1.1
+        }
+      },
+      "explosive": {
+        "name": "Explosive",
+        "modifiers": {
+          "structure": 1.3,
+          "light": 0.7
+        }
+      },
+      "psionic": {
+        "name": "Psionic",
+        "modifiers": {
+          "biological": 1.2,
+          "mechanical": 0.7
+        }
+      }
+    },
+    "armorTags": {
+      "light": { "name": "Light" },
+      "armored": { "name": "Armored" },
+      "biological": { "name": "Biological" },
+      "mechanical": { "name": "Mechanical" },
+      "structure": { "name": "Structure" },
+      "air": { "name": "Air" },
+      "shielded": { "name": "Shielded" },
+      "massive": { "name": "Massive" }
+    }
+  }
+}

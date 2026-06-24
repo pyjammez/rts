@@ -103,6 +103,88 @@ function drawSwordWeapon(unit, ctx, facing, baseX, baseY, length = 17) {
   ctx.restore();
 }
 
+function getWorkerToolAnimation(unit) {
+  const job = unit.workerJob;
+  const animation = unit.workerGatherAnimation;
+  if (!job || job.type !== 'gather' || !animation || !animation.target) return null;
+  if (job.resourceType !== 'gold' && job.resourceType !== 'stone' && job.resourceType !== 'wood') return null;
+  const phase = Math.max(0, Math.min(1, animation.progress || 0));
+  const cycle = Math.sin((phase * Math.PI * 8) % (Math.PI * 2));
+  return {
+    resourceType: job.resourceType,
+    cycle,
+    impact: cycle > 0.72,
+    target: animation.target
+  };
+}
+
+function drawWorkerGatherTool(unit, ctx, riderYOffset = 0) {
+  const animation = getWorkerToolAnimation(unit);
+  if (!animation) return;
+
+  const facing = unit.spriteDirectionRow === 1 ? -1 : 1;
+  const isWood = animation.resourceType === 'wood';
+  const toolX = unit.x + facing * 7;
+  const toolY = unit.y - 3 + riderYOffset;
+  const swing = -0.35 + animation.cycle * 0.95;
+
+  ctx.save();
+  ctx.translate(toolX, toolY);
+  ctx.scale(facing, 1);
+  ctx.rotate(isWood ? -0.95 + swing : -1.25 + swing);
+
+  ctx.strokeStyle = '#6b4324';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(20, 0);
+  ctx.stroke();
+
+  if (isWood) {
+    ctx.fillStyle = '#b8c0bd';
+    ctx.strokeStyle = '#4d5652';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(19, -7);
+    ctx.lineTo(27, -3);
+    ctx.lineTo(25, 5);
+    ctx.lineTo(18, 7);
+    ctx.lineTo(21, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle = '#b9c0bc';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(16, -6);
+    ctx.lineTo(27, 0);
+    ctx.lineTo(16, 6);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  if (animation.impact) {
+    const dx = animation.target.x - unit.x;
+    const dy = animation.target.y - unit.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const hitX = unit.x + dx / length * Math.min(length, tileSize * 0.55);
+    const hitY = unit.y + dy / length * Math.min(length, tileSize * 0.55);
+    ctx.save();
+    ctx.strokeStyle = isWood ? 'rgba(130, 82, 37, 0.7)' : 'rgba(238, 218, 128, 0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const angle = unit.heading + (i - 1) * 0.75;
+      ctx.moveTo(hitX, hitY);
+      ctx.lineTo(hitX + Math.cos(angle) * 8, hitY + Math.sin(angle) * 5);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 function processUnitRender(unit, ctx) {
   const drawX = unit.x - 16;
   const drawY = unit.y - 16;
@@ -169,11 +251,36 @@ function processUnitRender(unit, ctx) {
     ctx.restore();
   }
 
+  if (unit.movementType === 'air' || unit.unitType === 'balloon') {
+    const bob = Math.sin((unit.spriteFrame || 0) * Math.PI * 0.5) * 1.2;
+    ctx.save();
+    ctx.fillStyle = 'rgba(25, 12, 5, 0.18)';
+    ctx.beginPath();
+    ctx.ellipse(unit.x + 4, unit.y + 13, tileSize * 0.35, tileSize * 0.12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#5b3a1c';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(unit.x - 8, unit.y - 3 + bob);
+    ctx.lineTo(unit.x - 5, unit.y + 13);
+    ctx.moveTo(unit.x + 8, unit.y - 3 + bob);
+    ctx.lineTo(unit.x + 5, unit.y + 13);
+    ctx.stroke();
+    ctx.fillStyle = typeof getTeamColor === 'function' ? getTeamColor(unit.team) : '#c85c45';
+    ctx.beginPath();
+    ctx.ellipse(unit.x, unit.y - 12 + bob, 13, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#6b4324';
+    ctx.fillRect(unit.x - 7, unit.y + 11, 14, 8);
+    ctx.restore();
+    return;
+  }
+
   const isMoving = unit.hasActivePath ? unit.hasActivePath() : !!unit.target;
   const stride = isMoving ? Math.sin((unit.spriteFrame || 0) * Math.PI * 0.5) * 1.4 : 0;
   const hasMount = drawUnitMount(unit, ctx, isMoving, stride);
   const riderYOffset = hasMount ? -8 : 0;
-  const legColor = unit.team === 'red' ? '#4c231d' : '#1d284c';
+  const legColor = '#332318';
   const bootColor = '#211712';
   const legBaseY = unit.y + unit.size * 0.28;
   const legPairs = [
@@ -187,13 +294,13 @@ function processUnitRender(unit, ctx) {
   if (!hasMount && tileSprites.unit && tileSprites.unit.complete && tileSprites.unit.naturalWidth > 0) {
     ctx.drawImage(tileSprites.unit, frameX, frameY, frameSize, frameSize, drawX, drawY, tileSize, tileSize);
   } else {
-    ctx.fillStyle = unit.team === 'red' ? '#c63c3c' : '#3e69d7';
+    ctx.fillStyle = typeof getTeamColor === 'function' ? getTeamColor(unit.team) : (unit.team === 'red' ? '#c63c3c' : '#3e69d7');
     ctx.beginPath();
     ctx.arc(unit.x, unit.y, unit.size * 0.5, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  const shirtColor = unit.team === 'red' ? '#d84545' : unit.team === 'blue' ? '#4c78ff' : null;
+  const shirtColor = typeof getTeamColor === 'function' ? getTeamColor(unit.team) : (unit.team === 'red' ? '#d84545' : unit.team === 'blue' ? '#4c78ff' : null);
   if (shirtColor) {
     ctx.fillStyle = shirtColor;
     if (unit.spriteDirectionRow === 1) {
@@ -228,7 +335,7 @@ function processUnitRender(unit, ctx) {
     ctx.ellipse(unit.x - facing * 8, unit.y - 1, 6, 9, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = unit.team === 'red' ? '#a53030' : '#315fc4';
+    ctx.fillStyle = typeof getTeamColor === 'function' ? getTeamColor(unit.team) : (unit.team === 'red' ? '#a53030' : '#315fc4');
     ctx.beginPath();
     ctx.ellipse(unit.x - facing * 8, unit.y - 1, 3.4, 5.8, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -263,6 +370,10 @@ function processUnitRender(unit, ctx) {
   if (unit.unitType === 'scout' && !unit.mountType) {
     ctx.fillStyle = '#704521';
     ctx.fillRect(unit.x - 10, unit.y + 1, 20, 3);
+  }
+
+  if (unit.unitType === 'worker') {
+    drawWorkerGatherTool(unit, ctx, riderYOffset);
   }
 
   ctx.restore();

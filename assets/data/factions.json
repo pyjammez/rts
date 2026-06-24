@@ -1,0 +1,79 @@
+{
+  "kingdoms": {
+    "name": "Kingdoms",
+    "summary": "Default castle-age faction for Open RTS testing.",
+    "ruleset": "open_rts_core",
+    "theme": "medieval",
+    "color": "#c93a32",
+    "startingResources": {
+      "gold": 140,
+      "wood": 160,
+      "stone": 0,
+      "food": 0
+    },
+    "startingUnits": {
+      "king": 1,
+      "worker": 5
+    },
+    "startingBuildings": {
+      "home": 1
+    },
+    "units": ["king", "worker", "soldier", "archer", "knight", "scout", "gunman", "crossbowman", "grenademan", "balloon"],
+    "buildings": ["home", "tower"],
+    "techTree": {
+      "rootBuildings": ["home"],
+      "unlocks": {
+        "home": ["worker", "king"],
+        "tower": []
+      }
+    },
+    "production": {
+      "home": {
+        "train": ["worker", "king"],
+        "research": ["castle_upgrade"]
+      },
+      "tower": {
+        "train": [],
+        "research": []
+      }
+    }
+  },
+  "stellar_union": {
+    "name": "Stellar Union",
+    "summary": "Example original sci-fi faction showing how a StarCraft-like mod can be described without copying protected content.",
+    "ruleset": "spacecraft_like",
+    "theme": "sci_fi",
+    "color": "#3f7cff",
+    "startingResources": {
+      "crystals": 50,
+      "gas": 0,
+      "supply": 10
+    },
+    "startingUnits": {
+      "worker": 6,
+      "gunman": 0
+    },
+    "startingBuildings": {
+      "home": 1
+    },
+    "units": ["worker", "gunman", "crossbowman", "grenademan", "balloon"],
+    "buildings": ["home", "tower"],
+    "techTree": {
+      "rootBuildings": ["home"],
+      "unlocks": {
+        "home": ["worker", "tower"],
+        "tower": ["gunman", "crossbowman"]
+      }
+    },
+    "production": {
+      "home": {
+        "train": ["worker"],
+        "research": []
+      },
+      "tower": {
+        "train": ["gunman", "crossbowman"],
+        "research": []
+      }
+    }
+  }
+}

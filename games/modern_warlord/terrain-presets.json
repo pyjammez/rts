@@ -1,0 +1,12 @@
+{
+  "dry_oil_basin": {
+    "name": "Dry Oil Basin",
+    "waterLevel": 0,
+    "rockCount": 36,
+    "treeCount": 3,
+    "sheepCount": 0,
+    "duckCount": 0,
+    "goldMineCount": 10,
+    "houseCount": 6
+  }
+}

@@ -47,4 +47,5 @@
     ? app.rendering
     : new RendererRegistry();
   app.runtime?.registerService('rendering', app.rendering);
+  app.diagnostics?.register?.('rendering', () => app.rendering.describe());
 })(globalThis);

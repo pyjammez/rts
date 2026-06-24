@@ -1,0 +1,39 @@
+{
+  "ue_laser": {
+    "name": "Pulse Laser",
+    "damage": 14,
+    "movingDamage": 9,
+    "range": 190,
+    "stopRange": 225,
+    "fireRate": 1.4,
+    "projectileSpeed": 520,
+    "projectileColor": "#ff5555",
+    "projectileType": "laser",
+    "damageType": "laser"
+  },
+  "ue_cannon": {
+    "name": "Gauss Cannon",
+    "damage": 34,
+    "movingDamage": 18,
+    "range": 230,
+    "stopRange": 265,
+    "fireRate": 0.55,
+    "projectileSpeed": 360,
+    "projectileColor": "#d6d6d6",
+    "projectileType": "shell",
+    "splashRadius": 20,
+    "damageType": "shell"
+  },
+  "ue_missile": {
+    "name": "Seeker Missile",
+    "damage": 26,
+    "movingDamage": 15,
+    "range": 255,
+    "stopRange": 290,
+    "fireRate": 0.8,
+    "projectileSpeed": 280,
+    "projectileColor": "#f5f5f5",
+    "projectileType": "rocket",
+    "damageType": "missile"
+  }
+}

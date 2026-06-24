@@ -1,0 +1,30 @@
+{
+  "battleforge_rules": {
+    "name": "BattleForge Rules",
+    "summary": "Fantasy economy with gold, lumber, food capacity, mana, melee lines, ranged support, and defensive towers.",
+    "resources": {
+      "gold": { "name": "Gold", "storage": "stockpile", "defaultStartingAmount": 500, "gatherable": true },
+      "lumber": { "name": "Lumber", "storage": "stockpile", "defaultStartingAmount": 150, "gatherable": true },
+      "food": { "name": "Food", "storage": "capacity", "defaultStartingAmount": 10, "gatherable": false },
+      "mana": { "name": "Mana", "storage": "unit_pool", "defaultStartingAmount": 0, "gatherable": false }
+    },
+    "damageTypes": {
+      "blade": { "name": "Blade", "modifiers": { "light": 1.1, "heavy": 0.9, "structure": 0.6 } },
+      "pierce": { "name": "Pierce", "modifiers": { "light": 1.0, "air": 1.2, "heavy": 0.75 } },
+      "magic": { "name": "Magic", "modifiers": { "heavy": 1.15, "structure": 0.8, "summoned": 1.25 } }
+    },
+    "armorTags": {
+      "light": { "name": "Light" },
+      "heavy": { "name": "Heavy" },
+      "air": { "name": "Air" },
+      "structure": { "name": "Structure" },
+      "summoned": { "name": "Summoned" }
+    },
+    "effectTypes": {
+      "damage": { "name": "Damage" },
+      "heal": { "name": "Heal" },
+      "buff": { "name": "Buff" },
+      "summon": { "name": "Summon" }
+    }
+  }
+}

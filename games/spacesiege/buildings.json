@@ -1,0 +1,49 @@
+{
+  "ss_nexus": {
+    "name": "Command Nexus",
+    "width": 8,
+    "height": 8,
+    "hp": 1500,
+    "size": 300,
+    "cost": { "minerals": 400 },
+    "buildTime": 35,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "ss_pylon": {
+    "name": "Power Spire",
+    "width": 2,
+    "height": 2,
+    "hp": 380,
+    "size": 80,
+    "cost": { "minerals": 100, "supply": 8 },
+    "buildTime": 18,
+    "model": "arrow_tower",
+    "armorType": "structure"
+  },
+  "ss_gateway": {
+    "name": "Unit Gateway",
+    "width": 4,
+    "height": 4,
+    "hp": 850,
+    "size": 150,
+    "cost": { "minerals": 150 },
+    "buildTime": 24,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "ss_defense_spire": {
+    "name": "Defense Spire",
+    "width": 2,
+    "height": 2,
+    "hp": 470,
+    "size": 75,
+    "weapon": "ss_plasma_cannon",
+    "cost": { "minerals": 125 },
+    "buildTime": 20,
+    "model": "arrow_tower",
+    "armorType": "structure",
+    "canTargetAir": true,
+    "canTargetGround": true
+  }
+}

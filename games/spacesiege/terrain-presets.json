@@ -1,0 +1,12 @@
+{
+  "crystal_frontier": {
+    "name": "Crystal Frontier",
+    "waterLevel": 2,
+    "rockCount": 28,
+    "treeCount": 0,
+    "sheepCount": 0,
+    "duckCount": 0,
+    "goldMineCount": 12,
+    "houseCount": 0
+  }
+}

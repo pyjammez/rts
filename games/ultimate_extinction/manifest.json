@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "ultimate_extinction",
+  "name": "UltimateExtinction",
+  "description": "Original large-scale robot-war RTS sample package showing how a Total Annihilation-like metal and energy economy can be expressed as static data.",
+  "version": "0.1.0",
+  "engineVersion": "0.2.0",
+  "author": "Open RTS",
+  "license": "CC0-1.0",
+  "homepage": "https://example.com/open-rts/ultimate-extinction",
+  "mergeMode": "merge",
+  "dependencies": [],
+  "conflicts": [],
+  "provides": ["large_scale_robot_rts"],
+  "tags": ["robots", "metal", "energy", "sample"],
+  "files": {
+    "rulesets": "rulesets.json",
+    "factions": "factions.json",
+    "units": "units.json",
+    "buildings": "buildings.json",
+    "weapons": "weapons.json",
+    "terrainPresets": "terrain-presets.json",
+    "modes": "game-modes.json"
+  }
+}

@@ -12,7 +12,7 @@ npm run validate
 npm run check
 ```
 
-The authoritative modding files live under `assets/data/`. The game remains build-free and deploys directly to static hosting.
+The authoritative modding files live under `assets/data/`. `assets/data/content-manifest.json` declares the content schema version, content version, and browser-loadable JSON files. `npm run validate` checks those files as a modding contract before launch, including IDs, references, numeric ranges, roster caps, and manifest path safety. The game remains build-free and deploys directly to static hosting.
 
 ## 3D Rendering
 

@@ -81,8 +81,8 @@ function removeCollisions(units, { rebuildSpatialHash = true } = {}) {
   }
 }
 
-function findPath(start, goal) {
-    if (!isWalkableTile(start.x, start.y) || !isWalkableTile(goal.x, goal.y)) {
+function findPath(start, goal, options = {}) {
+    if (!isWalkableTile(start.x, start.y, options) || !isWalkableTile(goal.x, goal.y, options)) {
       return [];
     }
 
@@ -157,12 +157,12 @@ function findPath(start, goal) {
         const nKey = nodeKey(n);
 
         // Skip invalid or blocked tiles.
-        if (!isWalkableTile(n.x, n.y)) continue;
+        if (!isWalkableTile(n.x, n.y, { ...options, fromTile: current })) continue;
         if (closed.has(nKey)) continue;
 
         // Check if already in open list
         const existing = openMap.get(nKey);
-        const gScore = current.g + getMovementCost(n.x, n.y);
+        const gScore = current.g + getMovementCost(n.x, n.y, { ...options, fromTile: current });
 
         if (!existing) {
           const newNode = {

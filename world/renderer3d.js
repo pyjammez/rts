@@ -8,17 +8,39 @@ const RTS3D = (() => {
     staticGroup: null,
     dynamicGroup: null,
     materials: null,
-    geometry: new Map(),
     raycaster: null,
     groundPlane: null,
     treeCrowns: [],
+    teamMaterials: new Map(),
     staticSignature: '',
     initialized: false,
-    threeUnavailableWarned: false
+    threeUnavailableWarned: false,
+    geometryCache: null,
+    primitives: null,
+    unitAttachments: null,
+    unitModels: null,
+    terrainMeshes: null,
+    buildingModels: null,
+    proceduralFactoriesRegistered: false
   };
 
   function use3DRenderer() {
     return true;
+  }
+
+  function getTeamMaterial(team) {
+    if (!state.materials) return null;
+    if (team === 'red') return state.materials.red;
+    if (team === 'blue') return state.materials.blue;
+
+    const color = typeof getTeamColor === 'function' ? getTeamColor(team) : '#2c5fb5';
+    if (!state.teamMaterials.has(color)) {
+      state.teamMaterials.set(color, new window.THREE.MeshStandardMaterial({
+        color,
+        roughness: 0.72
+      }));
+    }
+    return state.teamMaterials.get(color);
   }
 
   function init3DRenderer() {
@@ -32,59 +54,76 @@ const RTS3D = (() => {
       return false;
     }
 
-    const renderer = new THREE.WebGLRenderer({
+    const runtime = OpenRTS.rendering.threeSceneBootstrap.createSceneRuntime({
+      THREE,
       canvas: canvas3d,
-      antialias: true,
-      alpha: false,
-      powerPreference: 'high-performance'
+      devicePixelRatio: window.devicePixelRatio || 1
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-    renderer.setSize(canvas3d.clientWidth || canvas3d.width, canvas3d.clientHeight || canvas3d.height, false);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.08;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    if (!runtime) return false;
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x8aa5a0);
-    scene.fog = new THREE.FogExp2(0x91aaa4, 0.0095);
-
-    const sceneCamera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
-    sceneCamera.up.set(0, 1, 0);
-
-    const hemisphere = new THREE.HemisphereLight(0xdbe8f0, 0x39452d, 1.55);
-    scene.add(hemisphere);
-
-    const sun = new THREE.DirectionalLight(0xffe3b2, 3.4);
-    sun.position.set(-28, 42, 24);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -45;
-    sun.shadow.camera.right = 45;
-    sun.shadow.camera.top = 45;
-    sun.shadow.camera.bottom = -45;
-    sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 120;
-    sun.shadow.bias = -0.00025;
-    sun.shadow.normalBias = 0.025;
-    scene.add(sun);
-    scene.add(sun.target);
-
-    const staticGroup = new THREE.Group();
-    staticGroup.name = 'static-world';
-    const dynamicGroup = new THREE.Group();
-    dynamicGroup.name = 'dynamic-entities';
-    scene.add(staticGroup, dynamicGroup);
-
-    state.renderer = renderer;
-    state.scene = scene;
-    state.camera = sceneCamera;
-    state.staticGroup = staticGroup;
-    state.dynamicGroup = dynamicGroup;
+    state.renderer = runtime.renderer;
+    state.scene = runtime.scene;
+    state.camera = runtime.camera;
+    state.staticGroup = runtime.staticGroup;
+    state.dynamicGroup = runtime.dynamicGroup;
     state.materials = createMaterials();
-    state.raycaster = new THREE.Raycaster();
-    state.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    state.raycaster = runtime.raycaster;
+    state.groundPlane = runtime.groundPlane;
+    state.geometryCache = OpenRTS.rendering.geometryCaches.createGeometryCache();
+    state.primitives = OpenRTS.rendering.meshPrimitives.createFactory({
+      THREE,
+      geometryCache: state.geometryCache
+    });
+    state.terrainMeshes = OpenRTS.rendering.threeTerrainMeshes.createFactory({
+      THREE,
+      materials: state.materials,
+      tileSize,
+      getRows: () => MAP_ROWS,
+      getColumns: () => MAP_COLS,
+      getMapConfig: () => window.mapConfig || mapConfig || {},
+      hashNoise,
+      smoothValueNoise,
+      fbmNoise,
+      getWorldElevation: typeof getWorldElevation === 'function' ? getWorldElevation : null
+    });
+    state.buildingModels = OpenRTS.rendering.threeBuildingModels.createFactory({
+      THREE,
+      geometry,
+      addBox,
+      addCylinder,
+      materials: state.materials,
+      worldToScene,
+      getTeamMaterial,
+      rampartHeight: RAMPART_HEIGHT
+    });
+    state.unitAttachments = OpenRTS.rendering.threeUnitAttachments.createFactory({
+      THREE,
+      geometry,
+      addBox,
+      addCylinder,
+      addSphere,
+      addMesh,
+      materials: state.materials,
+      obstacleTypes: OBSTACLE
+    });
+    state.unitModels = OpenRTS.rendering.threeUnitModels.createFactory({
+      THREE,
+      geometry,
+      addBox,
+      addCylinder,
+      addSphere,
+      materials: state.materials,
+      attachments: state.unitAttachments,
+      worldToScene,
+      getWorldElevation: typeof getWorldElevation === 'function' ? getWorldElevation : null,
+      getTeamMaterial,
+      addSelectionRing,
+      entityElevation: OpenRTS.rendering.entityElevation,
+      rampartHeight: RAMPART_HEIGHT,
+      clamp,
+      smoothStep
+    });
+    registerProceduralModelFactories();
     state.initialized = true;
     return true;
   }
@@ -99,162 +138,40 @@ const RTS3D = (() => {
   }
 
   function geometry(key, factory) {
-    if (!state.geometry.has(key)) state.geometry.set(key, factory());
-    return state.geometry.get(key);
+    if (!state.geometryCache) state.geometryCache = OpenRTS.rendering.geometryCaches.createGeometryCache();
+    return state.geometryCache.get(key, factory);
   }
 
   function addMesh(parent, mesh, x, y, z, castShadow = true, receiveShadow = true) {
-    mesh.position.set(x, y, z);
-    mesh.castShadow = castShadow;
-    mesh.receiveShadow = receiveShadow;
-    parent.add(mesh);
-    return mesh;
+    return state.primitives.addMesh(parent, mesh, x, y, z, castShadow, receiveShadow);
   }
 
   function addBox(parent, x, y, z, width, height, depth, material) {
-    const THREE = window.THREE;
-    const key = `box:${width.toFixed(3)}:${height.toFixed(3)}:${depth.toFixed(3)}`;
-    const mesh = new THREE.Mesh(geometry(key, () => new THREE.BoxGeometry(width, height, depth)), material);
-    return addMesh(parent, mesh, x, y + height * 0.5, z);
+    return state.primitives.addBox(parent, x, y, z, width, height, depth, material);
   }
 
   function addCylinder(parent, x, y, z, radiusTop, radiusBottom, height, material, segments = 16) {
-    const THREE = window.THREE;
-    const key = `cyl:${radiusTop}:${radiusBottom}:${height}:${segments}`;
-    const mesh = new THREE.Mesh(
-      geometry(key, () => new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments)),
-      material
-    );
-    return addMesh(parent, mesh, x, y + height * 0.5, z);
+    return state.primitives.addCylinder(parent, x, y, z, radiusTop, radiusBottom, height, material, segments);
   }
 
   function addSphere(parent, x, y, z, radius, material, scale = null) {
-    const THREE = window.THREE;
-    const mesh = new THREE.Mesh(
-      geometry('sphere:16:10', () => new THREE.SphereGeometry(1, 16, 10)),
-      material
-    );
-    mesh.scale.set(scale?.x || radius, scale?.y || radius, scale?.z || radius);
-    return addMesh(parent, mesh, x, y, z);
-  }
-
-  function addLongbow(parent, riderY = 0) {
-    const THREE = window.THREE;
-    const bowGroup = new THREE.Group();
-    bowGroup.position.y = riderY;
-
-    const bow = new THREE.Mesh(
-      geometry('weapon:longbow', () => {
-        const curve = new THREE.CatmullRomCurve3([
-          new THREE.Vector3(0.2, 1.08, 0.18),
-          new THREE.Vector3(0.35, 0.84, 0.18),
-          new THREE.Vector3(0.42, 0.55, 0.18),
-          new THREE.Vector3(0.35, 0.27, 0.18),
-          new THREE.Vector3(0.2, 0.03, 0.18)
-        ], false, 'centripetal');
-        return new THREE.TubeGeometry(curve, 20, 0.026, 7, false);
-      }),
-      state.materials.wood
-    );
-    bow.castShadow = true;
-    bow.receiveShadow = true;
-    bowGroup.add(bow);
-
-    addCylinder(bowGroup, 0.2, 0.03, 0.18, 0.006, 0.006, 1.05, state.materials.bone, 5);
-    addCylinder(bowGroup, 0.4, 0.47, 0.18, 0.043, 0.043, 0.16, state.materials.leather, 8);
-    parent.add(bowGroup);
-    return bowGroup;
-  }
-
-  function addPistol(parent, riderY = 0) {
-    addBox(parent, 0.29, 0.53 + riderY, 0.13, 0.42, 0.09, 0.1, state.materials.iron);
-    const grip = addBox(parent, 0.13, 0.38 + riderY, 0.13, 0.1, 0.2, 0.09, state.materials.leather);
-    grip.rotation.z = -0.2;
-    addCylinder(parent, 0.51, 0.555 + riderY, 0.13, 0.035, 0.035, 0.08, state.materials.iron, 10).rotation.z = Math.PI * 0.5;
-  }
-
-  function addCrossbow(parent, riderY = 0) {
-    const THREE = window.THREE;
-    const crossbowGroup = new THREE.Group();
-    crossbowGroup.position.y = riderY;
-    addBox(crossbowGroup, 0.28, 0.47, 0, 0.58, 0.08, 0.1, state.materials.wood);
-
-    const limbs = new THREE.Mesh(
-      geometry('weapon:crossbow-limbs', () => {
-        const curve = new THREE.CatmullRomCurve3([
-          new THREE.Vector3(0.5, 0.55, -0.4),
-          new THREE.Vector3(0.59, 0.55, -0.2),
-          new THREE.Vector3(0.62, 0.55, 0),
-          new THREE.Vector3(0.59, 0.55, 0.2),
-          new THREE.Vector3(0.5, 0.55, 0.4)
-        ], false, 'centripetal');
-        return new THREE.TubeGeometry(curve, 18, 0.024, 7, false);
-      }),
-      state.materials.wood
-    );
-    limbs.castShadow = true;
-    crossbowGroup.add(limbs);
-    addBox(crossbowGroup, 0.5, 0.54, 0, 0.025, 0.025, 0.8, state.materials.bone);
-    addBox(crossbowGroup, 0.45, 0.56, 0, 0.46, 0.025, 0.025, state.materials.steel);
-    parent.add(crossbowGroup);
-  }
-
-  function addGrenadeWeapon(parent, riderY = 0) {
-    addSphere(parent, 0.32, 0.58 + riderY, 0.15, 0.13, state.materials.grenade);
-    const fuse = addCylinder(parent, 0.32, 0.69 + riderY, 0.15, 0.018, 0.018, 0.11, state.materials.wood, 6);
-    fuse.rotation.z = -0.35;
-  }
-
-  function addCarriedObject(parent, unit, riderY = 0) {
-    const item = unit.inventoryItem;
-    if (!item) return;
-
-    if (item.carryType === 'obstacle' && item.obstacleType === OBSTACLE.TREE) {
-      const trunk = addCylinder(parent, 0, 1.02 + riderY, -0.08, 0.07, 0.1, 0.92, state.materials.trunk, 8);
-      trunk.rotation.z = Math.PI * 0.5;
-      addSphere(parent, -0.43, 1.08 + riderY, -0.08, 0.27, state.materials.foliage, { x: 0.34, y: 0.3, z: 0.3 });
-      addSphere(parent, -0.58, 1.1 + riderY, -0.05, 0.2, state.materials.foliageLight);
-      return;
-    }
-
-    if (item.carryType === 'obstacle' && item.obstacleType === OBSTACLE.ROCK) {
-      const rock = new window.THREE.Mesh(
-        geometry('carried:rock', () => new window.THREE.DodecahedronGeometry(1, 0)),
-        state.materials.rock
-      );
-      rock.scale.set(0.28, 0.22, 0.25);
-      rock.rotation.set(0.2, 0.45, -0.15);
-      addMesh(parent, rock, 0.05, 1.12 + riderY, 0);
-      return;
-    }
-
-    addBox(parent, 0, 0.92 + riderY, -0.12, 0.32, 0.2, 0.24, state.materials.supply);
+    return state.primitives.addSphere(parent, x, y, z, radius, material, scale);
   }
 
   function worldToScene(worldX, worldY) {
-    return {
-      x: (worldX - getMapWidthPx() * 0.5) * SCALE,
-      z: (worldY - getMapHeightPx() * 0.5) * SCALE
-    };
+    return OpenRTS.rendering.threeCoordinates.worldToScene(worldX, worldY, {
+      scale: SCALE,
+      mapWidth: getMapWidthPx(),
+      mapHeight: getMapHeightPx()
+    });
   }
 
   function sceneToWorld(point) {
-    return {
-      x: point.x / SCALE + getMapWidthPx() * 0.5,
-      y: point.z / SCALE + getMapHeightPx() * 0.5
-    };
-  }
-
-  function terrainSample(x, y) {
-    const thresholds = mapConfig.terrain || {};
-    const waterEdge = thresholds.water ?? 0.28;
-    const sandEdge = thresholds.sand ?? waterEdge + 0.07;
-    const heightNoise = fbmNoise(x, y);
-    const shoreNoise = (smoothValueNoise(x + 229, y + 541, 3.4) - 0.5) * 0.018;
-    const beachNoise = (smoothValueNoise(x + 811, y + 131, 1.8) - 0.5) * 0.012;
-    const waterBlend = smoothStep(waterEdge - 0.012, waterEdge + 0.018, heightNoise + shoreNoise);
-    const grassBlend = smoothStep(sandEdge - 0.02, sandEdge + 0.035, heightNoise + beachNoise);
-    return { heightNoise, waterBlend, grassBlend, isWater: waterBlend < 0.5 };
+    return OpenRTS.rendering.threeCoordinates.sceneToWorld(point, {
+      scale: SCALE,
+      mapWidth: getMapWidthPx(),
+      mapHeight: getMapHeightPx()
+    });
   }
 
   function smoothStep(edge0, edge1, value) {
@@ -262,251 +179,24 @@ const RTS3D = (() => {
     return t * t * (3 - 2 * t);
   }
 
-  function terrainHeight(x, y, sample) {
-    const broad = smoothValueNoise(x + 17, y + 43, 8) - 0.5;
-    const fine = smoothValueNoise(x + 71, y + 19, 2.5) - 0.5;
-    const landHeight = (broad * 0.78 + fine * 0.22) * 0.15;
-    const shoreBlend = smoothStep(0.28, 0.72, sample.waterBlend);
-    return -0.06 + (landHeight + 0.06) * shoreBlend;
-  }
-
-  function terrainColor(x, y, sample) {
-    const THREE = window.THREE;
-    const broad = smoothValueNoise(x + 37, y + 61, 5) - 0.5;
-    const fine = hashNoise(Math.floor(x * 11) + 101, Math.floor(y * 11) + 409) - 0.5;
-    const shade = broad * 0.15 + fine * 0.06;
-    const water = new THREE.Color(0.08 + shade * 0.2, 0.34 + shade * 0.35, 0.52 + shade * 0.45);
-    const sand = new THREE.Color(0.72 + shade, 0.62 + shade * 0.82, 0.34 + shade * 0.5);
-    const meadow = smoothValueNoise(x + 503, y + 211, 2.8);
-    const grass = new THREE.Color(0.11 + shade * 0.35, 0.34 + shade * 0.65 + meadow * 0.1, 0.12 + shade * 0.3);
-    const beach = sand.clone().lerp(grass, sample.grassBlend);
-    return water.lerp(beach, sample.waterBlend);
-  }
-
   function createTerrainMeshes() {
-    const THREE = window.THREE;
-    const positions = [];
-    const colors = [];
-    const subdivisions = 8;
-
-    function pushVertex(px, py, pz, color) {
-      positions.push(px, py, pz);
-      colors.push(color.r, color.g, color.b);
-    }
-
-    for (let tileY = 0; tileY < MAP_ROWS; tileY++) {
-      for (let tileX = 0; tileX < MAP_COLS; tileX++) {
-        for (let sy = 0; sy < subdivisions; sy++) {
-          for (let sx = 0; sx < subdivisions; sx++) {
-            const x0 = tileX + sx / subdivisions;
-            const x1 = tileX + (sx + 1) / subdivisions;
-            const z0 = tileY + sy / subdivisions;
-            const z1 = tileY + (sy + 1) / subdivisions;
-            const samples = [terrainSample(x0, z0), terrainSample(x1, z0), terrainSample(x0, z1), terrainSample(x1, z1)];
-            const points = [
-              [x0 - MAP_COLS * 0.5, terrainHeight(x0, z0, samples[0]), z0 - MAP_ROWS * 0.5],
-              [x1 - MAP_COLS * 0.5, terrainHeight(x1, z0, samples[1]), z0 - MAP_ROWS * 0.5],
-              [x0 - MAP_COLS * 0.5, terrainHeight(x0, z1, samples[2]), z1 - MAP_ROWS * 0.5],
-              [x1 - MAP_COLS * 0.5, terrainHeight(x1, z1, samples[3]), z1 - MAP_ROWS * 0.5]
-            ];
-            const tileColors = [terrainColor(x0, z0, samples[0]), terrainColor(x1, z0, samples[1]), terrainColor(x0, z1, samples[2]), terrainColor(x1, z1, samples[3])];
-            for (const index of [0, 2, 1, 1, 2, 3]) pushVertex(...points[index], tileColors[index]);
-
-          }
-        }
-      }
-    }
-
-    const terrainGeometry = new THREE.BufferGeometry();
-    terrainGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    terrainGeometry.computeVertexNormals();
-    const terrain = new THREE.Mesh(terrainGeometry, state.materials.ground);
-    terrain.receiveShadow = true;
-
-    return [terrain];
-  }
-
-  function addBattlements(parent, axis, centerX, centerZ, length, wallThickness, height, material, skipCenter = false, skipHalfWidth = 0.8) {
-    const count = Math.max(4, Math.round(length / 0.58));
-    const merlonW = Math.min(0.38, length / count * 0.62);
-    for (let i = 0; i < count; i++) {
-      const offset = -length * 0.5 + (i + 0.5) * (length / count);
-      if (skipCenter && Math.abs(offset) < skipHalfWidth) continue;
-      if (axis === 'x') {
-        addBox(parent, centerX + offset, height, centerZ - wallThickness * 0.42, merlonW, 0.34, 0.22, material);
-        addBox(parent, centerX + offset, height, centerZ + wallThickness * 0.42, merlonW, 0.34, 0.22, material);
-      } else {
-        addBox(parent, centerX - wallThickness * 0.42, height, centerZ + offset, 0.22, 0.34, merlonW, material);
-        addBox(parent, centerX + wallThickness * 0.42, height, centerZ + offset, 0.22, 0.34, merlonW, material);
-      }
-    }
-  }
-
-  function addArrowSlit(parent, x, y, z, face) {
-    const THREE = window.THREE;
-    const slit = new THREE.Mesh(
-      geometry('slit', () => new THREE.PlaneGeometry(0.07, 0.33)),
-      state.materials.slit
-    );
-    slit.position.set(x, y, z);
-    if (face === 'front') slit.rotation.y = 0;
-    if (face === 'back') slit.rotation.y = Math.PI;
-    if (face === 'left') slit.rotation.y = Math.PI * 0.5;
-    if (face === 'right') slit.rotation.y = -Math.PI * 0.5;
-    parent.add(slit);
+    return state.terrainMeshes.createTerrainMeshes();
   }
 
   function createCastle(building) {
-    const THREE = window.THREE;
-    const group = new THREE.Group();
-    const position = worldToScene(building.x, building.y);
-    group.position.set(position.x, 0, position.z);
-
-    const outerW = building.width * 0.9;
-    const outerD = building.height * 0.86;
-    const wallT = 0.92;
-    const wallH = RAMPART_HEIGHT;
-    const halfW = outerW * 0.5;
-    const halfD = outerD * 0.5;
-    const gateW = 3.05;
-    const frontSegment = (outerW - gateW) * 0.5;
-    const frontOffset = gateW * 0.5 + frontSegment * 0.5;
-
-    addBox(group, 0, 0.02, 0, outerW - wallT * 1.25, 0.08, outerD - wallT * 1.25, state.materials.courtyard);
-    addBox(group, 0, 0, -halfD, outerW, wallH, wallT, state.materials.stone);
-    addBox(group, -halfW, 0, 0, wallT, wallH, outerD, state.materials.stone);
-    addBox(group, halfW, 0, 0, wallT, wallH, outerD, state.materials.stone);
-    addBox(group, -frontOffset, 0, halfD, frontSegment, wallH, wallT, state.materials.stone);
-    addBox(group, frontOffset, 0, halfD, frontSegment, wallH, wallT, state.materials.stone);
-
-    addBox(group, 0, wallH, -halfD, outerW, 0.09, wallT + 0.08, state.materials.stoneLight);
-    addBox(group, -halfW, wallH, 0, wallT + 0.08, 0.09, outerD, state.materials.stoneLight);
-    addBox(group, halfW, wallH, 0, wallT + 0.08, 0.09, outerD, state.materials.stoneLight);
-    addBox(group, -frontOffset, wallH, halfD, frontSegment, 0.09, wallT + 0.08, state.materials.stoneLight);
-    addBox(group, frontOffset, wallH, halfD, frontSegment, 0.09, wallT + 0.08, state.materials.stoneLight);
-
-    addBattlements(group, 'x', 0, -halfD, outerW, wallT, wallH + 0.09, state.materials.stone);
-    addBattlements(group, 'z', -halfW, 0, outerD, wallT, wallH + 0.09, state.materials.stone);
-    addBattlements(group, 'z', halfW, 0, outerD, wallT, wallH + 0.09, state.materials.stone);
-    addBattlements(group, 'x', 0, halfD, outerW, wallT, wallH + 0.09, state.materials.stone, true, gateW * 0.56);
-
-    const towerRadius = 0.72;
-    const towerHeight = 1.65;
-    const towers = [[-halfW, -halfD], [halfW, -halfD], [-halfW, halfD], [halfW, halfD]];
-    for (const [towerX, towerZ] of towers) {
-      addCylinder(group, towerX, 0, towerZ, towerRadius * 0.94, towerRadius, towerHeight, state.materials.stoneDark, 20);
-      addCylinder(group, towerX, towerHeight, towerZ, towerRadius * 1.04, towerRadius * 1.04, 0.1, state.materials.stoneLight, 20);
-      for (let i = 0; i < 10; i++) {
-        const angle = i / 10 * Math.PI * 2;
-        addBox(
-          group,
-          towerX + Math.cos(angle) * towerRadius * 0.82,
-          towerHeight + 0.1,
-          towerZ + Math.sin(angle) * towerRadius * 0.82,
-          0.26,
-          0.36,
-          0.26,
-          state.materials.stone
-        ).rotation.y = -angle;
-      }
-    }
-
-    // The taller keep and gatehouse create a believable defensive hierarchy.
-    const keepW = outerW * 0.34;
-    const keepD = 1.28;
-    addBox(group, 0, 0.04, -halfD + wallT * 1.25, keepW, 2.15, keepD, state.materials.stoneDark);
-    addBox(group, 0, 2.19, -halfD + wallT * 1.25, keepW + 0.08, 0.1, keepD + 0.08, state.materials.stoneLight);
-    addBattlements(group, 'x', 0, -halfD + wallT * 1.25, keepW, keepD, 2.29, state.materials.stone);
-    addBattlements(group, 'z', -keepW * 0.5, -halfD + wallT * 1.25, keepD, keepW, 2.29, state.materials.stone);
-    addBattlements(group, 'z', keepW * 0.5, -halfD + wallT * 1.25, keepD, keepW, 2.29, state.materials.stone);
-
-    const gatehouseZ = halfD + wallT * 0.15;
-    const gatePillarW = 0.62;
-    const gatehouseH = 1.88;
-    const openingShoulderY = 0.82;
-    addBox(group, -(gateW + gatePillarW) * 0.5, 0, gatehouseZ, gatePillarW, gatehouseH, 0.82, state.materials.stoneDark);
-    addBox(group, (gateW + gatePillarW) * 0.5, 0, gatehouseZ, gatePillarW, gatehouseH, 0.82, state.materials.stoneDark);
-    addBox(group, 0, 1.48, gatehouseZ, gateW + gatePillarW * 2, 0.4, 0.82, state.materials.stoneDark);
-    addBox(group, 0, gatehouseH, gatehouseZ, gateW + gatePillarW * 2 + 0.12, 0.1, 0.9, state.materials.stoneLight);
-    addBattlements(group, 'x', 0, gatehouseZ, gateW + gatePillarW * 2, 0.9, gatehouseH + 0.1, state.materials.stone);
-
-    // Individual voussoirs form a real arch while leaving the doorway empty.
-    const archRadiusX = gateW * 0.5 + 0.02;
-    const archRadiusY = 0.7;
-    for (let i = 0; i < 11; i++) {
-      const angle = i / 10 * Math.PI;
-      const stone = addBox(
-        group,
-        Math.cos(angle) * archRadiusX,
-        openingShoulderY + Math.sin(angle) * archRadiusY,
-        gatehouseZ + 0.43,
-        0.38,
-        0.26,
-        0.18,
-        i === 5 ? state.materials.stoneLight : state.materials.stone
-      );
-      stone.rotation.z = angle - Math.PI * 0.5;
-    }
-
-    for (const slitX of [-outerW * 0.28, 0, outerW * 0.28]) addArrowSlit(group, slitX, 0.7, -halfD - wallT * 0.505, 'front');
-    for (const side of [-1, 1]) {
-      addArrowSlit(group, side * (halfW + wallT * 0.505), 0.7, -outerD * 0.18, side < 0 ? 'left' : 'right');
-      addArrowSlit(group, side * (halfW + wallT * 0.505), 0.7, outerD * 0.12, side < 0 ? 'left' : 'right');
-    }
-
-    const stairCount = 12;
-    const stairBaseX = 1.0;
-    const stairTopX = halfW - wallT * 0.18;
-    const stairZ = 1.0;
-    const stairWidth = (stairTopX - stairBaseX) / (stairCount - 1) + 0.04;
-    for (let step = 0; step < stairCount; step++) {
-      const progress = step / (stairCount - 1);
-      addBox(
-        group,
-        stairBaseX + (stairTopX - stairBaseX) * progress,
-        0.04,
-        stairZ,
-        stairWidth,
-        0.1 + wallH * progress,
-        1.08,
-        state.materials.stoneLight
-      );
-    }
-    const railLength = Math.hypot(stairTopX - stairBaseX, wallH) + 0.2;
-    const railCenterX = (stairBaseX + stairTopX) * 0.5;
-    const railAngle = Math.atan2(wallH, stairTopX - stairBaseX);
-    addBox(group, railCenterX, wallH * 0.5, stairZ - 0.52, railLength, 0.13, 0.12, state.materials.stoneDark).rotation.z = railAngle;
-    addBox(group, railCenterX, wallH * 0.5, stairZ + 0.52, railLength, 0.13, 0.12, state.materials.stoneDark).rotation.z = railAngle;
-
-    const flagMaterial = building.team === 'red' ? state.materials.red : state.materials.blue;
-    addCylinder(group, halfW * 0.45, towerHeight + 0.04, -halfD, 0.025, 0.025, 1.1, state.materials.wood, 8);
-    addBox(group, halfW * 0.45 + 0.23, towerHeight + 0.72, -halfD, 0.46, 0.25, 0.035, flagMaterial);
-    group.traverse(child => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
+    return OpenRTS.rendering.modelFactoryResolver.create(building, {
+      category: 'building',
+      fallbackId: 'building.castle',
+      fallback: state.buildingModels.createCastle
     });
-    return group;
   }
 
   function createDefenseTower(building) {
-    const THREE = window.THREE;
-    const group = new THREE.Group();
-    const position = worldToScene(building.x, building.y);
-    group.position.set(position.x, 0, position.z);
-    addCylinder(group, 0, 0, 0, 0.62, 0.76, 2.3, state.materials.stone, 20);
-    addCylinder(group, 0, 2.3, 0, 0.82, 0.82, 0.12, state.materials.stoneLight, 20);
-    for (let i = 0; i < 10; i++) {
-      const angle = i / 10 * Math.PI * 2;
-      addBox(group, Math.cos(angle) * 0.68, 2.42, Math.sin(angle) * 0.68, 0.27, 0.38, 0.27, state.materials.stone).rotation.y = -angle;
-    }
-    for (const y of [0.72, 1.35]) addArrowSlit(group, 0, y, 0.765, 'front');
-    const flagMaterial = building.team === 'red' ? state.materials.red : state.materials.blue;
-    addCylinder(group, 0.15, 2.42, 0, 0.025, 0.025, 0.9, state.materials.wood, 8);
-    addBox(group, 0.38, 3.0, 0, 0.44, 0.23, 0.035, flagMaterial);
-    return group;
+    return OpenRTS.rendering.modelFactoryResolver.create(building, {
+      category: 'building',
+      fallbackId: 'building.arrow_tower',
+      fallback: state.buildingModels.createDefenseTower
+    });
   }
 
   function addBranchBetween(parent, start, end, radius, material = state.materials.trunk, segments = 8) {
@@ -593,45 +283,64 @@ const RTS3D = (() => {
 
   function addPineTree(group, tileX, tileY, height) {
     const THREE = window.THREE;
-    addCylinder(group, 0, 0, 0, 0.07, 0.15, height * 0.9, state.materials.trunk, 11);
+    const trunkHeight = height * 0.92;
+    const leanX = (hashNoise(tileX + 307, tileY + 181) - 0.5) * 0.22;
+    const leanZ = (hashNoise(tileX + 409, tileY + 263) - 0.5) * 0.16;
+    let previous = { x: 0, y: 0, z: 0 };
+    for (let i = 1; i <= 6; i++) {
+      const t = i / 6;
+      const current = { x: leanX * t * t, y: trunkHeight * t, z: leanZ * t * t };
+      addBranchBetween(group, previous, current, 0.12 - t * 0.045, state.materials.trunk, 8);
+      previous = current;
+    }
+
     const crown = new THREE.Group();
-    const layers = 6;
+    const branchGeometry = geometry('tree:pine-bough', () => new THREE.ConeGeometry(1, 0.34, 9));
+    const layers = 9;
     for (let i = 0; i < layers; i++) {
       const progress = i / (layers - 1);
-      const radius = 0.84 - progress * 0.55 + hashNoise(tileX + i * 23, tileY + 47) * 0.08;
-      const layer = new THREE.Mesh(
-        geometry(`tree:pine-layer:${i}`, () => new THREE.ConeGeometry(1, 1, 10)),
-        i % 2 ? state.materials.foliage : state.materials.foliageLight
-      );
-      layer.scale.set(radius, height * (0.22 - progress * 0.04), radius * (0.9 + hashNoise(tileX + 17, tileY + i) * 0.18));
-      layer.position.set(
-        (hashNoise(tileX + i * 37, tileY + 71) - 0.5) * 0.12,
-        height * (0.32 + progress * 0.12),
-        (hashNoise(tileX + 89, tileY + i * 29) - 0.5) * 0.12
-      );
-      layer.rotation.y = hashNoise(tileX + i, tileY + 131) * Math.PI;
-      layer.castShadow = true;
-      crown.add(layer);
+      const yPos = height * (0.24 + progress * 0.63);
+      const radius = 0.92 - progress * 0.62 + hashNoise(tileX + i * 23, tileY + 47) * 0.09;
+      const branchCount = i < 2 ? 7 : i < 6 ? 6 : 5;
+      for (let branch = 0; branch < branchCount; branch++) {
+        const angle = branch / branchCount * Math.PI * 2 + hashNoise(tileX + i * 37, tileY + branch * 19) * 0.28;
+        const bough = new THREE.Mesh(
+          branchGeometry,
+          (i + branch) % 3 === 0 ? state.materials.foliageLight : state.materials.foliage
+        );
+        const length = radius * (0.72 + hashNoise(tileX + branch * 17, tileY + i * 11) * 0.34);
+        bough.scale.set(0.16 + radius * 0.12, 0.18 + radius * 0.08, length);
+        bough.position.set(
+          leanX * progress * 0.75 + Math.cos(angle) * radius * 0.24,
+          yPos + (hashNoise(tileX + branch, tileY + i) - 0.5) * 0.08,
+          leanZ * progress * 0.75 + Math.sin(angle) * radius * 0.24
+        );
+        bough.rotation.set(Math.PI * 0.5 + 0.18, angle, -0.22 - progress * 0.16);
+        bough.castShadow = true;
+        crown.add(bough);
+      }
     }
-    crown.add(new THREE.Mesh(
+    const tip = new THREE.Mesh(
       geometry('tree:pine-tip', () => new THREE.ConeGeometry(0.32, 0.72, 9)),
       state.materials.foliageLight
-    ));
-    crown.children[crown.children.length - 1].position.y = height * 0.91;
-    crown.children[crown.children.length - 1].castShadow = true;
+    );
+    tip.position.set(leanX, height * 0.94, leanZ);
+    tip.rotation.z = -leanX * 0.22;
+    tip.castShadow = true;
+    crown.add(tip);
     group.add(crown);
-    registerTreeCrown(crown, tileX, tileY, 0.009);
+    registerTreeCrown(crown, tileX, tileY, 0.014);
   }
 
   function palmFrondGeometry() {
     const THREE = window.THREE;
     const positions = new Float32Array([
       0, 0, 0,
-      0.28, 0.04, -0.18,
-      0.28, 0.04, 0.18,
-      0.72, -0.03, -0.15,
-      0.72, -0.03, 0.15,
-      1.12, -0.25, 0
+      0.28, 0.04, -0.2,
+      0.28, 0.04, 0.2,
+      0.72, -0.04, -0.18,
+      0.72, -0.04, 0.18,
+      1.24, -0.34, 0
     ]);
     const geometryValue = new THREE.BufferGeometry();
     geometryValue.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -642,28 +351,64 @@ const RTS3D = (() => {
 
   function addPalmTree(group, tileX, tileY, height) {
     const THREE = window.THREE;
-    const trunkHeight = height * 0.82;
-    const trunk = addCylinder(group, 0, 0, 0, 0.09, 0.16, trunkHeight, state.materials.trunk, 12);
-    trunk.rotation.z = (hashNoise(tileX + 307, tileY + 109) - 0.5) * 0.08;
+    const trunkHeight = height * 0.86;
+    const leanX = (hashNoise(tileX + 307, tileY + 109) - 0.5) * 0.38;
+    const leanZ = (hashNoise(tileX + 401, tileY + 157) - 0.5) * 0.24;
+    const segments = 9;
+    let previous = { x: 0, y: 0, z: 0 };
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      const current = {
+        x: leanX * t * t,
+        y: trunkHeight * t,
+        z: leanZ * t * t
+      };
+      const radius = 0.16 - t * 0.07;
+      addBranchBetween(group, previous, current, Math.max(0.055, radius), state.materials.trunk, 9);
+
+      const ring = addCylinder(group, current.x, current.y - 0.035, current.z, radius * 1.08, radius * 1.14, 0.035, state.materials.wood, 10);
+      ring.rotation.x = (hashNoise(tileX + i, tileY + 5) - 0.5) * 0.18;
+      ring.rotation.z = (hashNoise(tileX + 9, tileY + i) - 0.5) * 0.18;
+      previous = current;
+    }
 
     const crown = new THREE.Group();
-    crown.position.y = trunkHeight;
+    crown.position.set(previous.x, trunkHeight, previous.z);
+    crown.rotation.z = leanX * 0.12;
     const frondGeometry = geometry('tree:palm-frond', palmFrondGeometry);
-    for (let i = 0; i < 9; i++) {
-      const angle = i / 9 * Math.PI * 2 + hashNoise(tileX + i * 17, tileY + 313) * 0.18;
+    const frondCount = 15;
+    for (let i = 0; i < frondCount; i++) {
+      const angle = i / frondCount * Math.PI * 2 + hashNoise(tileX + i * 17, tileY + 313) * 0.22;
       const frond = new THREE.Mesh(frondGeometry, i % 3 === 0 ? state.materials.foliageLight : state.materials.foliage);
       frond.rotation.y = -angle;
-      frond.scale.set(0.9 + hashNoise(tileX + i * 41, tileY + 5) * 0.28, 1, 0.85 + hashNoise(tileX + 11, tileY + i) * 0.25);
+      frond.rotation.z = -0.18 - hashNoise(tileX + i * 19, tileY + 7) * 0.28;
+      frond.scale.set(
+        1.0 + hashNoise(tileX + i * 41, tileY + 5) * 0.42,
+        1,
+        0.9 + hashNoise(tileX + 11, tileY + i) * 0.34
+      );
       frond.castShadow = true;
       crown.add(frond);
       const end = {
         x: Math.cos(angle) * frond.scale.x,
-        y: -0.16,
+        y: -0.22 - hashNoise(tileX + i, tileY + 41) * 0.18,
         z: -Math.sin(angle) * frond.scale.x
       };
-      addBranchBetween(crown, { x: 0, y: 0, z: 0 }, end, 0.022, state.materials.trunk, 6);
+      addBranchBetween(crown, { x: 0, y: 0, z: 0 }, end, 0.018, state.materials.trunk, 6);
     }
-    addSphere(crown, 0, 0.02, 0, 0.22, state.materials.foliage, { x: 0.28, y: 0.2, z: 0.28 });
+    addSphere(crown, 0, 0.02, 0, 0.24, state.materials.foliage, { x: 0.28, y: 0.2, z: 0.28 });
+    for (let i = 0; i < 5; i++) {
+      const angle = i / 5 * Math.PI * 2 + hashNoise(tileX + 71, tileY + 89);
+      addSphere(
+        crown,
+        Math.cos(angle) * 0.15,
+        -0.13 - hashNoise(tileX + i, tileY + 23) * 0.08,
+        Math.sin(angle) * 0.13,
+        0.065,
+        state.materials.trunk,
+        { x: 0.85, y: 0.7, z: 0.75 }
+      );
+    }
     group.add(crown);
     registerTreeCrown(crown, tileX, tileY, 0.026);
   }
@@ -712,33 +457,184 @@ const RTS3D = (() => {
     return group;
   }
 
-  function buildStaticWorld() {
-    state.staticGroup.clear();
-    state.treeCrowns = [];
-    state.staticGroup.add(...createTerrainMeshes());
+  function createDitch(tileX, tileY) {
+    const center = tileCenter(tileX, tileY);
+    const position = worldToScene(center.x, center.y);
+    const elevation = typeof getWorldElevation === 'function' ? getWorldElevation(center.x, center.y) : 0;
+    const group = new window.THREE.Group();
+    group.position.set(position.x, elevation + 0.018, position.z);
+    group.rotation.y = hashNoise(tileX + 23, tileY + 47) > 0.5 ? 0.18 : -0.18;
 
-    for (let y = 0; y < MAP_ROWS; y++) {
-      for (let x = 0; x < MAP_COLS; x++) {
-        if (obstacleData[y][x] === OBSTACLE.TREE) state.staticGroup.add(createTree(x, y));
-        if (obstacleData[y][x] === OBSTACLE.ROCK) state.staticGroup.add(createRock(x, y));
+    addBox(group, 0, 0, 0, 0.96, 0.035, 0.42, state.materials.dirt);
+    addBox(group, -0.18, 0.02, -0.18, 0.46, 0.06, 0.09, state.materials.wood).rotation.y = 0.22;
+    addBox(group, 0.18, 0.025, 0.18, 0.48, 0.06, 0.09, state.materials.wood).rotation.y = -0.42;
+    addBox(group, -0.42, 0.035, 0, 0.12, 0.09, 0.5, state.materials.dirt);
+    addBox(group, 0.42, 0.035, 0, 0.12, 0.09, 0.5, state.materials.dirt);
+    return group;
+  }
+
+  function createCliffWall(tileX, tileY) {
+    const center = tileCenter(tileX, tileY);
+    const position = worldToScene(center.x, center.y);
+    const elevation = typeof getWorldElevation === 'function' ? getWorldElevation(center.x, center.y) : 0;
+    const group = new window.THREE.Group();
+    group.position.set(position.x, elevation - 0.18, position.z);
+
+    for (let i = 0; i < 8; i++) {
+      const px = -0.42 + (i % 4) * 0.28 + (hashNoise(tileX + i * 7, tileY + 3) - 0.5) * 0.04;
+      const pz = i < 4 ? -0.28 : 0.06;
+      const width = 0.24 + hashNoise(tileX + i * 13, tileY + 11) * 0.08;
+      const height = 0.34 + hashNoise(tileX + i * 17, tileY + 19) * 0.28;
+      const depth = 0.18 + hashNoise(tileX + i * 23, tileY + 29) * 0.08;
+      const material = i % 3 === 0 ? state.materials.stoneDark : state.materials.rock;
+      const block = addBox(group, px, 0, pz, width, height, depth, material);
+      block.rotation.y = (hashNoise(tileX + i, tileY + i) - 0.5) * 0.28;
+    }
+    addBox(group, 0, 0.34, -0.1, 1.02, 0.08, 0.52, state.materials.stoneLight);
+    return group;
+  }
+
+  function createWell(tileX, tileY) {
+    const center = tileCenter(tileX, tileY);
+    const position = worldToScene(center.x, center.y);
+    const elevation = typeof getWorldElevation === 'function' ? getWorldElevation(center.x, center.y) : 0;
+    const group = new window.THREE.Group();
+    group.position.set(position.x, elevation + 0.01, position.z);
+    group.rotation.y = hashNoise(tileX + 89, tileY + 131) * Math.PI * 2;
+
+    addCylinder(group, 0, 0, 0, 0.36, 0.42, 0.34, state.materials.stoneDark, 18);
+    addCylinder(group, 0, 0.31, 0, 0.25, 0.3, 0.035, state.materials.slit, 18);
+    addCylinder(group, -0.32, 0.28, 0, 0.035, 0.045, 0.74, state.materials.wood, 8);
+    addCylinder(group, 0.32, 0.28, 0, 0.035, 0.045, 0.74, state.materials.wood, 8);
+    addBox(group, 0, 1.03, 0, 0.78, 0.08, 0.08, state.materials.wood);
+    addCylinder(group, 0, 0.52, 0, 0.012, 0.012, 0.46, state.materials.iron, 8);
+    addBox(group, 0, 0.31, 0, 0.16, 0.16, 0.14, state.materials.wood);
+    addBox(group, 0, 0.47, 0, 0.22, 0.035, 0.18, state.materials.iron);
+    return group;
+  }
+
+  function createHutDecoration(tileX, tileY) {
+    const center = tileCenter(tileX, tileY);
+    const position = worldToScene(center.x, center.y);
+    const elevation = typeof getWorldElevation === 'function' ? getWorldElevation(center.x, center.y) : 0;
+    const group = new window.THREE.Group();
+    group.position.set(position.x, elevation + 0.01, position.z);
+    group.rotation.y = hashNoise(tileX + 211, tileY + 17) * Math.PI * 2;
+    addBox(group, 0, 0.02, 0, 0.52, 0.42, 0.48, state.materials.wood);
+    const roof = new window.THREE.Mesh(
+      geometry('decor:hut-roof', () => new window.THREE.ConeGeometry(0.48, 0.44, 4)),
+      state.materials.trunk
+    );
+    roof.rotation.y = Math.PI * 0.25;
+    addMesh(group, roof, 0, 0.66, 0);
+    return group;
+  }
+
+  function createMapDecoration(tileX, tileY, decorType) {
+    if (decorType === DECOR.DITCH) return createDitch(tileX, tileY);
+    if (decorType === DECOR.CLIFF) return createCliffWall(tileX, tileY);
+    if (decorType === DECOR.WELL) return createWell(tileX, tileY);
+    if (decorType === DECOR.HUT) return createHutDecoration(tileX, tileY);
+    return null;
+  }
+
+  function createGoldMine(mine) {
+    const THREE = window.THREE;
+    const position = worldToScene(mine.x, mine.y);
+    const group = new THREE.Group();
+    group.position.set(position.x, 0, position.z);
+    group.rotation.y = hashNoise(mine.tileX + 101, mine.tileY + 211) * Math.PI * 2;
+
+    const count = 24;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + hashNoise(mine.tileX + i * 17, mine.tileY) * 0.38;
+      const radius = 0.18 + hashNoise(mine.tileX + i * 23, mine.tileY + 7) * 1.02;
+      const size = 0.28 + hashNoise(mine.tileX + i * 11, mine.tileY + 13) * 0.36;
+      const rock = new THREE.Mesh(
+        geometry('rock:dodecahedron', () => new THREE.DodecahedronGeometry(1, 0)),
+        i % 3 === 0 ? state.materials.gold : state.materials.rock
+      );
+      rock.scale.set(size * 1.32, size * 0.78, size * 1.08);
+      rock.rotation.set(hashNoise(i, mine.tileY) * 0.4, angle, hashNoise(mine.tileX, i) * 0.35);
+      addMesh(group, rock, Math.cos(angle) * radius, size * 0.32, Math.sin(angle) * radius);
+    }
+
+    return group;
+  }
+
+  function createNeutralHouse(house) {
+    const position = worldToScene(house.x, house.y);
+    const group = new window.THREE.Group();
+    group.position.set(position.x, 0, position.z);
+    const occupied = (house.occupants?.length || 0) > 0;
+
+    if (house.isWreck) {
+      addBox(group, 0, 0.05, 0, 1.35, 0.2, 1.0, state.materials.charcoal || state.materials.rock);
+      addBox(group, -0.25, 0.18, 0, 0.12, 0.5, 1.1, state.materials.wood).rotation.z = 0.65;
+      addBox(group, 0.28, 0.2, 0, 0.1, 0.52, 1.0, state.materials.wood).rotation.z = -0.58;
+      return group;
+    }
+
+    addBox(group, 0, 0.1, 0, 1.35, 0.7, 1.05, state.materials.wood);
+    addBox(group, 0, 0.08, 0.54, 0.28, 0.42, 0.05, state.materials.dirt);
+    if (!occupied) {
+      const roof = new window.THREE.Mesh(
+        geometry('house:roof', () => new window.THREE.ConeGeometry(1.05, 0.62, 4)),
+        state.materials.trunk
+      );
+      roof.rotation.y = Math.PI * 0.25;
+      addMesh(group, roof, 0, 0.9, 0);
+    }
+    if (house.burning) {
+      for (let i = 0; i < 4; i++) {
+        const flame = new window.THREE.Mesh(
+          geometry('house:flame', () => new window.THREE.ConeGeometry(0.12, 0.5, 7)),
+          i % 2 ? state.materials.gold : state.materials.red
+        );
+        flame.position.set((i - 1.5) * 0.22, 1.05, 0.05 * (i % 2 ? 1 : -1));
+        flame.rotation.y = i;
+        group.add(flame);
       }
     }
-    for (const building of getBuildings()) {
-      if (building.isDead) continue;
-      state.staticGroup.add(building.type === BUILDING_TYPES.HOME ? createCastle(building) : createDefenseTower(building));
-    }
+    return group;
+  }
+
+  function buildStaticWorld() {
+    return OpenRTS.rendering.staticWorldComposer.compose({
+      group: state.staticGroup,
+      onReset: () => { state.treeCrowns = []; },
+      createTerrainMeshes,
+      obstacleData,
+      decorationData,
+      obstacle: OBSTACLE,
+      decor: DECOR,
+      rows: MAP_ROWS,
+      columns: MAP_COLS,
+      createTree,
+      createRock,
+      createMapDecoration,
+      buildings: getBuildings(),
+      homeType: BUILDING_TYPES.HOME,
+      createCastle,
+      createDefenseTower,
+      goldMines: typeof getGoldMines === 'function' ? getGoldMines() : [],
+      createGoldMine,
+      houses: typeof getHouses === 'function' ? getHouses() : [],
+      createNeutralHouse
+    });
   }
 
   function staticWorldSignature() {
-    const buildings = getBuildings().map(building => `${building.id}:${building.isDead ? 1 : 0}:${building.upgradeLevel || 0}`).join(',');
-    const obstacles = typeof getObstacleRevision === 'function' ? getObstacleRevision() : 0;
-    return `${MAP_SEED}:${MAP_COLS}:${MAP_ROWS}:${buildings}:${obstacles}:${JSON.stringify({
-      terrainPreset: mapConfig?.terrainPreset || '',
-      terrain: mapConfig?.terrain || {},
-      waterPercent: mapConfig?.waterPercent,
-      rockCount: mapConfig?.rockCount,
-      treeCount: mapConfig?.treeCount
-    })}`;
+    return OpenRTS.rendering.staticWorldSignatures.createSignature({
+      seed: MAP_SEED,
+      columns: MAP_COLS,
+      rows: MAP_ROWS,
+      buildings: getBuildings(),
+      obstacleRevision: typeof getObstacleRevision === 'function' ? getObstacleRevision() : 0,
+      goldMineRevision: typeof getGoldMineRevision === 'function' ? getGoldMineRevision() : 0,
+      houseRevision: typeof getHouseRevision === 'function' ? getHouseRevision() : 0,
+      mapConfig
+    });
   }
 
   function addSelectionRing(parent, radius) {
@@ -753,102 +649,19 @@ const RTS3D = (() => {
     parent.add(ring);
   }
 
+  function createProceduralUnit(unit) {
+    return state.unitModels.create(unit);
+  }
+
   function createUnit(unit) {
-    const THREE = window.THREE;
-    const group = new THREE.Group();
-    const position = worldToScene(unit.x, unit.y);
-    const elevation = getUnitCastleElevation(unit);
-    group.position.set(position.x, elevation, position.z);
-    group.rotation.y = -(Number.isFinite(unit.heading) ? unit.heading : 0);
-    if (unit.isDead) {
-      addBox(group, 0, 0.04, 0, 0.55, 0.06, 0.12, state.materials.bone);
-      addSphere(group, 0.33, 0.1, 0, 0.13, state.materials.bone);
-      return group;
-    }
-    if (unit.selected) addSelectionRing(group, 0.46);
-
-    const teamMaterial = unit.team === 'red' ? state.materials.red : state.materials.blue;
-    const type = unit.unitType || 'soldier';
-    const stride = unit.hasActivePath?.() ? Math.sin((unit.spriteFrame || 0) * Math.PI * 0.5) * 0.07 : 0;
-    const mountedSheep = unit.mountType === 'sheep';
-    const mountedHorse = type === 'scout' && !mountedSheep;
-    let riderY = 0;
-    if (mountedSheep) {
-      addSphere(group, 0, 0.34, 0, 0.38, state.materials.sheep, { x: 0.52, y: 0.3, z: 0.3 });
-      addSphere(group, 0.42, 0.4, 0, 0.16, state.materials.sheepFace);
-      riderY = 0.42;
-    } else if (mountedHorse) {
-      addSphere(group, 0, 0.38, 0, 0.42, state.materials.horse, { x: 0.62, y: 0.32, z: 0.31 });
-      addSphere(group, 0.48, 0.55, 0, 0.18, state.materials.horse, { x: 0.23, y: 0.31, z: 0.2 });
-      for (const [legX, legZ, legStep] of [
-        [-0.27, -0.14, stride],
-        [-0.27, 0.14, -stride],
-        [0.27, -0.14, -stride],
-        [0.27, 0.14, stride]
-      ]) {
-        addBox(group, legX, 0.03, legZ + legStep, 0.065, 0.34, 0.065, state.materials.leather);
-        addBox(group, legX + 0.035, 0.015, legZ + legStep, 0.12, 0.045, 0.08, state.materials.iron);
-      }
-      riderY = 0.5;
-    }
-
-    addBox(group, -0.09, 0.04 + riderY, -stride, 0.09, 0.28, 0.09, state.materials.leather);
-    addBox(group, 0.09, 0.04 + riderY, stride, 0.09, 0.28, 0.09, state.materials.leather);
-    addCylinder(group, 0, 0.28 + riderY, 0, type === 'knight' ? 0.22 : 0.18, type === 'knight' ? 0.24 : 0.2, type === 'knight' ? 0.62 : 0.52, teamMaterial, 12);
-    addSphere(group, 0, 0.93 + riderY, 0, 0.14, state.materials.skin);
-    if (type === 'king') {
-      addCylinder(group, 0, 1.02 + riderY, 0, 0.17, 0.17, 0.11, state.materials.gold, 12);
-      for (let i = 0; i < 5; i++) {
-        const angle = i / 5 * Math.PI * 2;
-        const point = new THREE.Mesh(
-          geometry('unit:king-crown-point', () => new THREE.ConeGeometry(0.055, 0.2, 6)),
-          state.materials.gold
-        );
-        point.position.set(Math.cos(angle) * 0.13, 1.19 + riderY, Math.sin(angle) * 0.13);
-        point.castShadow = true;
-        group.add(point);
-      }
-    }
-    if (type === 'knight') {
-      addCylinder(group, 0, 0.89 + riderY, 0, 0.15, 0.17, 0.17, state.materials.steel, 12);
-      addCylinder(group, -0.25, 0.45 + riderY, 0, 0.18, 0.18, 0.05, state.materials.steel, 16).rotation.z = Math.PI * 0.5;
-    }
-    if (type === 'archer') {
-      addLongbow(group, riderY);
-    } else if (type === 'gunman') {
-      addPistol(group, riderY);
-    } else if (type === 'crossbowman') {
-      addCrossbow(group, riderY);
-    } else if (type === 'grenademan') {
-      addGrenadeWeapon(group, riderY);
-    } else {
-      const swing = (unit.attackAnimationTime || 0) > 0 ? -0.8 : 0.2;
-      const sword = addBox(group, 0.29, 0.48 + riderY, 0, 0.055, 0.68, 0.045, state.materials.steel);
-      sword.rotation.z = swing;
-      addBox(group, 0.25, 0.46 + riderY, 0, 0.24, 0.05, 0.08, state.materials.wood).rotation.z = swing;
-    }
-    addCarriedObject(group, unit, riderY);
-    return group;
+    return OpenRTS.rendering.modelFactoryResolver.create(unit, {
+      category: 'unit',
+      fallbackId: `unit.${unit?.unitType || 'soldier'}`,
+      fallback: createProceduralUnit
+    });
   }
 
-  function getUnitCastleElevation(unit) {
-    if (!unit.castleTopBuildingId) return 0;
-    if (unit.castleRampClimbed || unit.castleTopReached) return RAMPART_HEIGHT + 0.1;
-    if (!unit.castleRampBase || !unit.castleRampTop) return 0;
-
-    const rampX = unit.castleRampTop.x - unit.castleRampBase.x;
-    const rampY = unit.castleRampTop.y - unit.castleRampBase.y;
-    const rampLengthSquared = rampX * rampX + rampY * rampY;
-    if (rampLengthSquared <= 0) return 0;
-    const progress = clamp(
-      ((unit.x - unit.castleRampBase.x) * rampX + (unit.y - unit.castleRampBase.y) * rampY) / rampLengthSquared,
-      0,
-      1
-    );
-    return smoothStep(0.04, 0.96, progress) * (RAMPART_HEIGHT + 0.1);
-  }
-
-  function createSheep(sheep) {
+  function createProceduralSheep(sheep) {
     const group = new window.THREE.Group();
     const position = worldToScene(sheep.x, sheep.y);
     group.position.set(position.x, 0, position.z);
@@ -921,7 +734,15 @@ const RTS3D = (() => {
     return group;
   }
 
-  function createDuck(duck) {
+  function createSheep(sheep) {
+    return OpenRTS.rendering.modelFactoryResolver.create(sheep, {
+      category: 'wildlife',
+      fallbackId: 'wildlife.sheep',
+      fallback: createProceduralSheep
+    });
+  }
+
+  function createProceduralDuck(duck) {
     const group = new window.THREE.Group();
     const position = worldToScene(duck.x, duck.y);
     group.position.set(position.x, 0, position.z);
@@ -938,7 +759,15 @@ const RTS3D = (() => {
     return group;
   }
 
-  function createHorse(horse) {
+  function createDuck(duck) {
+    return OpenRTS.rendering.modelFactoryResolver.create(duck, {
+      category: 'wildlife',
+      fallbackId: 'wildlife.duck',
+      fallback: createProceduralDuck
+    });
+  }
+
+  function createProceduralHorse(horse) {
     const group = new window.THREE.Group();
     const position = worldToScene(horse.x, horse.y);
     group.position.set(position.x, 0, position.z);
@@ -952,7 +781,15 @@ const RTS3D = (() => {
     return group;
   }
 
-  function createWorldItem(item) {
+  function createHorse(horse) {
+    return OpenRTS.rendering.modelFactoryResolver.create(horse, {
+      category: 'wildlife',
+      fallbackId: 'wildlife.horse',
+      fallback: createProceduralHorse
+    });
+  }
+
+  function createProceduralWorldItem(item) {
     const group = new window.THREE.Group();
     const position = worldToScene(item.x, item.y);
     group.position.set(position.x, 0, position.z);
@@ -963,92 +800,119 @@ const RTS3D = (() => {
     return group;
   }
 
+  function createWorldItem(item) {
+    return OpenRTS.rendering.modelFactoryResolver.create(item, {
+      category: 'item',
+      fallbackId: item?.assetId || 'item.supply',
+      fallback: createProceduralWorldItem
+    });
+  }
+
+  function registerProceduralModelFactories() {
+    const registry = OpenRTS.rendering.factoryRegistry;
+    if (!registry || state.proceduralFactoriesRegistered) return;
+    const registrations = [
+      ['unit.king', createProceduralUnit],
+      ['unit.worker', createProceduralUnit],
+      ['unit.soldier', createProceduralUnit],
+      ['unit.archer', createProceduralUnit],
+      ['unit.knight', createProceduralUnit],
+      ['unit.scout', createProceduralUnit],
+      ['unit.gunman', createProceduralUnit],
+      ['unit.crossbowman', createProceduralUnit],
+      ['unit.grenademan', createProceduralUnit],
+      ['unit.balloon', createProceduralUnit],
+      ['wildlife.sheep', createProceduralSheep],
+      ['wildlife.duck', createProceduralDuck],
+      ['wildlife.horse', createProceduralHorse],
+      ['building.castle', createProceduralCastle],
+      ['building.arrow_tower', createProceduralDefenseTower],
+      ['item.supply', createProceduralWorldItem]
+    ];
+    for (const [id, factory] of registrations) {
+      if (!registry.has(id)) registry.register(id, source => factory(source), { renderer: 'three', kind: 'procedural' });
+    }
+    state.proceduralFactoriesRegistered = true;
+  }
+
+  function getDynamicRenderSources(fallbackUnits) {
+    return OpenRTS.rendering.threeDomains?.getDynamicRenderSources
+      ? OpenRTS.rendering.threeDomains.getDynamicRenderSources(fallbackUnits)
+      : {
+        units: fallbackUnits || [],
+        sheep: Array.isArray(sheepData) ? sheepData : [],
+        ducks: Array.isArray(duckData) ? duckData : [],
+        horses: Array.isArray(horseData) ? horseData : [],
+        items: Array.isArray(window.itemData) ? window.itemData : [],
+        projectiles: OpenRTS.systems.projectiles.getProjectiles()
+      };
+  }
+
+  function createSelectedObjectMarker(selectedObject) {
+    if (!selectedObject || selectedObject.objectType !== 'obstacle') return null;
+    const position = worldToScene(selectedObject.x, selectedObject.y);
+    const marker = new window.THREE.Group();
+    marker.position.set(position.x, 0, position.z);
+    addSelectionRing(marker, selectedObject.obstacleType === OBSTACLE.TREE ? 0.78 : 0.64);
+    return marker;
+  }
+
+  function createProjectileVisual(projectile) {
+    return OpenRTS.rendering.projectileVisuals.createProjectileVisual(projectile, {
+      THREE: window.THREE,
+      worldToScene,
+      addSphere,
+      addBox,
+      materials: state.materials
+    });
+  }
+
+  function createImpactEffectVisual(effect) {
+    return OpenRTS.rendering.projectileVisuals.createImpactEffectVisual(effect, {
+      THREE: window.THREE,
+      worldToScene,
+      geometry,
+      materials: state.materials,
+      scale: SCALE
+    });
+  }
+
   function buildDynamicWorld(units) {
-    state.dynamicGroup.clear();
-    for (const unit of units) state.dynamicGroup.add(createUnit(unit));
-    for (const sheep of sheepData) if (!sheep.isMounted) state.dynamicGroup.add(createSheep(sheep));
-    for (const roast of OpenRTS.systems.cooking.getRoasts()) state.dynamicGroup.add(createRoast(roast));
-    if (Array.isArray(duckData)) for (const duck of duckData) state.dynamicGroup.add(createDuck(duck));
-    if (Array.isArray(horseData)) for (const horse of horseData) if (!horse.isDead) state.dynamicGroup.add(createHorse(horse));
-    if (Array.isArray(window.itemData)) {
-      for (const item of window.itemData) {
-        if (!item.isDead && !item.isPickedUp) state.dynamicGroup.add(createWorldItem(item));
+    const renderSources = getDynamicRenderSources(units);
+    return OpenRTS.rendering.dynamicWorldComposer.compose({
+      group: state.dynamicGroup,
+      sources: renderSources,
+      roasts: OpenRTS.systems.cooking.getRoasts(),
+      impactEffects: OpenRTS.systems.projectiles.getImpactEffects(),
+      selectedObject: typeof getSelectedWorldObject === 'function' ? getSelectedWorldObject() : null,
+      factories: {
+        createUnit,
+        createSheep,
+        createRoast,
+        createDuck,
+        createHorse,
+        createWorldItem,
+        createSelectedObjectMarker,
+        createProjectile: createProjectileVisual,
+        createImpactEffect: createImpactEffectVisual
       }
-    }
-    const selectedObject = typeof getSelectedWorldObject === 'function' ? getSelectedWorldObject() : null;
-    if (selectedObject && selectedObject.objectType === 'obstacle') {
-      const position = worldToScene(selectedObject.x, selectedObject.y);
-      const marker = new window.THREE.Group();
-      marker.position.set(position.x, 0, position.z);
-      addSelectionRing(marker, selectedObject.obstacleType === OBSTACLE.TREE ? 0.78 : 0.64);
-      state.dynamicGroup.add(marker);
-    }
-    for (const bullet of OpenRTS.systems.projectiles.getProjectiles()) {
-      if (bullet.dead) continue;
-      const position = worldToScene(bullet.x, bullet.y);
-      if (bullet.projectileType === 'grenade') {
-        const progress = Math.min(1, bullet.distanceTraveled / Math.max(1, bullet.targetDistance));
-        const arcHeight = Math.sin(progress * Math.PI) * 0.9;
-        addSphere(state.dynamicGroup, position.x, 0.3 + arcHeight, position.z, 0.1, state.materials.grenade);
-      } else if (bullet.projectileType === 'bolt') {
-        const bolt = new window.THREE.Group();
-        bolt.position.set(position.x, 0.4, position.z);
-        bolt.rotation.y = -Math.atan2(bullet.dirY, bullet.dirX);
-        addBox(bolt, 0, 0, 0, 0.3, 0.035, 0.035, state.materials.bolt);
-        state.dynamicGroup.add(bolt);
-      } else {
-        const material = bullet.projectileType === 'bullet' ? state.materials.pistolRound : state.materials.projectile;
-        const radius = bullet.projectileType === 'bullet' ? 0.045 : 0.08;
-        addSphere(state.dynamicGroup, position.x, 0.35, position.z, radius, material);
-      }
-    }
-    const impactEffects = OpenRTS.systems.projectiles.getImpactEffects();
-    if (Array.isArray(impactEffects)) {
-      for (const effect of impactEffects) {
-        if (effect.type !== 'explosion') continue;
-        const position = worldToScene(effect.x, effect.y);
-        const progress = Math.min(1, effect.age / effect.duration);
-        const radius = Math.max(0.08, effect.radius * SCALE * progress);
-        const ring = new window.THREE.Mesh(
-          geometry('ring:explosion', () => new window.THREE.RingGeometry(0.82, 1, 32)),
-          state.materials.explosion
-        );
-        ring.position.set(position.x, 0.08, position.z);
-        ring.rotation.x = -Math.PI * 0.5;
-        ring.scale.setScalar(radius);
-        state.dynamicGroup.add(ring);
-      }
-    }
+    });
   }
 
   function updateCameraMatrices() {
-    if (!state.camera || !state.renderer) return;
-    const width = canvas3d.clientWidth || canvas3d.width;
-    const heightPx = canvas3d.clientHeight || canvas3d.height;
-    if (canvas3d.width !== Math.round(width * state.renderer.getPixelRatio()) || canvas3d.height !== Math.round(heightPx * state.renderer.getPixelRatio())) {
-      state.renderer.setSize(width, heightPx, false);
-    }
-    state.camera.aspect = Math.max(1, width) / Math.max(1, heightPx);
-    const centerWorldX = camera.x + camera.viewportWidth / camera.zoom * 0.5;
-    const centerWorldY = camera.y + camera.viewportHeight / camera.zoom * 0.5;
-    const target = worldToScene(centerWorldX, centerWorldY);
-    const zoomForView = Math.max(camera.minZoom3D || 0.22, camera.zoom);
-    const cameraHeight = 25 / zoomForView;
-    const distance = 20 / zoomForView;
-    state.camera.position.set(target.x, cameraHeight, target.z + distance);
-    state.camera.lookAt(target.x, 0, target.z);
-    state.camera.updateProjectionMatrix();
-    state.camera.updateMatrixWorld();
+    OpenRTS.rendering.threeCameraSync.syncCamera({
+      sceneCamera: state.camera,
+      renderer: state.renderer,
+      canvas: canvas3d,
+      gameCamera: camera,
+      scale: SCALE,
+      mapWidth: getMapWidthPx(),
+      mapHeight: getMapHeightPx()
+    });
   }
 
   function updateTreeWind() {
-    const time = performance.now() * 0.001;
-    for (const crown of state.treeCrowns) {
-      const phase = crown.userData.windPhase || 0;
-      const strength = crown.userData.windStrength || 0;
-      crown.rotation.z = crown.userData.baseRotationZ + Math.sin(time * 0.72 + phase) * strength;
-      crown.rotation.x = crown.userData.baseRotationX + Math.cos(time * 0.53 + phase * 1.3) * strength * 0.55;
-    }
+    OpenRTS.rendering.treeWind.updateCrowns(state.treeCrowns, performance.now() * 0.001);
   }
 
   function render3DScene(units) {
@@ -1078,15 +942,14 @@ const RTS3D = (() => {
   }
 
   function projectWorld(worldX, worldY, height = 0) {
-    if (!state.camera) return null;
-    const THREE = window.THREE;
-    const point = worldToScene(worldX, worldY);
-    const projected = new THREE.Vector3(point.x, height, point.z).project(state.camera);
-    if (projected.z < -1 || projected.z > 1) return null;
-    return {
-      x: (projected.x * 0.5 + 0.5) * canvas.width,
-      y: (-projected.y * 0.5 + 0.5) * canvas.height
-    };
+    return OpenRTS.rendering.threeCoordinates.projectWorldToScreen(worldX, worldY, height, {
+      THREE: window.THREE,
+      camera: state.camera,
+      canvas,
+      scale: SCALE,
+      mapWidth: getMapWidthPx(),
+      mapHeight: getMapHeightPx()
+    });
   }
 
   function is3DWorldPointVisible(worldX, worldY, height = 0) {
@@ -1095,13 +958,16 @@ const RTS3D = (() => {
   }
 
   function get3DWorldPoint(screenX, screenY) {
-    if (!state.raycaster || !state.camera) return null;
-    const THREE = window.THREE;
-    const pointer = new THREE.Vector2(screenX / canvas.width * 2 - 1, 1 - screenY / canvas.height * 2);
-    state.raycaster.setFromCamera(pointer, state.camera);
-    const intersection = new THREE.Vector3();
-    if (!state.raycaster.ray.intersectPlane(state.groundPlane, intersection)) return null;
-    return sceneToWorld(intersection);
+    return OpenRTS.rendering.threeCoordinates.screenToWorld(screenX, screenY, {
+      THREE: window.THREE,
+      raycaster: state.raycaster,
+      camera: state.camera,
+      canvas,
+      groundPlane: state.groundPlane,
+      scale: SCALE,
+      mapWidth: getMapWidthPx(),
+      mapHeight: getMapHeightPx()
+    });
   }
 
   function loadRTSModel(url) {

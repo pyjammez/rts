@@ -19,6 +19,7 @@ const camera = {
 const runtime = OpenRTS.runtime;
 const gameRuntime = runtime.setContext({
   units,
+  simulation: OpenRTS.simulation.context,
   camera,
   debug: DEBUG,
   input: inputState,
@@ -38,153 +39,95 @@ OpenRTS.diagnostics.simulation.bindStateProvider(() => ({
   projectiles: OpenRTS.systems.projectiles.getProjectiles()
 }));
 
+OpenRTS.runtime.matchSnapshots?.bindStateProvider?.(() => ({
+  frame: runtime.frame,
+  seed: OpenRTS.random.getSeed(),
+  modeId: (window.mapConfig || mapConfig || {}).modeId,
+  config: window.mapConfig || mapConfig || {},
+  entityRegistry: window.entityManager,
+  resources: window.playerResources || {}
+}));
+
 OpenRTS.commands.bindFrameProvider(() => runtime.frame);
 
-function findEntityById(collection, id) {
-  return (Array.isArray(collection) ? collection : []).find(entity => String(entity.id) === String(id)) || null;
-}
-
-function resolveUnit(id) {
-  return findEntityById(units, id);
-}
-
-function resolveBuilding(id) {
-  return findEntityById(OpenRTS.world.runtime.get('buildings'), id);
-}
-
-function resolveCommandTarget(kind, id) {
-  if (kind === 'unit') return resolveUnit(id);
-  if (kind === 'building') return resolveBuilding(id);
-  const collectionName = {
-    sheep: 'sheep',
-    duck: 'ducks',
-    horse: 'horses',
-    item: 'items',
-    obstacle: 'obstacleEntities'
-  }[kind];
-  return collectionName ? findEntityById(OpenRTS.world.runtime.get(collectionName), id) : null;
-}
+const gameplayCommandHandlers = OpenRTS.commands.gameplayHandlers.createRegistrar({
+  units,
+  worldRuntime: OpenRTS.world.runtime,
+  systems: OpenRTS.systems,
+  tileSize,
+  clearCastleTopCommand: typeof clearCastleTopCommand === 'function' ? clearCastleTopCommand : null,
+  removeSheepFromMap: typeof removeSheepFromMap === 'function' ? removeSheepFromMap : null,
+  commandUnitIntoHouse: typeof commandUnitIntoHouse === 'function' ? commandUnitIntoHouse : null,
+  commandUnitOutOfHouse: typeof commandUnitOutOfHouse === 'function' ? commandUnitOutOfHouse : null,
+  startBurningHouse: typeof startBurningHouse === 'function' ? startBurningHouse : null,
+  commandUnitIntoCastle: typeof commandUnitIntoCastle === 'function' ? commandUnitIntoCastle : null,
+  commandUnitOutOfCastle: typeof commandUnitOutOfCastle === 'function' ? commandUnitOutOfCastle : null,
+  commandUnitToCastleTop: typeof commandUnitToCastleTop === 'function' ? commandUnitToCastleTop : null
+});
 
 function registerGameplayCommandHandlers() {
-  const commandTypes = OpenRTS.commands.types;
-  OpenRTS.commands.register(commandTypes.MOVE, command => {
-    const unit = resolveUnit(command.payload.unitId);
-    if (!unit || unit.isDead) return false;
-    if (!command.payload.append && typeof clearCastleTopCommand === 'function') clearCastleTopCommand(unit);
-    unit.issueMoveCommand(command.payload.x, command.payload.y, { append: !!command.payload.append });
-    return true;
+  gameplayCommandHandlers.registerAll();
+}
+
+function registerGameModeAdapters() {
+  const modeRuntime = OpenRTS.modes?.runtime;
+  if (!modeRuntime || modeRuntime.get('versus')) return;
+
+  const createMatch = config => ({
+    modeId: config.modeId || 'versus',
+    config: structuredClone(config || {}),
+    seed: OpenRTS.random.getSeed()
   });
-  OpenRTS.commands.register(commandTypes.ATTACK, command => {
-    const unit = resolveUnit(command.payload.unitId);
-    const target = resolveCommandTarget(command.payload.targetKind, command.payload.targetId);
-    if (!unit || unit.isDead || !target || target.isDead) return false;
-    unit.issueAttackCommand(target, { append: !!command.payload.append });
-    return true;
+  const describeFromDefinition = modeId => {
+    const mode = typeof getGameModeDefinition === 'function' ? getGameModeDefinition(modeId) : null;
+    return {
+      modeId,
+      sections: [...(mode?.sections || [])],
+      allowedUnits: [...(mode?.allowedUnits || [])],
+      playable: !!mode?.playable
+    };
+  };
+  const checkVictory = (_match, context) => {
+    if (typeof evaluateGameFinishRules !== 'function') return null;
+    return evaluateGameFinishRules(context.aliveUnits || gameRuntime.aliveUnits || []);
+  };
+
+  modeRuntime.register('versus', {
+    createMatch,
+    checkVictory,
+    describeSetup: () => describeFromDefinition('versus')
   });
-  OpenRTS.commands.register(commandTypes.MOUNT, command => {
-    const unit = resolveUnit(command.payload.unitId);
-    const sheep = resolveCommandTarget('sheep', command.payload.sheepId);
-    if (!unit || unit.isDead || !sheep) return false;
-    unit.issueMountCommand(sheep, { append: !!command.payload.append });
-    return true;
+  modeRuntime.register('tower_defense', {
+    createMatch,
+    update: (dt, _match, context) => OpenRTS.systems.towerDefense?.update(dt, {
+      units: context.aliveUnits || [],
+      buildings: context.buildings || OpenRTS.world.runtime.get('buildings')
+    }),
+    checkVictory,
+    describeSetup: () => describeFromDefinition('tower_defense')
   });
-  OpenRTS.commands.register(commandTypes.PICK_UP, command => {
-    const unit = resolveUnit(command.payload.unitId);
-    const item = resolveCommandTarget(command.payload.targetKind, command.payload.targetId);
-    return !!unit && !unit.isDead && !!item && unit.issuePickupCommand(item);
+  modeRuntime.register('unit_comparison', {
+    createMatch,
+    update: (_dt, _match, context) => {
+      if (typeof findNearestEnemyForUnit !== 'function') return null;
+      for (const unit of context.aliveUnits || []) {
+        if (unit.attackOrderTarget && unit.isEnemyValid(unit.attackOrderTarget)) continue;
+        const target = findNearestEnemyForUnit(unit);
+        if (target) unit.issueAttackCommand(target);
+      }
+      return null;
+    },
+    checkVictory,
+    describeSetup: () => describeFromDefinition('unit_comparison')
   });
-  OpenRTS.commands.register(commandTypes.DROP, command => {
-    const unit = resolveUnit(command.payload.unitId);
-    return !!unit && !unit.isDead && unit.issueDropItemCommand(command.payload.x, command.payload.y);
-  });
-  OpenRTS.commands.register(commandTypes.FIRE_STANCE, command => {
-    const unit = resolveUnit(command.payload.unitId);
-    if (!unit || unit.isDead) return false;
-    unit.setFireStance(command.payload.stance);
-    return true;
-  });
-  OpenRTS.commands.register(commandTypes.COOK, command => {
-    const sheep = resolveCommandTarget('sheep', command.payload.sheepId);
-    if (!sheep) return false;
-    return !!OpenRTS.systems.cooking.start({
-      sheep,
-      team: command.payload.team,
-      removeSheep: removeSheepFromMap,
-      tileSize
-    });
-  });
-  OpenRTS.commands.register(commandTypes.CASTLE_UPGRADE, command => {
-    const king = resolveUnit(command.payload.kingId);
-    const building = resolveBuilding(command.payload.buildingId);
-    return OpenRTS.systems.castleUpgrades.upgrade(building, king);
-  });
-  OpenRTS.commands.register(commandTypes.CASTLE_ENTER, command => {
-    const unit = resolveUnit(command.payload.unitId);
-    const building = resolveBuilding(command.payload.buildingId);
-    if (!unit || !building) return false;
-    return commandUnitIntoCastle(
-      unit,
-      building,
-      { x: command.payload.x, y: command.payload.y },
-      !!command.payload.append,
-      command.payload.laneIndex || 0
-    );
-  });
-  OpenRTS.commands.register(commandTypes.CASTLE_EXIT, command => {
-    const unit = resolveUnit(command.payload.unitId);
-    const building = resolveBuilding(command.payload.buildingId);
-    if (!unit || !building) return false;
-    return commandUnitOutOfCastle(
-      unit,
-      building,
-      { x: command.payload.x, y: command.payload.y },
-      !!command.payload.append,
-      command.payload.laneIndex || 0
-    );
-  });
-  OpenRTS.commands.register(commandTypes.CASTLE_RAMPART, command => {
-    const unit = resolveUnit(command.payload.unitId);
-    const building = resolveBuilding(command.payload.buildingId);
-    if (!unit || !building) return false;
-    return commandUnitToCastleTop(
-      unit,
-      building,
-      command.payload.index || 0,
-      command.payload.total || 1,
-      !!command.payload.append,
-      command.payload.targetX,
-      command.payload.targetY
-    );
+  modeRuntime.register('map_builder', {
+    createMatch,
+    describeSetup: () => describeFromDefinition('map_builder')
   });
 }
 
 function getEdgeScrollDirection() {
-  if (!inputState.mouseInside && !inputState.southEdgeActive) {
-    return { x: 0, y: 0 };
-  }
-
-  let x = 0;
-  let y = 0;
-  const commandBar = document.querySelector('.command-bar');
-  const commandBarRect = commandBar?.getBoundingClientRect();
-  const commandBarVisible = !!commandBarRect &&
-    commandBarRect.width > 0 &&
-    commandBarRect.height > 0 &&
-    getComputedStyle(commandBar).display !== 'none';
-  const bottomEdge = commandBarVisible
-    ? Math.max(camera.edgeScrollMargin, Math.min(camera.viewportHeight, commandBarRect.top))
-    : camera.viewportHeight;
-  const bottomScrollMargin = Math.max(camera.edgeScrollMargin, 40);
-
-  if (inputState.mouseInside) {
-    if (inputState.mouseX <= camera.edgeScrollMargin) x -= 1;
-    if (inputState.mouseX >= camera.viewportWidth - camera.edgeScrollMargin) x += 1;
-    if (inputState.mouseY <= camera.edgeScrollMargin) y -= 1;
-    if (inputState.mouseY >= bottomEdge - bottomScrollMargin && inputState.mouseY <= bottomEdge) y += 1;
-  }
-  if (inputState.southEdgeActive) y = 1;
-
-  return { x, y };
+  return cameraController.getEdgeScrollDirection();
 }
 
 function toggleDebugFlag(flagName) {
@@ -193,95 +136,42 @@ function toggleDebugFlag(flagName) {
   console.log(`${flagName}: ${DEBUG[flagName] ? 'ON' : 'OFF'}`);
 }
 
-function getMinZoomToFitMap() {
-  const fitX = canvas.width / getMapWidthPx();
-  const fitY = canvas.height / getMapHeightPx();
-  const flatFit = Math.min(fitX, fitY);
-  const is3D = typeof use3DRenderer === 'function' && use3DRenderer();
-
-  if (is3D) {
-    return Math.min(flatFit, camera.minZoom3D);
+const cameraController = OpenRTS.camera.controller.createCameraController({
+  camera,
+  inputState,
+  canvas,
+  tileSize,
+  document,
+  getComputedStyle,
+  getMapWidthPx,
+  getMapHeightPx,
+  use3DRenderer: () => typeof use3DRenderer === 'function' && use3DRenderer(),
+  refresh3DCameraMatrices: () => {
+    if (typeof refresh3DCameraMatrices === 'function') refresh3DCameraMatrices();
+  },
+  get3DWorldPoint: (screenX, screenY) => {
+    return typeof get3DWorldPoint === 'function' ? get3DWorldPoint(screenX, screenY) : null;
   }
+});
 
-  return flatFit;
+function getMinZoomToFitMap() {
+  return cameraController.getMinZoomToFitMap();
 }
 
 function getCameraOverscan() {
-  const visibleWorldWidth = camera.viewportWidth / camera.zoom;
-  const visibleWorldHeight = camera.viewportHeight / camera.zoom;
-  const is3D = typeof use3DRenderer === 'function' && use3DRenderer();
-
-  if (is3D) {
-    return {
-      x: Math.max(tileSize * 6, visibleWorldWidth * 0.28),
-      y: Math.max(tileSize * 9, visibleWorldHeight * 0.42)
-    };
-  }
-
-  return {
-    x: Math.max(tileSize * 2, visibleWorldWidth * 0.08),
-    y: Math.max(tileSize * 2, visibleWorldHeight * 0.08)
-  };
+  return cameraController.getCameraOverscan();
 }
 
 function clampCameraPosition() {
-  const visibleWorldWidth = camera.viewportWidth / camera.zoom;
-  const visibleWorldHeight = camera.viewportHeight / camera.zoom;
-  const mapWidth = getMapWidthPx();
-  const mapHeight = getMapHeightPx();
-  const overscan = getCameraOverscan();
-  const minX = -overscan.x;
-  const maxX = mapWidth - visibleWorldWidth + overscan.x;
-  const minY = -overscan.y;
-  const maxY = mapHeight - visibleWorldHeight + overscan.y;
-
-  if (minX > maxX) {
-    camera.x = (minX + maxX) * 0.5;
-  } else {
-    camera.x = Math.max(minX, Math.min(camera.x, maxX));
-  }
-
-  if (minY > maxY) {
-    camera.y = (minY + maxY) * 0.5;
-  } else {
-    camera.y = Math.max(minY, Math.min(camera.y, maxY));
-  }
+  cameraController.clampCameraPosition();
 }
 
 function zoomAtScreenPoint(screenX, screenY, zoomFactor) {
-  const is3D = typeof use3DRenderer === 'function' && use3DRenderer() && typeof refresh3DCameraMatrices === 'function';
-  if (is3D) refresh3DCameraMatrices();
-
-  const worldBefore = screenToWorld(screenX, screenY);
-  const minZoom = getMinZoomToFitMap();
-  const nextZoom = Math.max(minZoom, Math.min(camera.zoom * zoomFactor, camera.maxZoom));
-
-  if (nextZoom === camera.zoom) return;
-  camera.zoom = nextZoom;
-
-  if (is3D && worldBefore) {
-    refresh3DCameraMatrices();
-    const worldAfter = screenToWorld(screenX, screenY);
-
-    if (worldAfter) {
-      camera.x += worldBefore.x - worldAfter.x;
-      camera.y += worldBefore.y - worldAfter.y;
-      clampCameraPosition();
-      refresh3DCameraMatrices();
-      return;
-    }
-  }
-
-  camera.x = worldBefore.x - screenX / camera.zoom;
-  camera.y = worldBefore.y - screenY / camera.zoom;
-  clampCameraPosition();
+  cameraController.zoomAtScreenPoint(screenX, screenY, zoomFactor);
 }
 
 function zoomToFullMap() {
-  camera.zoom = getMinZoomToFitMap();
-  camera.x = getMapWidthPx() * 0.5 - (camera.viewportWidth / camera.zoom) * 0.5;
-  camera.y = getMapHeightPx() * 0.5 - (camera.viewportHeight / camera.zoom) * 0.5;
-  clampCameraPosition();
+  cameraController.zoomToFullMap();
 }
 
 window.zoomToFullMap = zoomToFullMap;
@@ -289,44 +179,36 @@ window.zoomAtScreenPoint = zoomAtScreenPoint;
 window.getEdgeScrollDirection = getEdgeScrollDirection;
 
 function updateCamera(dt) {
-  camera.viewportWidth = canvas.width;
-  camera.viewportHeight = canvas.height;
-
-  const minZoom = getMinZoomToFitMap();
-  if (camera.zoom < minZoom) {
-    camera.zoom = minZoom;
-  }
-
-  const edge = getEdgeScrollDirection();
-  const moveX = ((inputState.right ? 1 : 0) - (inputState.left ? 1 : 0)) + edge.x;
-  const moveY = ((inputState.down ? 1 : 0) - (inputState.up ? 1 : 0)) + edge.y;
-
-  if (moveX !== 0 || moveY !== 0) {
-    const length = Math.hypot(moveX, moveY);
-    camera.x += (moveX / length) * camera.speed * dt;
-    camera.y += (moveY / length) * camera.speed * dt;
-  }
-
-  clampCameraPosition();
+  cameraController.update(dt);
 }
 
 function screenToWorld(screenX, screenY) {
-  if (typeof use3DRenderer === 'function' && use3DRenderer() && typeof get3DWorldPoint === 'function') {
-    const point = get3DWorldPoint(screenX, screenY);
-    if (point) return point;
-  }
-
-  return {
-    x: screenX / camera.zoom + camera.x,
-    y: screenY / camera.zoom + camera.y
-  };
+  return cameraController.screenToWorld(screenX, screenY);
 }
 
 window.screenToWorld = screenToWorld;
 
 function refreshRuntimeUnits() {
-  if (window.entityManager && typeof window.entityManager.syncUnits === 'function') {
-    window.entityManager.syncUnits(units);
+  const worldCollections = {
+    buildings: OpenRTS.world.runtime.get('buildings'),
+    sheep: OpenRTS.world.runtime.get('sheep'),
+    ducks: OpenRTS.world.runtime.get('ducks'),
+    horses: OpenRTS.world.runtime.get('horses'),
+    items: OpenRTS.world.runtime.get('items'),
+    goldMines: OpenRTS.world.runtime.get('goldMines'),
+    houses: OpenRTS.world.runtime.get('houses'),
+    obstacleEntities: OpenRTS.world.runtime.get('obstacleEntities')
+  };
+  const projectiles = OpenRTS.systems.projectiles.getProjectiles();
+
+  if (window.entityManager && typeof window.entityManager.syncAll === 'function') {
+    window.entityManager.syncAll({
+      units,
+      collections: worldCollections,
+      projectiles,
+      frame: runtime.frame
+    });
+    gameRuntime.entityRegistry = window.entityManager;
   }
 
   const aliveUnits = window.entityManager && typeof window.entityManager.getAliveUnits === 'function'
@@ -334,7 +216,7 @@ function refreshRuntimeUnits() {
     : units.filter(unit => !unit.isDead);
   gameRuntime.aliveUnits = aliveUnits;
   gameRuntime.ecsAliveUnits = aliveUnits;
-  gameRuntime.bullets = OpenRTS.systems.projectiles.getProjectiles();
+  gameRuntime.bullets = projectiles;
 
   if (typeof syncUnitComponentsFromUnits === 'function') {
     syncUnitComponentsFromUnits(aliveUnits);
@@ -354,6 +236,7 @@ function getProjectileTargets(x, y, radius) {
 
 function registerRuntimeSystems() {
   if (runtime.hasSystem('camera')) return;
+  registerGameModeAdapters();
 
   runtime.registerSystem({ id: 'camera', order: 10, update: updateCamera });
   runtime.registerSystem({
@@ -365,6 +248,14 @@ function registerRuntimeSystems() {
   });
   runtime.registerSystem({ id: 'entity-sync', order: 30, update: refreshRuntimeUnits });
   runtime.registerSystem({
+    id: 'vision',
+    order: 32,
+    update: dt => OpenRTS.systems.vision?.update(dt, {
+      registry: window.entityManager,
+      teams: typeof getConfiguredTeams === 'function' ? getConfiguredTeams(window.mapConfig || mapConfig || {}) : []
+    })
+  });
+  runtime.registerSystem({
     id: 'commands',
     order: 35,
     update: () => OpenRTS.commands.process(runtime.frame, gameRuntime)
@@ -373,8 +264,26 @@ function registerRuntimeSystems() {
     id: 'game-mode',
     order: 40,
     update: dt => {
-      if (typeof updateActiveGameMode === 'function') updateActiveGameMode(dt, gameRuntime.aliveUnits);
+      const modeResult = typeof updateActiveGameMode === 'function'
+        ? updateActiveGameMode(dt, gameRuntime.aliveUnits)
+        : OpenRTS.modes?.runtime?.update(dt, {
+          aliveUnits: gameRuntime.aliveUnits,
+          buildings: OpenRTS.world.runtime.get('buildings')
+        });
+      if (modeResult && typeof finishGame === 'function') finishGame(modeResult);
     }
+  });
+  runtime.registerSystem({
+    id: 'skirmish-ai',
+    order: 45,
+    update: dt => OpenRTS.systems.skirmishAi?.update(dt, {
+      units: gameRuntime.aliveUnits,
+      buildings: OpenRTS.world.runtime.get('buildings')
+    }, {
+      commands: OpenRTS.commands,
+      entityManager: window.entityManager,
+      query: OpenRTS.entities?.query
+    })
   });
   runtime.registerSystem({
     id: 'wildlife',
@@ -395,11 +304,26 @@ function registerRuntimeSystems() {
     update: dt => OpenRTS.systems.cooking.update(dt, gameRuntime.aliveUnits)
   });
   runtime.registerSystem({
+    id: 'houses',
+    order: 65,
+    update: dt => {
+      if (typeof updateHouseUnitInteractions === 'function') updateHouseUnitInteractions();
+      if (typeof updateHouses === 'function') updateHouses(dt);
+    }
+  });
+  runtime.registerSystem({
     id: 'movement',
     order: 70,
     update: dt => {
       if (typeof updateUnitMovementSystem === 'function') updateUnitMovementSystem(gameRuntime.aliveUnits, dt);
     }
+  });
+  runtime.registerSystem({
+    id: 'worker-economy',
+    order: 75,
+    update: dt => OpenRTS.systems.workerEconomy?.update(dt, {
+      units: gameRuntime.aliveUnits
+    })
   });
   runtime.registerSystem({
     id: 'spatial-index',
@@ -560,8 +484,21 @@ function initializeGame() {
   console.log('Initializing game with config:', mapConfig);
   if (typeof resetGameSession === 'function') resetGameSession();
   runtime.resetClock();
+  runtime.resetSystems({ config: window.mapConfig || mapConfig || {} });
   OpenRTS.commands.clear();
   OpenRTS.systems.projectiles.reset();
+  OpenRTS.systems.skirmishAi?.reset();
+  OpenRTS.systems.workerEconomy?.reset();
+  OpenRTS.systems.towerDefense?.reset(window.mapConfig || mapConfig || {});
+  OpenRTS.systems.resources?.reset(
+    typeof getConfiguredTeams === 'function' ? getConfiguredTeams(window.mapConfig || mapConfig || {}) : ['red', 'blue'],
+    {
+      gold: (window.mapConfig || mapConfig || {}).startingGold ?? 140,
+      wood: (window.mapConfig || mapConfig || {}).startingWood ?? 160,
+      stone: (window.mapConfig || mapConfig || {}).startingStone ?? 0,
+      food: (window.mapConfig || mapConfig || {}).startingFood ?? 0
+    }
+  );
   regenerateMapData();
   spawnInitialUnits();
   if (typeof startGameSession === 'function') startGameSession(window.mapConfig || mapConfig || {});

@@ -7,8 +7,16 @@
     "weapon": "sword",
     "role": "Royal commander and castle upgrader",
     "model": "king",
-    "maxPerTeam": 1,
-    "requiredPerTeam": true
+    "maxPerTeam": 1
+  },
+  "worker": {
+    "name": "Worker",
+    "hp": 74,
+    "speed": 104,
+    "size": 18,
+    "weapon": "sword",
+    "role": "Builder and resource gatherer",
+    "model": "worker"
   },
   "soldier": {
     "name": "Soldier",
@@ -26,7 +34,8 @@
     "size": 18,
     "weapon": "longbow",
     "role": "Long range, fragile",
-    "model": "archer"
+    "model": "archer",
+    "canTargetAir": true
   },
   "knight": {
     "name": "Knight",
@@ -53,7 +62,8 @@
     "size": 19,
     "weapon": "pistol",
     "role": "Fast-firing pistol infantry",
-    "model": "gunman"
+    "model": "gunman",
+    "canTargetAir": true
   },
   "crossbowman": {
     "name": "Crossbowman",
@@ -62,7 +72,8 @@
     "size": 20,
     "weapon": "crossbow",
     "role": "Heavy ranged infantry",
-    "model": "crossbowman"
+    "model": "crossbowman",
+    "canTargetAir": true
   },
   "grenademan": {
     "name": "Grenademan",
@@ -72,5 +83,18 @@
     "weapon": "grenade",
     "role": "Splash-damage specialist",
     "model": "grenademan"
+  },
+  "balloon": {
+    "name": "Balloon",
+    "hp": 90,
+    "speed": 118,
+    "size": 22,
+    "weapon": "shortbow",
+    "role": "Light air scout that ignores terrain and water",
+    "model": "balloon",
+    "movementType": "air",
+    "flightHeight": 2.35,
+    "canTargetGround": true,
+    "canTargetAir": false
   }
 }

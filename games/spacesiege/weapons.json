@@ -1,0 +1,39 @@
+{
+  "ss_particle_rifle": {
+    "name": "Particle Rifle",
+    "damage": 8,
+    "movingDamage": 5,
+    "range": 170,
+    "stopRange": 205,
+    "fireRate": 1.8,
+    "projectileSpeed": 520,
+    "projectileColor": "#7fd7ff",
+    "projectileType": "bullet",
+    "damageType": "kinetic"
+  },
+  "ss_plasma_cannon": {
+    "name": "Plasma Cannon",
+    "damage": 22,
+    "movingDamage": 12,
+    "range": 215,
+    "stopRange": 250,
+    "fireRate": 0.8,
+    "projectileSpeed": 340,
+    "projectileColor": "#b478ff",
+    "projectileType": "shell",
+    "damageType": "plasma"
+  },
+  "ss_lancer_missile": {
+    "name": "Lancer Missile",
+    "damage": 27,
+    "movingDamage": 15,
+    "range": 250,
+    "stopRange": 285,
+    "fireRate": 0.7,
+    "projectileSpeed": 300,
+    "projectileColor": "#f6f8ff",
+    "projectileType": "rocket",
+    "splashRadius": 32,
+    "damageType": "explosive"
+  }
+}

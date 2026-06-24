@@ -1,0 +1,58 @@
+{
+  "eok_villager": {
+    "name": "Villager",
+    "hp": 75,
+    "speed": 96,
+    "size": 18,
+    "weapon": "eok_tool",
+    "role": "Gatherer and builder",
+    "cost": { "food": 50, "population": 1 },
+    "trainTime": 9,
+    "model": "worker",
+    "era": "historical",
+    "armorType": "villager",
+    "tags": ["worker", "villager"]
+  },
+  "eok_spearman": {
+    "name": "Spearman",
+    "hp": 105,
+    "speed": 92,
+    "size": 20,
+    "weapon": "eok_spear",
+    "role": "Cheap melee infantry",
+    "cost": { "food": 60, "wood": 20, "population": 1 },
+    "trainTime": 10,
+    "model": "soldier",
+    "era": "historical",
+    "armorType": "infantry",
+    "tags": ["infantry", "melee"]
+  },
+  "eok_archer": {
+    "name": "Archer",
+    "hp": 80,
+    "speed": 100,
+    "size": 19,
+    "weapon": "eok_bow",
+    "role": "Ranged infantry",
+    "cost": { "wood": 50, "gold": 25, "population": 1 },
+    "trainTime": 12,
+    "model": "archer",
+    "era": "historical",
+    "armorType": "infantry",
+    "tags": ["infantry", "ranged"]
+  },
+  "eok_cavalry": {
+    "name": "Light Cavalry",
+    "hp": 170,
+    "speed": 136,
+    "size": 25,
+    "weapon": "eok_lance",
+    "role": "Fast mounted raider",
+    "cost": { "food": 80, "gold": 65, "population": 2 },
+    "trainTime": 18,
+    "model": "scout",
+    "era": "historical",
+    "armorType": "cavalry",
+    "tags": ["cavalry", "melee"]
+  }
+}

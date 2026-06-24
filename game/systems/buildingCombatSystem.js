@@ -9,6 +9,9 @@
     let closestDistance = Infinity;
     for (const unit of Array.isArray(units) ? units : []) {
       if (!unit || unit.isDead || unit.team === building.team) continue;
+      const targetIsAir = unit.movementType === 'air' || unit.airborne === true;
+      if (targetIsAir && !building.canTargetAir) continue;
+      if (!targetIsAir && building.canTargetGround === false) continue;
       const distance = Math.hypot(unit.x - building.x, unit.y - building.y);
       if (distance >= range || distance >= closestDistance) continue;
       target = unit;

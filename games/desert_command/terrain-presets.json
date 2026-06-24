@@ -1,0 +1,12 @@
+{
+  "desert_oilfield": {
+    "name": "Desert Oilfield",
+    "waterLevel": 0,
+    "rockCount": 36,
+    "treeCount": 2,
+    "sheepCount": 0,
+    "duckCount": 0,
+    "goldMineCount": 8,
+    "houseCount": 6
+  }
+}

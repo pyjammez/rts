@@ -1,0 +1,88 @@
+{
+  "coalition": {
+    "name": "Coalition",
+    "summary": "Conventional combined-arms faction with strong vehicles, defensive scans, and precision commander powers.",
+    "ruleset": "desert_command_rules",
+    "theme": "modern_desert",
+    "color": "#2d65c8",
+    "startingResources": {
+      "supplies": 10000,
+      "power": 0,
+      "command_points": 0
+    },
+    "startingUnits": {
+      "dc_builder": 1,
+      "dc_rifle_squad": 2
+    },
+    "startingBuildings": {
+      "dc_command_hub": 1
+    },
+    "units": ["dc_builder", "dc_rifle_squad", "dc_rocket_team", "dc_battle_tank", "dc_rocket_buggy", "dc_attack_drone"],
+    "buildings": ["dc_command_hub", "dc_supply_depot", "dc_barracks", "dc_war_factory", "dc_guard_tower"],
+    "techTree": {
+      "rootBuildings": ["dc_command_hub"],
+      "unlocks": {
+        "dc_command_hub": ["dc_builder", "dc_supply_depot", "dc_barracks"],
+        "dc_barracks": ["dc_rifle_squad", "dc_rocket_team", "dc_war_factory", "dc_guard_tower"],
+        "dc_war_factory": ["dc_battle_tank", "dc_rocket_buggy", "dc_attack_drone"]
+      }
+    },
+    "production": {
+      "dc_command_hub": {
+        "train": ["dc_builder"],
+        "research": ["dc_scan", "dc_airstrike"]
+      },
+      "dc_barracks": {
+        "train": ["dc_rifle_squad", "dc_rocket_team"],
+        "research": []
+      },
+      "dc_war_factory": {
+        "train": ["dc_battle_tank", "dc_rocket_buggy", "dc_attack_drone"],
+        "research": []
+      }
+    }
+  },
+  "free_brigade": {
+    "name": "Free Brigade",
+    "summary": "Light, mobile faction focused on quick harassment, rockets, and improvised commander powers.",
+    "ruleset": "desert_command_rules",
+    "theme": "modern_desert",
+    "color": "#c08935",
+    "startingResources": {
+      "supplies": 10000,
+      "power": 0,
+      "command_points": 0
+    },
+    "startingUnits": {
+      "dc_builder": 1,
+      "dc_rocket_buggy": 1
+    },
+    "startingBuildings": {
+      "dc_command_hub": 1
+    },
+    "units": ["dc_builder", "dc_rifle_squad", "dc_rocket_team", "dc_rocket_buggy", "dc_attack_drone"],
+    "buildings": ["dc_command_hub", "dc_supply_depot", "dc_barracks", "dc_war_factory", "dc_guard_tower"],
+    "techTree": {
+      "rootBuildings": ["dc_command_hub"],
+      "unlocks": {
+        "dc_command_hub": ["dc_builder", "dc_supply_depot", "dc_barracks"],
+        "dc_barracks": ["dc_rifle_squad", "dc_rocket_team", "dc_war_factory"],
+        "dc_war_factory": ["dc_rocket_buggy", "dc_attack_drone"]
+      }
+    },
+    "production": {
+      "dc_command_hub": {
+        "train": ["dc_builder"],
+        "research": ["dc_scan"]
+      },
+      "dc_barracks": {
+        "train": ["dc_rifle_squad", "dc_rocket_team"],
+        "research": []
+      },
+      "dc_war_factory": {
+        "train": ["dc_rocket_buggy", "dc_attack_drone"],
+        "research": []
+      }
+    }
+  }
+}

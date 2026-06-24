@@ -1,4 +1,10 @@
 let hudRoot = null;
+let resourceBar = null;
+let resourceTeamEl = null;
+let resourceGoldEl = null;
+let resourceWoodEl = null;
+let resourceStoneEl = null;
+let resourceFoodEl = null;
 let miniMapCanvas = null;
 let miniMapCtx = null;
 let redCountEl = null;
@@ -7,17 +13,33 @@ let selectedInfoEl = null;
 let unitActionsEl = null;
 let attackAtWillAction = null;
 let holdFireAction = null;
+let attackMoveAction = null;
 let pickUpItemAction = null;
 let dropItemAction = null;
 let cookAction = null;
 let upgradeCastleAction = null;
+let mineGoldAction = null;
+let mineStoneAction = null;
+let chopWoodAction = null;
+let gatherFoodAction = null;
+let buildTowerAction = null;
+let burnHouseAction = null;
 let unitActionStatus = null;
 let actionMessage = '';
 let actionMessageUntil = 0;
-let itemActionTargetMode = null;
+
+function getCommandTargetMode() {
+  return OpenRTS.ui?.commandTargeting?.getMode?.() || null;
+}
 
 function initHUD() {
   hudRoot = document.getElementById('hud');
+  resourceBar = document.getElementById('resourceBar');
+  resourceTeamEl = document.getElementById('resourceTeam');
+  resourceGoldEl = document.getElementById('resourceGold');
+  resourceWoodEl = document.getElementById('resourceWood');
+  resourceStoneEl = document.getElementById('resourceStone');
+  resourceFoodEl = document.getElementById('resourceFood');
   miniMapCanvas = document.getElementById('miniMapCanvas');
   redCountEl = document.getElementById('redCount');
   blueCountEl = document.getElementById('blueCount');
@@ -25,11 +47,25 @@ function initHUD() {
   unitActionsEl = document.getElementById('unitActions');
   attackAtWillAction = document.getElementById('attackAtWillAction');
   holdFireAction = document.getElementById('holdFireAction');
+  attackMoveAction = document.getElementById('attackMoveAction');
   pickUpItemAction = document.getElementById('pickUpItemAction');
   dropItemAction = document.getElementById('dropItemAction');
   cookAction = document.getElementById('cookAction');
   upgradeCastleAction = document.getElementById('upgradeCastleAction');
+  mineGoldAction = document.getElementById('mineGoldAction');
+  mineStoneAction = document.getElementById('mineStoneAction');
+  chopWoodAction = document.getElementById('chopWoodAction');
+  gatherFoodAction = document.getElementById('gatherFoodAction');
+  buildTowerAction = document.getElementById('buildTowerAction');
+  burnHouseAction = document.getElementById('burnHouseAction');
   unitActionStatus = document.getElementById('unitActionStatus');
+  OpenRTS.ui.commandTargeting?.configure({
+    getSelectedUnits: getSelectedLivingUnits,
+    setMessage: setActionMessage,
+    clearMessage: () => { actionMessageUntil = 0; },
+    updateActions: updateUnitActions,
+    addMarker: typeof addCommandClickMarker === 'function' ? addCommandClickMarker : null
+  });
   const bottomEdgeScrollZone = document.getElementById('bottomEdgeScrollZone');
 
   const updateBottomEdgeScroll = event => {
@@ -54,10 +90,17 @@ function initHUD() {
 
   attackAtWillAction?.addEventListener('click', () => setSelectedUnitsFireStance('attack_at_will'));
   holdFireAction?.addEventListener('click', () => setSelectedUnitsFireStance('hold_fire'));
+  attackMoveAction?.addEventListener('click', () => toggleItemActionTargeting('attack-move'));
   pickUpItemAction?.addEventListener('click', () => toggleItemActionTargeting('pickup'));
   dropItemAction?.addEventListener('click', () => toggleItemActionTargeting('drop'));
   cookAction?.addEventListener('click', () => toggleItemActionTargeting('cook'));
   upgradeCastleAction?.addEventListener('click', () => toggleItemActionTargeting('upgrade-castle'));
+  mineGoldAction?.addEventListener('click', () => toggleItemActionTargeting('mine-gold'));
+  mineStoneAction?.addEventListener('click', () => toggleItemActionTargeting('mine-stone'));
+  chopWoodAction?.addEventListener('click', () => toggleItemActionTargeting('chop-wood'));
+  gatherFoodAction?.addEventListener('click', () => toggleItemActionTargeting('gather-food'));
+  buildTowerAction?.addEventListener('click', () => toggleItemActionTargeting('build-tower'));
+  burnHouseAction?.addEventListener('click', () => toggleItemActionTargeting('burn-house'));
 
   if (miniMapCanvas) {
     miniMapCtx = miniMapCanvas.getContext('2d');
@@ -88,6 +131,7 @@ function initHUD() {
 function showHUD() {
   if (!hudRoot) initHUD();
   if (hudRoot) hudRoot.style.display = 'block';
+  if (resourceBar) resourceBar.style.display = 'flex';
   updateTeamCounts();
 }
 
@@ -111,114 +155,37 @@ function updateTeamCounts() {
 }
 
 function terrainMiniColor(type) {
-  if (type === TERRAIN.WATER) return '#2f78b7';
-  if (type === TERRAIN.SAND) return '#c8b560';
-  if (type === TERRAIN.GRASS) return '#2f7a3a';
-  return '#8a5a34';
+  return OpenRTS.rendering.canvas.minimap.terrainColor(type, TERRAIN);
 }
 
 function renderMiniMap() {
   if (!miniMapCtx || !terrainData || terrainData.length === 0) return;
-
-  const w = miniMapCanvas.width;
-  const h = miniMapCanvas.height;
-  const cellW = w / MAP_COLS;
-  const cellH = h / MAP_ROWS;
-
-  miniMapCtx.clearRect(0, 0, w, h);
-
-  // Terrain
-  for (let y = 0; y < MAP_ROWS; y++) {
-    for (let x = 0; x < MAP_COLS; x++) {
-      miniMapCtx.fillStyle = terrainMiniColor(terrainData[y][x]);
-      miniMapCtx.fillRect(x * cellW, y * cellH, Math.ceil(cellW), Math.ceil(cellH));
-    }
-  }
-
-  // Obstacles
-  if (obstacleData && obstacleData.length > 0) {
-    for (let y = 0; y < MAP_ROWS; y++) {
-      for (let x = 0; x < MAP_COLS; x++) {
-        const obs = obstacleData[y][x];
-        if (obs === OBSTACLE.NONE) continue;
-        miniMapCtx.fillStyle = obs === OBSTACLE.TREE ? '#1f4f1f' : '#666';
-        miniMapCtx.fillRect(x * cellW, y * cellH, Math.max(1, cellW * 0.9), Math.max(1, cellH * 0.9));
-      }
-    }
-  }
-
-  // Units
   const sourceUnits = (window.gameRuntime && Array.isArray(window.gameRuntime.aliveUnits))
     ? window.gameRuntime.aliveUnits
     : units;
-  if (Array.isArray(sourceUnits)) {
-    for (const u of sourceUnits) {
-      if (u.isDead) continue;
-      const px = (u.x / getMapWidthPx()) * w;
-      const py = (u.y / getMapHeightPx()) * h;
-      miniMapCtx.fillStyle = u.team === 'red' ? '#ff4a4a' : '#59a0ff';
-      miniMapCtx.fillRect(px - 1, py - 1, 3, 3);
-    }
-  }
-
-  if (Array.isArray(sheepData)) {
-    miniMapCtx.fillStyle = '#eadfca';
-    for (const sheep of sheepData) {
-      if (sheep.isMounted) continue;
-      const px = (sheep.x / getMapWidthPx()) * w;
-      const py = (sheep.y / getMapHeightPx()) * h;
-      miniMapCtx.fillRect(px - 0.5, py - 0.5, 2, 2);
-    }
-  }
-
-  if (Array.isArray(horseData)) {
-    miniMapCtx.fillStyle = '#9a6336';
-    for (const horse of horseData) {
-      if (horse.isDead) continue;
-      const px = (horse.x / getMapWidthPx()) * w;
-      const py = (horse.y / getMapHeightPx()) * h;
-      miniMapCtx.fillRect(px - 1, py - 1, 2.5, 2.5);
-    }
-  }
-
-  if (Array.isArray(window.itemData)) {
-    miniMapCtx.fillStyle = '#f0c35a';
-    for (const item of window.itemData) {
-      if (item.isDead || item.isPickedUp) continue;
-      const px = (item.x / getMapWidthPx()) * w;
-      const py = (item.y / getMapHeightPx()) * h;
-      miniMapCtx.fillRect(px - 1, py - 1, 2, 2);
-    }
-  }
-
+  const goldMines = typeof getGoldMines === 'function' ? getGoldMines() : window.goldMineData;
+  const houses = typeof getHouses === 'function' ? getHouses() : window.houseData;
   const buildings = typeof getBuildings === 'function' ? getBuildings() : window.buildingData;
-  if (Array.isArray(buildings)) {
-    for (const building of buildings) {
-      if (building.isDead) continue;
-      const px = (building.x / getMapWidthPx()) * w;
-      const py = (building.y / getMapHeightPx()) * h;
-      const bw = Math.max(3, (building.width * tileSize / getMapWidthPx()) * w);
-      const bh = Math.max(3, (building.height * tileSize / getMapHeightPx()) * h);
-      miniMapCtx.fillStyle = building.team === 'red' ? '#c63c3c' : '#3e69d7';
-      miniMapCtx.fillRect(px - bw * 0.5, py - bh * 0.5, bw, bh);
-      miniMapCtx.strokeStyle = '#f8e7ad';
-      miniMapCtx.strokeRect(px - bw * 0.5, py - bh * 0.5, bw, bh);
-    }
-  }
-
-  // Camera viewport
-  const vw = (camera.viewportWidth / camera.zoom / getMapWidthPx()) * w;
-  const vh = (camera.viewportHeight / camera.zoom / getMapHeightPx()) * h;
-  const rawVx = (camera.x / getMapWidthPx()) * w;
-  const rawVy = (camera.y / getMapHeightPx()) * h;
-  const vx = Math.max(0, Math.min(rawVx, w));
-  const vy = Math.max(0, Math.min(rawVy, h));
-  const clippedVw = Math.max(0, Math.min(rawVx + vw, w) - vx);
-  const clippedVh = Math.max(0, Math.min(rawVy + vh, h) - vy);
-
-  miniMapCtx.strokeStyle = '#ffffff';
-  miniMapCtx.lineWidth = 1;
-  miniMapCtx.strokeRect(vx, vy, clippedVw, clippedVh);
+  OpenRTS.rendering.canvas.minimap.render(miniMapCtx, {
+    canvas: miniMapCanvas,
+    terrainData,
+    obstacleData,
+    rows: MAP_ROWS,
+    columns: MAP_COLS,
+    tileSize,
+    dimensions: { width: getMapWidthPx(), height: getMapHeightPx() },
+    terrain: TERRAIN,
+    obstacle: OBSTACLE,
+    units: Array.isArray(sourceUnits) ? sourceUnits : [],
+    sheep: Array.isArray(sheepData) ? sheepData : [],
+    horses: Array.isArray(horseData) ? horseData : [],
+    items: Array.isArray(window.itemData) ? window.itemData : [],
+    goldMines: Array.isArray(goldMines) ? goldMines : [],
+    houses: Array.isArray(houses) ? houses : [],
+    buildings: Array.isArray(buildings) ? buildings : [],
+    camera,
+    teamColor: team => typeof getTeamColor === 'function' ? getTeamColor(team) : (team === 'red' ? '#ff4a4a' : '#59a0ff')
+  });
 }
 
 function handleMiniMapClick(e) {
@@ -252,10 +219,32 @@ function handleMiniMapPointerCapture(e) {
 
 function renderHUD() {
   if (!hudRoot || hudRoot.style.display === 'none') return;
+  updateResourceBar();
   updateTeamCounts();
   updateSelectedInfo();
   updateUnitActions();
   renderMiniMap();
+}
+
+function getLocalResourceTeam() {
+  const config = window.mapConfig || mapConfig || {};
+  const humanSlot = Array.isArray(config.playerSlots)
+    ? config.playerSlots.find(slot => slot.controller === 'human')
+    : null;
+  if (humanSlot?.flag) return humanSlot.flag;
+  const teams = typeof getConfiguredTeams === 'function' ? getConfiguredTeams(config) : config.teams;
+  return Array.isArray(teams) && teams[0] ? teams[0] : 'red';
+}
+
+function updateResourceBar() {
+  if (!resourceBar || !OpenRTS.systems.resources) return;
+  const team = getLocalResourceTeam();
+  const resources = OpenRTS.systems.resources.get(team);
+  if (resourceTeamEl) resourceTeamEl.textContent = team;
+  if (resourceGoldEl) resourceGoldEl.textContent = String(resources.gold);
+  if (resourceWoodEl) resourceWoodEl.textContent = String(resources.wood);
+  if (resourceStoneEl) resourceStoneEl.textContent = String(resources.stone);
+  if (resourceFoodEl) resourceFoodEl.textContent = String(resources.food);
 }
 
 function getSelectedLivingUnits() {
@@ -281,136 +270,25 @@ function setSelectedUnitsFireStance(stance) {
 }
 
 function toggleItemActionTargeting(mode) {
-  if (itemActionTargetMode === mode) {
-    cancelItemActionTargeting();
-    return;
-  }
-  const selectedUnits = getSelectedLivingUnits();
-  const eligible = mode === 'pickup'
-    ? selectedUnits.some(unit => !unit.inventoryItem)
-    : mode === 'drop'
-      ? selectedUnits.some(unit => !!unit.inventoryItem)
-      : mode === 'upgrade-castle'
-        ? selectedUnits.some(unit => unit.unitType === 'king')
-        : selectedUnits.length > 0;
-  if (!eligible) return;
-  itemActionTargetMode = mode;
-  actionMessageUntil = 0;
-  updateUnitActions();
+  OpenRTS.ui.commandTargeting?.toggle(mode);
 }
 
 function cancelItemActionTargeting(message = 'Item action cancelled') {
-  if (!itemActionTargetMode) return;
-  itemActionTargetMode = null;
-  if (message) setActionMessage(message);
-  updateUnitActions();
+  OpenRTS.ui.commandTargeting?.cancel(message);
 }
 
 function getItemActionTargetMode() {
-  return itemActionTargetMode;
+  return getCommandTargetMode();
 }
 
 function handleItemActionTarget(worldX, worldY) {
-  if (!itemActionTargetMode) return false;
-  const selectedUnits = getSelectedLivingUnits();
-
-  if (itemActionTargetMode === 'upgrade-castle') {
-    const king = selectedUnits.find(unit => unit.unitType === 'king');
-    const building = typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(worldX, worldY) : null;
-    if (!king || !building || building.type !== 'home' || building.team !== king.team) {
-      setActionMessage('Click your king\'s castle');
-      return true;
-    }
-    if (building.upgradeLevel >= building.maxUpgradeLevel) {
-      setActionMessage('That castle is fully upgraded');
-      return true;
-    }
-    OpenRTS.commands.enqueue({
-      type: OpenRTS.commands.types.CASTLE_UPGRADE,
-      payload: { kingId: king.id, buildingId: building.id }
-    });
-    itemActionTargetMode = null;
-    setActionMessage('Castle upgrade ordered');
-    if (typeof addCommandClickMarker === 'function') addCommandClickMarker(building.x, building.y, 'green');
-    updateUnitActions();
-    return true;
-  }
-
-  if (itemActionTargetMode === 'cook') {
-    const sheep = typeof getSheepAtPoint === 'function' ? getSheepAtPoint(worldX, worldY) : null;
-    if (!sheep) {
-      setActionMessage('Click a living sheep');
-      return true;
-    }
-    const team = selectedUnits[0]?.team;
-    if (!team) return true;
-    OpenRTS.commands.enqueue({
-      type: OpenRTS.commands.types.COOK,
-      payload: { sheepId: sheep.id, team }
-    });
-    itemActionTargetMode = null;
-    setActionMessage('Roast cooking for 10 seconds');
-    if (typeof addCommandClickMarker === 'function') addCommandClickMarker(sheep.x, sheep.y, 'green');
-    updateUnitActions();
-    return true;
-  }
-
-  if (itemActionTargetMode === 'pickup') {
-    const item = (typeof getWorldItemAtPoint === 'function' && getWorldItemAtPoint(worldX, worldY)) ||
-      (typeof getObstacleAtPoint === 'function' && getObstacleAtPoint(worldX, worldY));
-    if (!item || !item.pickupable || item.isDead || item.isPickedUp) {
-      setActionMessage('Click a tree, rock, or item');
-      return true;
-    }
-    const unit = selectedUnits.find(candidate => !candidate.inventoryItem);
-    if (!unit) {
-      setActionMessage('No selected unit can pick that up');
-      return true;
-    }
-    OpenRTS.commands.enqueue({
-      type: OpenRTS.commands.types.PICK_UP,
-      payload: {
-        unitId: unit.id,
-        targetId: item.id,
-        targetKind: item.objectType === 'obstacle' ? 'obstacle' : 'item'
-      }
-    });
-    itemActionTargetMode = null;
-    setActionMessage(`${unit.displayName || 'Unit'} moving to pick up ${item.displayName || 'item'}`);
-    if (typeof addCommandClickMarker === 'function') addCommandClickMarker(item.x, item.y, 'green');
-    updateUnitActions();
-    return true;
-  }
-
-  const carryingUnits = selectedUnits.filter(unit => unit.inventoryItem);
-  let ordered = 0;
-  carryingUnits.forEach((unit, index) => {
-    const angle = carryingUnits.length > 1 ? index / carryingUnits.length * Math.PI * 2 : 0;
-    const radius = carryingUnits.length > 1 ? tileSize * 0.85 : 0;
-    OpenRTS.commands.enqueue({
-      type: OpenRTS.commands.types.DROP,
-      payload: {
-        unitId: unit.id,
-        x: worldX + Math.cos(angle) * radius,
-        y: worldY + Math.sin(angle) * radius
-      }
-    });
-    ordered++;
-  });
-  if (ordered === 0) {
-    setActionMessage('No selected unit can drop an item there');
-    return true;
-  }
-  itemActionTargetMode = null;
-  setActionMessage(`${ordered} unit${ordered === 1 ? '' : 's'} moving to the drop location`);
-  if (typeof addCommandClickMarker === 'function') addCommandClickMarker(worldX, worldY, 'green');
-  updateUnitActions();
-  return true;
+  return !!OpenRTS.ui.commandTargeting?.targetAt(worldX, worldY);
 }
 
 window.getItemActionTargetMode = getItemActionTargetMode;
 window.handleItemActionTarget = handleItemActionTarget;
 window.cancelItemActionTargeting = cancelItemActionTargeting;
+window.toggleItemActionTargeting = toggleItemActionTargeting;
 
 function updateUnitActions() {
   if (!unitActionsEl) return;
@@ -420,30 +298,65 @@ function updateUnitActions() {
   const allAttack = hasUnits && selectedUnits.every(unit => unit.fireStance !== 'hold_fire');
   const canDrop = selectedUnits.some(unit => !!unit.inventoryItem);
   const canPickUp = selectedUnits.some(unit => !unit.inventoryItem);
+  const hasWorker = selectedUnits.some(unit => unit.unitType === 'worker');
 
-  if (!hasUnits && itemActionTargetMode) itemActionTargetMode = null;
+  const itemActionTargetMode = getCommandTargetMode();
+  if (!hasUnits && itemActionTargetMode) OpenRTS.ui.commandTargeting?.cancel('');
 
-  for (const button of [attackAtWillAction, holdFireAction, pickUpItemAction, dropItemAction, cookAction, upgradeCastleAction]) {
+  for (const button of [
+    attackAtWillAction,
+    holdFireAction,
+    attackMoveAction,
+    pickUpItemAction,
+    dropItemAction,
+    cookAction,
+    upgradeCastleAction,
+    mineGoldAction,
+    mineStoneAction,
+    chopWoodAction,
+    gatherFoodAction,
+    buildTowerAction,
+    burnHouseAction
+  ]) {
     if (button) button.disabled = !hasUnits;
   }
   if (pickUpItemAction) pickUpItemAction.disabled = !canPickUp;
   if (dropItemAction) dropItemAction.disabled = !canDrop;
   if (upgradeCastleAction) upgradeCastleAction.disabled = !selectedUnits.some(unit => unit.unitType === 'king');
+  for (const button of [mineGoldAction, mineStoneAction, chopWoodAction, gatherFoodAction, buildTowerAction]) {
+    if (button) button.disabled = !hasWorker;
+  }
   attackAtWillAction?.classList.toggle('is-active', allAttack);
   holdFireAction?.classList.toggle('is-active', allHold);
+  attackMoveAction?.classList.toggle('is-active', itemActionTargetMode === 'attack-move');
   pickUpItemAction?.classList.toggle('is-active', itemActionTargetMode === 'pickup');
   dropItemAction?.classList.toggle('is-active', itemActionTargetMode === 'drop');
   cookAction?.classList.toggle('is-active', itemActionTargetMode === 'cook');
   upgradeCastleAction?.classList.toggle('is-active', itemActionTargetMode === 'upgrade-castle');
+  mineGoldAction?.classList.toggle('is-active', itemActionTargetMode === 'mine-gold');
+  mineStoneAction?.classList.toggle('is-active', itemActionTargetMode === 'mine-stone');
+  chopWoodAction?.classList.toggle('is-active', itemActionTargetMode === 'chop-wood');
+  gatherFoodAction?.classList.toggle('is-active', itemActionTargetMode === 'gather-food');
+  buildTowerAction?.classList.toggle('is-active', itemActionTargetMode === 'build-tower');
+  burnHouseAction?.classList.toggle('is-active', itemActionTargetMode === 'burn-house');
   attackAtWillAction?.setAttribute('aria-pressed', String(allAttack));
   holdFireAction?.setAttribute('aria-pressed', String(allHold));
+  attackMoveAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'attack-move'));
   pickUpItemAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'pickup'));
   dropItemAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'drop'));
   cookAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'cook'));
   upgradeCastleAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'upgrade-castle'));
+  mineGoldAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'mine-gold'));
+  mineStoneAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'mine-stone'));
+  chopWoodAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'chop-wood'));
+  gatherFoodAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'gather-food'));
+  buildTowerAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'build-tower'));
+  burnHouseAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'burn-house'));
 
   if (!unitActionStatus) return;
-  if (itemActionTargetMode === 'pickup') {
+  if (itemActionTargetMode === 'attack-move') {
+    unitActionStatus.textContent = 'Click a map location to attack-move';
+  } else if (itemActionTargetMode === 'pickup') {
     unitActionStatus.textContent = 'Click a tree, rock, or item';
   } else if (itemActionTargetMode === 'drop') {
     unitActionStatus.textContent = 'Click a map location to drop items';
@@ -451,6 +364,19 @@ function updateUnitActions() {
     unitActionStatus.textContent = 'Click a living sheep to start cooking';
   } else if (itemActionTargetMode === 'upgrade-castle') {
     unitActionStatus.textContent = 'Click your castle to upgrade it';
+  } else if (itemActionTargetMode === 'mine-gold') {
+    unitActionStatus.textContent = 'Click a gold mine';
+  } else if (itemActionTargetMode === 'mine-stone') {
+    unitActionStatus.textContent = 'Click a rock outcrop';
+  } else if (itemActionTargetMode === 'chop-wood') {
+    unitActionStatus.textContent = 'Click a tree';
+  } else if (itemActionTargetMode === 'gather-food') {
+    unitActionStatus.textContent = 'Click a living sheep or duck';
+  } else if (itemActionTargetMode === 'build-tower') {
+    const cost = OpenRTS.systems.workerEconomy?.BUILD_COSTS?.tower || { gold: 40, wood: 80 };
+    unitActionStatus.textContent = `Click a build location (${cost.wood} wood, ${cost.gold} gold)`;
+  } else if (itemActionTargetMode === 'burn-house') {
+    unitActionStatus.textContent = 'Click an intact house to burn it';
   } else if (performance.now() < actionMessageUntil) {
     unitActionStatus.textContent = actionMessage;
   } else if (!hasUnits) {
@@ -538,6 +464,14 @@ function renderSelectedUnitInfo(unit) {
     : '';
   const mountStatus = unit.mountType === 'sheep' ? 'Riding sheep' : unit.unitType === 'scout' ? 'Mounted scout' : 'On foot';
   const inventory = unit.inventoryItem?.name || 'Empty';
+  const workerStatus = unit.unitType === 'worker'
+    ? createInfoStat('Worker Job', unit.workerJob ? `${unit.workerJob.type} ${unit.workerJob.resourceType || unit.workerJob.buildingType}` : 'Idle')
+    : '';
+  const abilityNames = Array.isArray(unit.abilityDefinitions) && unit.abilityDefinitions.length
+    ? unit.abilityDefinitions.map(ability => ability.name || ability.id).join(', ')
+    : Array.isArray(unit.abilities) && unit.abilities.length
+      ? unit.abilities.join(', ')
+      : 'None';
 
   selectedInfoEl.style.display = 'block';
   selectedInfoEl.innerHTML = `
@@ -555,6 +489,8 @@ function renderSelectedUnitInfo(unit) {
       ${createInfoStat('Speed', speed)}
       ${createInfoStat('Mount', mountStatus)}
       ${createInfoStat('Inventory', inventory)}
+      ${createInfoStat('Abilities', abilityNames)}
+      ${workerStatus}
       ${createInfoStat('Fire Stance', unit.fireStance === 'hold_fire' ? 'Hold fire' : 'Attack at will')}
       ${createInfoStat('Team', unit.team)}
       ${createInfoStat('Unit Type', unit.unitType || 'soldier')}
@@ -566,9 +502,17 @@ function renderSelectedUnitInfo(unit) {
 function renderSelectedWorldObjectInfo(object) {
   const isObstacle = object.objectType === 'obstacle';
   const isItem = object.objectType === 'item';
+  const isResource = object.objectType === 'resource';
+  const isHouse = object.objectType === 'house';
   const hp = `${Math.ceil(object.hp)} / ${object.maxHp}`;
   const status = object.isDead
     ? 'Destroyed'
+    : isHouse && object.isWreck
+      ? 'Burnt wreck'
+    : isHouse && object.burning
+      ? `Burning (${Math.ceil(object.burnTimer)}s)`
+    : isResource
+      ? 'Available'
     : object.hp < object.maxHp
       ? 'Damaged'
       : object.displayName === 'Duck'
@@ -581,15 +525,15 @@ function renderSelectedWorldObjectInfo(object) {
 
   selectedInfoEl.style.display = 'block';
   selectedInfoEl.innerHTML = `
-    <div class="selected-info-name">
+      <div class="selected-info-name">
       <span>${object.displayName || 'World Object'}</span>
-      <span class="selected-info-tag">${isItem ? 'Item' : isObstacle ? 'Natural obstacle' : 'Wildlife'}</span>
+      <span class="selected-info-tag">${isHouse ? 'House' : isResource ? 'Resource' : isItem ? 'Item' : isObstacle ? 'Natural obstacle' : 'Wildlife'}</span>
     </div>
     <div class="selected-info-grid">
       ${createInfoStat('Hit Points', hp)}
       ${createInfoStat('Team', object.team || 'neutral')}
-      ${isItem ? createInfoStat('Portable', object.pickupable ? 'Yes' : 'No') : isObstacle ? createInfoStat('Material', object.material || 'Natural') : createInfoStat('Habitat', object.habitat || 'Land')}
-      ${isItem ? createInfoStat('Item Type', object.itemId || 'item') : isObstacle ? createInfoStat('Hardness', object.hardness || 'Unknown') : createInfoStat('Speed', Math.round(object.speed || 0))}
+      ${isHouse ? createInfoStat('Occupants', `${object.occupants?.length || 0}`) : isResource ? createInfoStat('Resource', object.resourceType || 'Unknown') : isItem ? createInfoStat('Portable', object.pickupable ? 'Yes' : 'No') : isObstacle ? createInfoStat('Material', object.material || 'Natural') : createInfoStat('Habitat', object.habitat || 'Land')}
+      ${isHouse ? createInfoStat('Roof', object.occupants?.length ? 'Open' : 'Covered') : isResource ? createInfoStat('Remaining', Math.ceil(object.amount || 0)) : isItem ? createInfoStat('Item Type', object.itemId || 'item') : isObstacle ? createInfoStat('Hardness', object.hardness || 'Unknown') : createInfoStat('Speed', Math.round(object.speed || 0))}
       ${createInfoStat('Status', status)}
     </div>
   `;

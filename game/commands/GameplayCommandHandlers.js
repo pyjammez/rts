@@ -1,0 +1,252 @@
+(function registerGameplayCommandHandlerFactory(global) {
+  const app = global.OpenRTS;
+  if (!app) return;
+
+  app.commands = app.commands || {};
+
+  function findEntityById(collection, id) {
+    return (Array.isArray(collection) ? collection : []).find(entity => String(entity.id) === String(id)) || null;
+  }
+
+  function createRegistrar(deps = {}) {
+    const {
+      commands = app.commands,
+      units = [],
+      worldRuntime = app.world?.runtime,
+      systems = app.systems || {},
+      tileSize = 32,
+      clearCastleTopCommand = null,
+      removeSheepFromMap = null,
+      commandUnitIntoHouse = null,
+      commandUnitOutOfHouse = null,
+      startBurningHouse = null,
+      commandUnitIntoCastle = null,
+      commandUnitOutOfCastle = null,
+      commandUnitToCastleTop = null
+    } = deps;
+
+    const resolveUnit = id => findEntityById(units, id);
+    const resolveBuilding = id => findEntityById(worldRuntime?.get?.('buildings'), id);
+    const resolveCommandTarget = (kind, id) => {
+      if (kind === 'unit') return resolveUnit(id);
+      if (kind === 'building') return resolveBuilding(id);
+      const collectionName = {
+        sheep: 'sheep',
+        duck: 'ducks',
+        horse: 'horses',
+        item: 'items',
+        goldMine: 'goldMines',
+        house: 'houses',
+        obstacle: 'obstacleEntities'
+      }[kind];
+      return collectionName ? findEntityById(worldRuntime?.get?.(collectionName), id) : null;
+    };
+
+    function registerAll() {
+      const commandTypes = commands.types;
+      const id = { type: 'integer', min: 1 };
+      const optionalBoolean = { type: 'boolean', required: false };
+      const worldPoint = { x: 'number', y: 'number' };
+      const unitTarget = {
+        unitId: id,
+        targetId: id,
+        targetKind: 'string',
+        append: optionalBoolean
+      };
+      const movePayload = { unitId: id, ...worldPoint, append: optionalBoolean };
+      const register = (type, description, payloadSchema, handler, validate = null) => {
+        commands.register(type, handler, validate, { description, payloadSchema });
+      };
+
+      register(commandTypes.MOVE, 'Order one unit to move to a world point.', movePayload, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        if (!unit || unit.isDead) return false;
+        systems.workerEconomy?.clearJob(unit);
+        if (!command.payload.append && typeof clearCastleTopCommand === 'function') clearCastleTopCommand(unit);
+        return unit.issueMoveCommand(command.payload.x, command.payload.y, { append: !!command.payload.append });
+      });
+      register(commandTypes.ATTACK_MOVE, 'Order one unit to move while auto-engaging enemies.', movePayload, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        if (!unit || unit.isDead) return false;
+        systems.workerEconomy?.clearJob(unit);
+        if (!command.payload.append && typeof clearCastleTopCommand === 'function') clearCastleTopCommand(unit);
+        return unit.issueAttackMoveCommand(command.payload.x, command.payload.y, { append: !!command.payload.append });
+      });
+      register(commandTypes.ATTACK, 'Order one unit to attack a target entity.', unitTarget, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        const target = resolveCommandTarget(command.payload.targetKind, command.payload.targetId);
+        if (!unit || unit.isDead || !target || target.isDead) return false;
+        systems.workerEconomy?.clearJob(unit);
+        unit.issueAttackCommand(target, { append: !!command.payload.append });
+        return true;
+      });
+      register(commandTypes.MOUNT, 'Order one unit to mount a sheep.', {
+        unitId: id,
+        sheepId: id,
+        append: optionalBoolean
+      }, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        const sheep = resolveCommandTarget('sheep', command.payload.sheepId);
+        if (!unit || unit.isDead || !sheep) return false;
+        systems.workerEconomy?.clearJob(unit);
+        unit.issueMountCommand(sheep, { append: !!command.payload.append });
+        return true;
+      });
+      register(commandTypes.PICK_UP, 'Order one unit to pick up a target world item.', unitTarget, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        const item = resolveCommandTarget(command.payload.targetKind, command.payload.targetId);
+        return !!unit && !unit.isDead && !!item && unit.issuePickupCommand(item);
+      });
+      register(commandTypes.DROP, 'Order one unit to drop its carried item at a world point.', movePayload, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        return !!unit && !unit.isDead && unit.issueDropItemCommand(command.payload.x, command.payload.y);
+      });
+      register(commandTypes.FIRE_STANCE, 'Change a unit fire-stance policy.', {
+        unitId: id,
+        stance: { type: 'string', values: ['attack_at_will', 'hold_fire'] }
+      }, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        if (!unit || unit.isDead) return false;
+        unit.setFireStance(command.payload.stance);
+        return true;
+      });
+      register(commandTypes.COOK, 'Start a sheep roast healing action.', {
+        sheepId: id,
+        team: 'string'
+      }, command => {
+        const sheep = resolveCommandTarget('sheep', command.payload.sheepId);
+        if (!sheep) return false;
+        return !!systems.cooking.start({
+          sheep,
+          team: command.payload.team,
+          removeSheep: removeSheepFromMap,
+          tileSize
+        });
+      });
+      register(commandTypes.WORKER_GATHER, 'Order a worker to gather a resource target.', {
+        unitId: id,
+        targetId: id,
+        targetKind: 'string',
+        resourceType: { type: 'string', values: ['gold', 'stone', 'wood', 'food'] }
+      }, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        const target = resolveCommandTarget(command.payload.targetKind, command.payload.targetId);
+        if (!unit || !target) return false;
+        return !!systems.workerEconomy?.startGather(unit, target, command.payload.resourceType);
+      });
+      register(commandTypes.WORKER_BUILD, 'Order a worker to construct a building.', {
+        unitId: id,
+        buildingType: 'string',
+        ...worldPoint
+      }, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        if (!unit) return false;
+        return !!systems.workerEconomy?.startBuild(
+          unit,
+          command.payload.buildingType,
+          command.payload.x,
+          command.payload.y
+        );
+      });
+      register(commandTypes.HOUSE_ENTER, 'Order one unit to enter a house through its door.', {
+        unitId: id,
+        houseId: id,
+        append: optionalBoolean
+      }, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        const house = resolveCommandTarget('house', command.payload.houseId);
+        if (!unit || !house || typeof commandUnitIntoHouse !== 'function') return false;
+        return commandUnitIntoHouse(unit, house, !!command.payload.append);
+      });
+      register(commandTypes.HOUSE_EXIT, 'Order one unit to exit a house toward a world point.', movePayload, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        if (!unit || typeof commandUnitOutOfHouse !== 'function') return false;
+        return commandUnitOutOfHouse(unit, command.payload.x, command.payload.y, !!command.payload.append);
+      });
+      register(commandTypes.HOUSE_BURN, 'Start burning a target house.', {
+        houseId: id
+      }, command => {
+        const house = resolveCommandTarget('house', command.payload.houseId);
+        if (!house || typeof startBurningHouse !== 'function') return false;
+        return startBurningHouse(house);
+      });
+      register(commandTypes.CASTLE_UPGRADE, 'Upgrade a friendly castle with a king.', {
+        kingId: id,
+        buildingId: id
+      }, command => {
+        const king = resolveUnit(command.payload.kingId);
+        const building = resolveBuilding(command.payload.buildingId);
+        return !!systems.castleUpgrades?.upgrade(building, king);
+      });
+      register(commandTypes.CASTLE_ENTER, 'Order one unit to enter a castle through a lane.', {
+        unitId: id,
+        buildingId: id,
+        ...worldPoint,
+        append: optionalBoolean,
+        laneIndex: { type: 'integer', min: 0, required: false }
+      }, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        const building = resolveBuilding(command.payload.buildingId);
+        if (!unit || !building || typeof commandUnitIntoCastle !== 'function') return false;
+        return commandUnitIntoCastle(
+          unit,
+          building,
+          { x: command.payload.x, y: command.payload.y },
+          !!command.payload.append,
+          command.payload.laneIndex || 0
+        );
+      });
+      register(commandTypes.CASTLE_EXIT, 'Order one unit to exit a castle through a lane.', {
+        unitId: id,
+        buildingId: id,
+        ...worldPoint,
+        append: optionalBoolean,
+        laneIndex: { type: 'integer', min: 0, required: false }
+      }, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        const building = resolveBuilding(command.payload.buildingId);
+        if (!unit || !building || typeof commandUnitOutOfCastle !== 'function') return false;
+        return commandUnitOutOfCastle(
+          unit,
+          building,
+          { x: command.payload.x, y: command.payload.y },
+          !!command.payload.append,
+          command.payload.laneIndex || 0
+        );
+      });
+      register(commandTypes.CASTLE_RAMPART, 'Order one unit to climb to a castle rampart position.', {
+        unitId: id,
+        buildingId: id,
+        index: { type: 'integer', min: 0, required: false },
+        total: { type: 'integer', min: 1, required: false },
+        append: optionalBoolean,
+        targetX: { type: 'number', required: false },
+        targetY: { type: 'number', required: false }
+      }, command => {
+        const unit = resolveUnit(command.payload.unitId);
+        const building = resolveBuilding(command.payload.buildingId);
+        if (!unit || !building || typeof commandUnitToCastleTop !== 'function') return false;
+        return commandUnitToCastleTop(
+          unit,
+          building,
+          command.payload.index || 0,
+          command.payload.total || 1,
+          !!command.payload.append,
+          command.payload.targetX,
+          command.payload.targetY
+        );
+      });
+    }
+
+    return Object.freeze({
+      registerAll,
+      resolveUnit,
+      resolveBuilding,
+      resolveCommandTarget
+    });
+  }
+
+  app.commands.gameplayHandlers = Object.freeze({
+    createRegistrar
+  });
+})(window);

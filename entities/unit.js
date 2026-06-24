@@ -1,62 +1,16 @@
-const COMMAND_TYPE = Object.freeze({
-  MOVE: 'move',
-  ATTACK_UNIT: 'attack-unit',
-  MOUNT_SHEEP: 'mount-sheep',
-  PICK_UP_ITEM: 'pick-up-item',
-  DROP_ITEM: 'drop-item'
-});
-const MAX_COMMAND_QUEUE = 16;
+const COMMAND_TYPE = OpenRTS.entities.unitCommandTypes.types;
+const MAX_COMMAND_QUEUE = OpenRTS.entities.unitCommandTypes.MAX_COMMAND_QUEUE;
 
 class Unit {
-    constructor({ id, x, y, team, hp, speed, size = 20, sprite = null }) {
-      this.id = id;
-      this.x = x;
-      this.y = y;
-      this.team = team;
-      this.hp = hp;
-      this.maxHp = hp;
-      this.speed = speed;
-      this.size = size;
-      this.sprite = sprite; // Optional: reference to an image or canvas drawing logic
-      this.target = null;
-      this.selected = false;
-      this.shooter = null;
-      this.rawPath = [];
-      this.path = []; // List of {x: tileX, y: tileY}
-      this.pathIndex = 0;
-      this.commandQueue = [];
-      this.stuckTime = 0;
-      this.repathCooldown = 0;
-      this.spriteFrame = 0;
-      this.spriteFrameTime = 0;
-      this.spriteFrameDuration = 0.12;
-      this.spriteDirectionRow = 0; // 0=down, 1=left, 2=right, 3=up
-      this.heading = Math.PI * 0.5;
-        // Combat state
-        this.isDead = false;
-        this.shootRange = 120;      // px — starts shooting within this distance
-        this.stopShootRange = 150;  // px — stops shooting beyond this distance
-        this.fireRate = 1.2;        // shots per second
-        this.fireCooldown = 0;
-        this.fireStance = 'attack_at_will';
-        this.currentEnemy = null;
-        this.attackOrderTarget = null; // Explicit attack-move target unit (locked until dead)
-        this.attackRepathCooldown = 0;
-        this.attackAnimationTime = 0;
-        this.attackAnimationDuration = 0.24;
-        this.castleTopBuildingId = null;
-        this.castleTopStairPoint = null;
-        this.castleTopReached = false;
-        this.castleRampBase = null;
-        this.castleRampTop = null;
-        this.castleRampClimbed = false;
-        this.mountTarget = null;
-        this.mountType = null;
-        this.mountedSpeedBonus = 0;
-        this.baseSpeed = speed;
-        this.inventoryItem = null;
-        this.pendingPickupItem = null;
-        this.pendingDropPoint = null;
+    constructor(options) {
+      Object.assign(this, OpenRTS.entities.unitState.createInitialState(options));
+    }
+
+    getMovementOptions() {
+      return {
+        movementType: this.movementType || 'ground',
+        unit: this
+      };
     }
 
     setFacingFromVector(dx, dy) {
@@ -73,6 +27,7 @@ class Unit {
       if (this.fireStance === 'hold_fire') {
         this.currentEnemy = null;
         this.attackOrderTarget = null;
+        this.autoEngageTarget = null;
       }
     }
 
@@ -115,24 +70,24 @@ class Unit {
 
     issuePickupCommand(item) {
       if (!item || item.isDead || item.isPickedUp || !item.pickupable || this.inventoryItem) return false;
-      this.commandQueue = [];
-      this.clearMovementState();
-      this.clearMountTarget();
-      this.attackOrderTarget = null;
-      this.currentEnemy = null;
+      OpenRTS.entities.unitCommandState.resetForImmediateCommand(this, {
+        clearAutoEngage: false,
+        clearCastle: false,
+        clearItems: false
+      });
       this.executeCommand({ type: COMMAND_TYPE.PICK_UP_ITEM, item });
       return true;
     }
 
     issueDropItemCommand(worldX, worldY) {
       if (!this.inventoryItem || !this.isValidDestination(worldX, worldY)) return false;
-      const destination = findNearestWalkablePoint(worldX, worldY, this.size);
+      const destination = findNearestWalkablePoint(worldX, worldY, this.size, 16, this.getMovementOptions());
       if (!destination) return false;
-      this.commandQueue = [];
-      this.clearMovementState();
-      this.clearMountTarget();
-      this.attackOrderTarget = null;
-      this.currentEnemy = null;
+      OpenRTS.entities.unitCommandState.resetForImmediateCommand(this, {
+        clearAutoEngage: false,
+        clearCastle: false,
+        clearItems: false
+      });
       this.executeCommand({ type: COMMAND_TYPE.DROP_ITEM, x: destination.x, y: destination.y });
       return true;
     }
@@ -225,27 +180,29 @@ class Unit {
       const nextX = this.x + dirX * Math.min(moveAmount, dist);
       const nextY = this.y + dirY * Math.min(moveAmount, dist);
 
-      if (canSpawnAt(nextX, nextY)) {
+      const movementOptions = this.getMovementOptions();
+      if (canSpawnAt(nextX, nextY, this.size, movementOptions)) {
         this.x = nextX;
         this.y = nextY;
       } else {
 
         const tryX = this.x + dirX * Math.min(moveAmount, dist);
-        if (canSpawnAt(tryX, this.y)) {
+        if (canSpawnAt(tryX, this.y, this.size, movementOptions)) {
           this.x = tryX;
         }
     
         const tryY = this.y + dirY * Math.min(moveAmount, dist);
-        if (canSpawnAt(this.x, tryY)) {
+        if (canSpawnAt(this.x, tryY, this.size, movementOptions)) {
           this.y = tryY;
         }
       }
     }
 
     setDestination(targetX, targetY) {
-      if (!this.isValidDestination(targetX, targetY)) return;
-      const destination = findNearestWalkablePoint(targetX, targetY, this.size);
-      if (!destination) return;
+      if (!this.isValidDestination(targetX, targetY)) return false;
+      const movementOptions = this.getMovementOptions();
+      const destination = findNearestWalkablePoint(targetX, targetY, this.size, 16, movementOptions);
+      if (!destination) return false;
       targetX = destination.x;
       targetY = destination.y;
 
@@ -260,47 +217,35 @@ class Unit {
       };
 
       this.target = { x: targetX, y: targetY };
-      this.rawPath = findPath(startTile, targetTile); // <<< A* gives you a list of tiles
-      this.path = smoothPath(this.rawPath);
+      this.rawPath = findPath(startTile, targetTile, movementOptions); // <<< A* gives you a list of tiles
+      this.path = smoothPath(this.rawPath, movementOptions);
       this.pathIndex = 0;
       this.stuckTime = 0;
 
       if (this.path.length === 0) {
         this.target = null;
+        return false;
       }
+      return true;
     }
 
     issueMoveCommand(targetX, targetY, { append = false } = {}) {
-      if (!this.isValidDestination(targetX, targetY)) return;
-      const destination = findNearestWalkablePoint(targetX, targetY, this.size);
-      if (!destination) return;
+      if (!this.isValidDestination(targetX, targetY)) return false;
+      const destination = findNearestWalkablePoint(targetX, targetY, this.size, 16, this.getMovementOptions());
+      if (!destination) return false;
       const command = { type: COMMAND_TYPE.MOVE, x: destination.x, y: destination.y };
 
       if (!append) {
-        this.commandQueue = [];
-        this.clearMovementState();
-        this.clearPendingItemAction();
-        this.attackOrderTarget = null;
-        this.currentEnemy = null;
-        this.castleTopBuildingId = null;
-        this.castleTopStairPoint = null;
-        this.castleTopReached = false;
-        this.castleRampBase = null;
-        this.castleRampTop = null;
-        this.castleRampClimbed = false;
-        this.clearMountTarget();
-        this.executeCommand(command);
-        return;
+        OpenRTS.entities.unitCommandState.resetForImmediateCommand(this);
+        return this.executeCommand(command);
       }
 
-      const hasActiveMove = !!this.target || this.hasActivePath();
-      if (!hasActiveMove) {
-        this.executeCommand(command);
-      } else {
-        if (this.commandQueue.length < MAX_COMMAND_QUEUE) {
-          this.commandQueue.push(command);
-        }
-      }
+      return OpenRTS.entities.unitCommandState.executeOrQueue(this, command, { append, maxQueue: MAX_COMMAND_QUEUE });
+    }
+
+    issueAttackMoveCommand(targetX, targetY, { append = false } = {}) {
+      this.fireStance = 'attack_at_will';
+      return this.issueMoveCommand(targetX, targetY, { append });
     }
 
     issueAttackCommand(targetUnit, { append = false } = {}) {
@@ -309,28 +254,15 @@ class Unit {
       const command = { type: COMMAND_TYPE.ATTACK_UNIT, targetUnit };
 
       if (!append) {
-        this.commandQueue = [];
-        this.clearMovementState();
-        this.clearPendingItemAction();
-        this.castleTopBuildingId = null;
-        this.castleTopStairPoint = null;
-        this.castleTopReached = false;
-        this.castleRampBase = null;
-        this.castleRampTop = null;
-        this.castleRampClimbed = false;
-        this.clearMountTarget();
+        OpenRTS.entities.unitCommandState.resetForImmediateCommand(this, {
+          clearAttack: false,
+          clearAutoEngage: false
+        });
         this.executeCommand(command);
         return;
       }
 
-      const hasActiveMove = !!this.target || this.hasActivePath();
-      if (!hasActiveMove) {
-        this.executeCommand(command);
-      } else {
-        if (this.commandQueue.length < MAX_COMMAND_QUEUE) {
-          this.commandQueue.push(command);
-        }
-      }
+      OpenRTS.entities.unitCommandState.executeOrQueue(this, command, { append, maxQueue: MAX_COMMAND_QUEUE });
     }
 
     issueMountCommand(sheep, { append = false } = {}) {
@@ -339,60 +271,50 @@ class Unit {
       const command = { type: COMMAND_TYPE.MOUNT_SHEEP, sheep };
 
       if (!append) {
-        this.commandQueue = [];
-        this.clearMovementState();
-        this.clearPendingItemAction();
-        this.attackOrderTarget = null;
-        this.currentEnemy = null;
-        this.castleTopBuildingId = null;
-        this.castleTopStairPoint = null;
-        this.castleTopReached = false;
-        this.castleRampBase = null;
-        this.castleRampTop = null;
-        this.castleRampClimbed = false;
+        OpenRTS.entities.unitCommandState.resetForImmediateCommand(this, {
+          clearMount: false
+        });
         this.executeCommand(command);
         return;
       }
 
-      const hasActiveMove = !!this.target || this.hasActivePath();
-      if (!hasActiveMove) {
-        this.executeCommand(command);
-      } else if (this.commandQueue.length < MAX_COMMAND_QUEUE) {
-        this.commandQueue.push(command);
-      }
+      OpenRTS.entities.unitCommandState.executeOrQueue(this, command, { append, maxQueue: MAX_COMMAND_QUEUE });
     }
 
     executeCommand(command) {
       if (command.type === COMMAND_TYPE.MOVE) {
-        this.setDestination(command.x, command.y);
-        return;
+        return this.setDestination(command.x, command.y);
       }
 
       if (command.type === COMMAND_TYPE.ATTACK_UNIT) {
         this.attackOrderTarget = command.targetUnit;
         this.currentEnemy = command.targetUnit;
+        this.autoEngageTarget = null;
         this.attackRepathCooldown = 0;
+        return true;
       }
 
       if (command.type === COMMAND_TYPE.MOUNT_SHEEP) {
         this.mountTarget = command.sheep;
         this.attackOrderTarget = null;
         this.currentEnemy = null;
+        this.autoEngageTarget = null;
         command.sheep.reservedByUnitId = this.id;
-        this.setDestination(command.sheep.x, command.sheep.y);
+        return this.setDestination(command.sheep.x, command.sheep.y);
       }
 
       if (command.type === COMMAND_TYPE.PICK_UP_ITEM) {
         this.pendingDropPoint = null;
         this.pendingPickupItem = command.item;
-        this.setDestination(command.item.x, command.item.y);
+        return this.setDestination(command.item.x, command.item.y);
       }
 
       if (command.type === COMMAND_TYPE.DROP_ITEM) {
         this.pendingPickupItem = null;
         this.pendingDropPoint = { x: command.x, y: command.y };
-        this.setDestination(command.x, command.y);
+        return this.setDestination(command.x, command.y);
       }
+      return false;
     }
 
     startNextCommand() {
@@ -407,17 +329,22 @@ class Unit {
     }
 
     isEnemyValid(enemy) {
-      return !!enemy && !enemy.isDead && enemy.team !== this.team;
+      if (!enemy || enemy.isDead || enemy.hiddenInHouse || enemy.team === this.team) return false;
+      const targetIsAir = enemy.movementType === 'air' || enemy.airborne === true;
+      if (targetIsAir && !this.canTargetAir) return false;
+      if (!targetIsAir && this.canTargetGround === false) return false;
+      if (targetIsAir && this.melee) return false;
+      return true;
     }
 
-    findNearestEnemy() {
-      const searchRadius = this.stopShootRange + tileSize;
+    findNearestEnemy(maxDistance = this.shootRange) {
+      const searchRadius = Math.max(maxDistance, this.stopShootRange + tileSize);
       const candidates = typeof getUnitsNearPoint === 'function'
         ? getUnitsNearPoint(this.x, this.y, searchRadius)
         : units;
 
       let closest = null;
-      let closestDist = this.shootRange;
+      let closestDist = maxDistance;
       for (const other of candidates) {
         if (!this.isEnemyValid(other)) continue;
         const dist = Math.hypot(other.x - this.x, other.y - this.y);
@@ -496,6 +423,7 @@ class Unit {
       this.commandQueue = [];
       this.target = null;
       this.currentEnemy = null;
+      this.autoEngageTarget = null;
       this.clearPendingItemAction();
       this.clearMountTarget();
     }
@@ -545,8 +473,9 @@ class Unit {
         const isDiagonal = Math.abs(dx) === 1 && Math.abs(dy) === 1;
     
         if (isDiagonal) {
-          const side1Blocked = !isWalkableTile(b.x, a.y);
-          const side2Blocked = !isWalkableTile(a.x, b.y);
+          const movementOptions = this.getMovementOptions();
+          const side1Blocked = !isWalkableTile(b.x, a.y, { ...movementOptions, fromTile: a });
+          const side2Blocked = !isWalkableTile(a.x, b.y, { ...movementOptions, fromTile: a });
     
           if (side1Blocked || side2Blocked) {
             // Draw a red line to show illegal diagonal move
@@ -567,6 +496,9 @@ class Unit {
     }
 
     resolveCollisionWith(other) {
+      const thisAir = this.movementType === 'air' || this.airborne;
+      const otherAir = other?.movementType === 'air' || other?.airborne;
+      if (thisAir !== otherAir) return;
       const dx = other.x - this.x;
       const dy = other.y - this.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -586,7 +518,7 @@ class Unit {
         const newAX = this.x + moveAX;
         const newAY = this.y + moveAY;
     
-        if (canSpawnAt(newAX, newAY, this.size)) {
+        if (canSpawnAt(newAX, newAY, this.size, this.getMovementOptions())) {
           this.x = newAX;
           this.y = newAY;
         }
@@ -595,7 +527,7 @@ class Unit {
         const newBX = other.x + moveBX;
         const newBY = other.y + moveBY;
     
-        if (canSpawnAt(newBX, newBY, other.size)) {
+        if (canSpawnAt(newBX, newBY, other.size, other.getMovementOptions ? other.getMovementOptions() : {})) {
           other.x = newBX;
           other.y = newBY;
         }

@@ -1,0 +1,52 @@
+{
+  "allied_taskforce": {
+    "name": "Allied Taskforce",
+    "summary": "Balanced modern army with sturdy tanks and air support.",
+    "ruleset": "modern_warlord_rules",
+    "theme": "dry_oil_basin",
+    "color": "#2d65c8",
+    "startingResources": { "supplies": 10000, "power": 0, "command_rank": 0 },
+    "startingUnits": { "mw_dozer": 1, "mw_rifleman": 2 },
+    "startingBuildings": { "mw_command_center": 1 },
+    "units": ["mw_dozer", "mw_rifleman", "mw_tank", "mw_gunship"],
+    "buildings": ["mw_command_center", "mw_reactor", "mw_barracks", "mw_war_factory", "mw_patrol_tower"],
+    "techTree": {
+      "rootBuildings": ["mw_command_center"],
+      "unlocks": {
+        "mw_command_center": ["mw_dozer", "mw_reactor", "mw_barracks"],
+        "mw_barracks": ["mw_rifleman", "mw_war_factory", "mw_patrol_tower"],
+        "mw_war_factory": ["mw_tank", "mw_gunship"]
+      }
+    },
+    "production": {
+      "mw_command_center": { "train": ["mw_dozer"], "research": [] },
+      "mw_barracks": { "train": ["mw_rifleman"], "research": [] },
+      "mw_war_factory": { "train": ["mw_tank", "mw_gunship"], "research": [] }
+    }
+  },
+  "desert_compact": {
+    "name": "Desert Compact",
+    "summary": "Mobile modern army with cheaper infantry and fast tech.",
+    "ruleset": "modern_warlord_rules",
+    "theme": "dry_oil_basin",
+    "color": "#c08935",
+    "startingResources": { "supplies": 10000, "power": 0, "command_rank": 0 },
+    "startingUnits": { "mw_dozer": 1, "mw_rifleman": 3 },
+    "startingBuildings": { "mw_command_center": 1 },
+    "units": ["mw_dozer", "mw_rifleman", "mw_tank", "mw_gunship"],
+    "buildings": ["mw_command_center", "mw_reactor", "mw_barracks", "mw_war_factory", "mw_patrol_tower"],
+    "techTree": {
+      "rootBuildings": ["mw_command_center"],
+      "unlocks": {
+        "mw_command_center": ["mw_dozer", "mw_reactor", "mw_barracks"],
+        "mw_barracks": ["mw_rifleman", "mw_war_factory"],
+        "mw_war_factory": ["mw_tank", "mw_gunship", "mw_patrol_tower"]
+      }
+    },
+    "production": {
+      "mw_command_center": { "train": ["mw_dozer"], "research": [] },
+      "mw_barracks": { "train": ["mw_rifleman"], "research": [] },
+      "mw_war_factory": { "train": ["mw_tank", "mw_gunship"], "research": [] }
+    }
+  }
+}

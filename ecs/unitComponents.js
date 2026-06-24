@@ -6,6 +6,14 @@ const UnitComponents = {
 };
 
 function syncUnitComponentsFromUnits(units) {
+  if (window.entityManager && typeof window.entityManager.componentMap === 'function') {
+    UnitComponents.transform = window.entityManager.componentMap('transform', { category: 'unit' });
+    UnitComponents.movement = window.entityManager.componentMap('movement', { category: 'unit' });
+    UnitComponents.combat = window.entityManager.componentMap('combat', { category: 'unit' });
+    UnitComponents.render = window.entityManager.componentMap('render', { category: 'unit' });
+    return;
+  }
+
   const seen = new Set();
 
   for (const unit of units) {
@@ -49,4 +57,3 @@ function syncUnitComponentsFromUnits(units) {
 
 window.UnitComponents = UnitComponents;
 window.syncUnitComponentsFromUnits = syncUnitComponentsFromUnits;
-

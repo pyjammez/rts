@@ -1,0 +1,60 @@
+{
+  "eok_town_center": {
+    "name": "Town Center",
+    "width": 8,
+    "height": 8,
+    "hp": 1800,
+    "size": 320,
+    "cost": { "wood": 275, "stone": 100 },
+    "buildTime": 35,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "eok_house": {
+    "name": "House",
+    "width": 2,
+    "height": 2,
+    "hp": 300,
+    "size": 75,
+    "cost": { "wood": 25, "population": 5 },
+    "buildTime": 12,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "eok_barracks": {
+    "name": "Barracks",
+    "width": 4,
+    "height": 4,
+    "hp": 900,
+    "size": 150,
+    "cost": { "wood": 175 },
+    "buildTime": 24,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "eok_archery_range": {
+    "name": "Archery Range",
+    "width": 4,
+    "height": 4,
+    "hp": 850,
+    "size": 150,
+    "cost": { "wood": 175 },
+    "buildTime": 24,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "eok_watch_tower": {
+    "name": "Watch Tower",
+    "width": 2,
+    "height": 2,
+    "hp": 500,
+    "size": 75,
+    "weapon": "eok_bow",
+    "cost": { "wood": 50, "stone": 125 },
+    "buildTime": 20,
+    "model": "arrow_tower",
+    "armorType": "structure",
+    "canTargetGround": true,
+    "canTargetAir": false
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "battleforge",
+  "name": "BattleForge",
+  "description": "Original fantasy RTS sample package showing how a WarCraft-like economy and forest map can be expressed as static data.",
+  "version": "0.1.0",
+  "engineVersion": "0.2.0",
+  "author": "Open RTS",
+  "license": "CC0-1.0",
+  "homepage": "https://example.com/open-rts/battleforge",
+  "mergeMode": "merge",
+  "dependencies": [],
+  "conflicts": [],
+  "provides": ["fantasy_rts"],
+  "tags": ["fantasy", "forest", "heroes", "sample"],
+  "files": {
+    "rulesets": "rulesets.json",
+    "factions": "factions.json",
+    "units": "units.json",
+    "buildings": "buildings.json",
+    "weapons": "weapons.json",
+    "terrainPresets": "terrain-presets.json",
+    "modes": "game-modes.json"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "ue_command_core": {
+    "name": "Command Core",
+    "width": 8,
+    "height": 8,
+    "hp": 2200,
+    "size": 320,
+    "cost": { "metal": 0, "energy": 0, "build_power": 10 },
+    "buildTime": 0,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "ue_metal_extractor": {
+    "name": "Metal Extractor",
+    "width": 3,
+    "height": 3,
+    "hp": 550,
+    "size": 100,
+    "cost": { "metal": 80, "energy": 150, "build_power": 1 },
+    "buildTime": 12,
+    "model": "arrow_tower",
+    "armorType": "structure"
+  },
+  "ue_solar_array": {
+    "name": "Solar Array",
+    "width": 3,
+    "height": 3,
+    "hp": 480,
+    "size": 105,
+    "cost": { "metal": 110, "energy": 0, "build_power": 1 },
+    "buildTime": 14,
+    "model": "arrow_tower",
+    "armorType": "structure"
+  },
+  "ue_bot_lab": {
+    "name": "Bot Lab",
+    "width": 5,
+    "height": 5,
+    "hp": 1050,
+    "size": 180,
+    "cost": { "metal": 450, "energy": 1100, "build_power": 3 },
+    "buildTime": 26,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "ue_laser_turret": {
+    "name": "Laser Turret",
+    "width": 2,
+    "height": 2,
+    "hp": 620,
+    "size": 80,
+    "weapon": "ue_laser",
+    "cost": { "metal": 180, "energy": 500, "build_power": 1 },
+    "buildTime": 18,
+    "model": "arrow_tower",
+    "armorType": "structure",
+    "canTargetGround": true,
+    "canTargetAir": false
+  }
+}

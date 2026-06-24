@@ -1,0 +1,55 @@
+{
+  "bash": {
+    "name": "Bash",
+    "type": "passive",
+    "summary": "Heavy melee hits can become a future short stun or knockback effect.",
+    "target": "enemy",
+    "cooldown": 6,
+    "tags": ["melee", "control"]
+  },
+  "heal": {
+    "name": "Heal",
+    "type": "active",
+    "summary": "Restores hit points to a friendly unit once the ability system is active.",
+    "target": "friendly_unit",
+    "range": 130,
+    "cooldown": 8,
+    "tags": ["support", "restoration"]
+  },
+  "fireball": {
+    "name": "Fireball",
+    "type": "active",
+    "summary": "Launches a splash-damage projectile once the ability system is active.",
+    "target": "enemy_or_ground",
+    "range": 170,
+    "cooldown": 10,
+    "effect": {
+      "damage": 28,
+      "splashRadius": 72
+    },
+    "tags": ["caster", "splash"]
+  },
+  "castle_upgrade": {
+    "name": "Castle Upgrade",
+    "type": "active",
+    "summary": "Allows a king to improve a friendly castle.",
+    "target": "friendly_castle",
+    "range": 120,
+    "cooldown": 1,
+    "tags": ["economy", "building"]
+  },
+  "gather": {
+    "name": "Gather",
+    "type": "job",
+    "summary": "Allows a worker to collect gold, stone, wood, or food.",
+    "target": "resource",
+    "tags": ["worker", "economy"]
+  },
+  "build": {
+    "name": "Build",
+    "type": "job",
+    "summary": "Allows a worker to construct buildings.",
+    "target": "ground",
+    "tags": ["worker", "construction"]
+  }
+}

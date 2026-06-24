@@ -1,0 +1,48 @@
+{
+  "highland_clans": {
+    "name": "Highland Clans",
+    "summary": "Sturdy infantry faction with strong early defense.",
+    "ruleset": "battleforge_rules",
+    "theme": "enchanted_forest",
+    "color": "#2f72d6",
+    "startingResources": { "gold": 500, "lumber": 150, "food": 10, "mana": 0 },
+    "startingUnits": { "bf_peasant": 5 },
+    "startingBuildings": { "bf_town_hall": 1 },
+    "units": ["bf_peasant", "bf_footman", "bf_ranger", "bf_mage"],
+    "buildings": ["bf_town_hall", "bf_farm", "bf_barracks", "bf_guard_tower"],
+    "techTree": {
+      "rootBuildings": ["bf_town_hall"],
+      "unlocks": {
+        "bf_town_hall": ["bf_peasant", "bf_farm", "bf_barracks"],
+        "bf_barracks": ["bf_footman", "bf_ranger", "bf_mage", "bf_guard_tower"]
+      }
+    },
+    "production": {
+      "bf_town_hall": { "train": ["bf_peasant"], "research": [] },
+      "bf_barracks": { "train": ["bf_footman", "bf_ranger", "bf_mage"], "research": [] }
+    }
+  },
+  "ember_coven": {
+    "name": "Ember Coven",
+    "summary": "Magic-focused forest faction with fragile but dangerous ranged units.",
+    "ruleset": "battleforge_rules",
+    "theme": "enchanted_forest",
+    "color": "#b84a32",
+    "startingResources": { "gold": 500, "lumber": 150, "food": 10, "mana": 0 },
+    "startingUnits": { "bf_peasant": 5 },
+    "startingBuildings": { "bf_town_hall": 1 },
+    "units": ["bf_peasant", "bf_ranger", "bf_mage"],
+    "buildings": ["bf_town_hall", "bf_farm", "bf_barracks", "bf_guard_tower"],
+    "techTree": {
+      "rootBuildings": ["bf_town_hall"],
+      "unlocks": {
+        "bf_town_hall": ["bf_peasant", "bf_farm", "bf_barracks"],
+        "bf_barracks": ["bf_ranger", "bf_mage", "bf_guard_tower"]
+      }
+    },
+    "production": {
+      "bf_town_hall": { "train": ["bf_peasant"], "research": [] },
+      "bf_barracks": { "train": ["bf_ranger", "bf_mage"], "research": [] }
+    }
+  }
+}

@@ -15,6 +15,7 @@
       this.systemIds = new Set();
       this.frame = 0;
       this.elapsed = 0;
+      this.initializedSystemIds = new Set();
     }
 
     setContext(values) {
@@ -33,12 +34,19 @@
       return this.services.get(id);
     }
 
-    registerSystem({ id, order = 0, update, enabled = true }) {
+    registerSystem({ id, order = 0, init = null, reset = null, update, dispose = null, describe = null, enabled = true }) {
       if (typeof id !== 'string' || !id) throw new TypeError('System id must be a non-empty string');
       if (typeof update !== 'function') throw new TypeError(`System "${id}" requires an update function`);
       if (this.systemIds.has(id)) throw new Error(`System already registered: ${id}`);
 
-      const system = Object.freeze({ id, order, update, enabled });
+      const lifecycle = { init, reset, update, dispose, describe };
+      for (const [hook, handler] of Object.entries(lifecycle)) {
+        if (handler !== null && handler !== undefined && typeof handler !== 'function') {
+          throw new TypeError(`System "${id}" ${hook} hook must be a function`);
+        }
+      }
+
+      const system = Object.freeze({ id, order, init, reset, update, dispose, describe, enabled });
       this.systems.push(system);
       this.systems.sort((left, right) => left.order - right.order || left.id.localeCompare(right.id));
       this.systemIds.add(id);
@@ -59,6 +67,10 @@
           ? system.enabled(this.context)
           : system.enabled;
         if (!enabled) continue;
+        if (!this.initializedSystemIds.has(system.id)) {
+          system.init?.(this.context, this);
+          this.initializedSystemIds.add(system.id);
+        }
         system.update(dt, this.context, this);
       }
     }
@@ -68,11 +80,36 @@
       this.elapsed = 0;
     }
 
+    resetSystems(match = null) {
+      for (const system of this.systems) {
+        system.reset?.(match, this.context, this);
+      }
+    }
+
+    dispose() {
+      for (const system of [...this.systems].reverse()) {
+        system.dispose?.(this.context, this);
+      }
+      this.initializedSystemIds.clear();
+    }
+
     describe() {
       return Object.freeze({
         frame: this.frame,
         elapsed: this.elapsed,
-        systems: this.systems.map(system => system.id),
+        systems: this.systems.map(system => ({
+          id: system.id,
+          order: system.order,
+          initialized: this.initializedSystemIds.has(system.id),
+          lifecycle: {
+            init: typeof system.init === 'function',
+            reset: typeof system.reset === 'function',
+            update: typeof system.update === 'function',
+            dispose: typeof system.dispose === 'function',
+            describe: typeof system.describe === 'function'
+          },
+          details: typeof system.describe === 'function' ? system.describe(this.context, this) : null
+        })),
         services: [...this.services.keys()]
       });
     }

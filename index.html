@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>open rts</title>
-  <link rel="stylesheet" href="ui/style.css?v=king1" />
+  <link rel="icon" href="favicon.ico" sizes="16x16" />
+  <link rel="stylesheet" href="ui/style.css?v=nopack1" />
 </head>
 <body>
   <div id="titleScreen" class="title-screen">
@@ -28,13 +29,21 @@
   <div id="waitingRoomPanel" class="config-panel waiting-room-panel" style="display: none;">
     <h1>Ready Room</h1>
     <p id="waitingRoomSummary" class="config-summary"></p>
-    <div id="waitingRoomSettings" class="waiting-room-settings"></div>
-    <div class="waiting-room-chat">
-      <div class="hud-title">Chat</div>
-      <div id="waitingRoomChatLog" class="waiting-room-chat-log"></div>
-      <div class="waiting-room-chat-row">
-        <input id="waitingRoomChatInput" type="text" placeholder="Type a message..." />
-        <button id="waitingRoomChatSend" class="secondary-button" type="button">Send</button>
+    <div class="waiting-room-layout">
+      <section class="waiting-room-column waiting-room-team-column" aria-label="Team selection">
+        <div id="waitingRoomTeams"></div>
+      </section>
+      <section class="waiting-room-column waiting-room-settings-column" aria-label="Match settings">
+        <div class="waiting-room-section-title">Settings</div>
+        <div id="waitingRoomSettings" class="waiting-room-settings"></div>
+      </section>
+      <div class="waiting-room-column waiting-room-chat">
+        <div class="hud-title">Chat</div>
+        <div id="waitingRoomChatLog" class="waiting-room-chat-log"></div>
+        <div class="waiting-room-chat-row">
+          <input id="waitingRoomChatInput" type="text" placeholder="Type a message..." />
+          <button id="waitingRoomChatSend" class="secondary-button" type="button">Send</button>
+        </div>
       </div>
     </div>
     <button id="backToSettings" class="secondary-button" type="button">Back to Settings</button>
@@ -45,6 +54,21 @@
     <h1 id="gameOverTitle">Game Over</h1>
     <div id="gameOverSummary" class="game-over-summary"></div>
     <div class="title-hint">click anywhere to continue</div>
+  </div>
+
+  <div id="resourceBar" class="resource-bar" style="display: none;">
+    <span class="resource-team" id="resourceTeam">Red</span>
+    <span>Gold <b id="resourceGold">0</b></span>
+    <span>Wood <b id="resourceWood">0</b></span>
+    <span>Stone <b id="resourceStone">0</b></span>
+    <span>Food <b id="resourceFood">0</b></span>
+  </div>
+
+  <div id="mapBuilderToolbar" class="map-builder-toolbar" style="display: none;">
+    <div class="map-builder-title">Map Builder</div>
+    <div class="map-builder-tools" id="mapBuilderTools"></div>
+    <button id="mapBuilderSave" class="secondary-button" type="button">Save Map</button>
+    <div id="mapBuilderStatus" class="map-builder-status">Paint the map, then save it.</div>
   </div>
 
   <div id="hud" class="hud" style="display: none;">
@@ -60,10 +84,17 @@
           <button id="holdFireAction" class="command-action" type="button" aria-pressed="false">Hold Fire</button>
         </div>
         <div class="inventory-actions">
+          <button id="attackMoveAction" class="command-action" type="button" aria-pressed="false">Attack Move</button>
           <button id="pickUpItemAction" class="command-action" type="button">Pick Up Item</button>
           <button id="dropItemAction" class="command-action" type="button">Drop Item</button>
           <button id="cookAction" class="command-action cook-action" type="button" aria-pressed="false">Cook</button>
           <button id="upgradeCastleAction" class="command-action" type="button" aria-pressed="false">Upgrade Castle</button>
+          <button id="mineGoldAction" class="command-action worker-action" type="button" aria-pressed="false">Mine Gold</button>
+          <button id="mineStoneAction" class="command-action worker-action" type="button" aria-pressed="false">Mine Stone</button>
+          <button id="chopWoodAction" class="command-action worker-action" type="button" aria-pressed="false">Chop Wood</button>
+          <button id="gatherFoodAction" class="command-action worker-action" type="button" aria-pressed="false">Gather Food</button>
+          <button id="buildTowerAction" class="command-action worker-action" type="button" aria-pressed="false">Build Tower</button>
+          <button id="burnHouseAction" class="command-action" type="button" aria-pressed="false">Burn House</button>
         </div>
         <div id="unitActionStatus" class="unit-action-status">Select a unit</div>
       </section>
@@ -80,21 +111,78 @@
   <script src="world/threeBootstrap.js?v=three5"></script>
   <script src="core/openRts.js?v=runtime6"></script>
   <script src="core/events/eventBus.js?v=runtime6"></script>
+  <script src="core/diagnostics/DiagnosticsRegistry.js?v=diagnostics1"></script>
+  <script src="core/diagnostics/PerformanceDiagnostics.js?v=worldclass1"></script>
   <script src="core/random/randomService.js?v=infrastructure1"></script>
   <script src="core/runtime/GameRuntime.js?v=runtime1"></script>
+  <script src="core/runtime/SimulationContext.js?v=simulationcontext1"></script>
   <script src="core/runtime/SimulationSnapshot.js?v=runtime5"></script>
-  <script src="game/commands/CommandBus.js?v=runtime6"></script>
-  <script src="world/runtime/WorldRuntime.js?v=runtime1"></script>
+  <script src="core/runtime/ReplayVerifier.js?v=worldclass1"></script>
+  <script src="core/runtime/MatchSnapshot.js?v=matchsnapshot1"></script>
+  <script src="core/runtime/HeadlessSimulationHarness.js?v=headless1"></script>
+  <script src="core/camera/CameraController.js?v=camera1"></script>
+  <script src="game/commands/CommandBus.js?v=commandlog1"></script>
+  <script src="game/commands/GameplayCommandHandlers.js?v=commandhandlers1"></script>
+  <script src="game/commands/UnitCommandIntents.js?v=attackmove1"></script>
+  <script src="world/runtime/WorldRuntime.js?v=worldcollections1"></script>
   <script src="world/terrain/TerrainGenerator.js?v=runtime2"></script>
   <script src="core/rendering/RendererRegistry.js?v=runtime1"></script>
+  <script src="world/rendering/canvas/CanvasRenderListService.js?v=renderextract1"></script>
+  <script src="world/rendering/canvas/CanvasMinimapRenderer.js?v=renderextract1"></script>
+  <script src="world/rendering/canvas/CanvasTerrainPainter.js?v=split2"></script>
+  <script src="world/rendering/three/GeometryCache.js?v=renderextract1"></script>
+  <script src="world/rendering/three/ThreeCoordinateService.js?v=renderextract2"></script>
+  <script src="world/rendering/three/MeshPrimitiveFactory.js?v=renderextract2"></script>
+  <script src="world/rendering/three/ThreeCameraSyncService.js?v=renderextract2"></script>
+  <script src="world/rendering/three/ThreeSceneBootstrap.js?v=renderextract1"></script>
+  <script src="world/rendering/three/StaticWorldSignatureService.js?v=renderextract3"></script>
+  <script src="world/rendering/three/StaticWorldComposer.js?v=renderextract3"></script>
+  <script src="world/rendering/three/TreeWindAnimator.js?v=renderextract3"></script>
+  <script src="world/rendering/three/EntityElevationService.js?v=renderextract4"></script>
+  <script src="world/rendering/three/ProjectileVisualFactory.js?v=renderextract4"></script>
+  <script src="world/rendering/three/DynamicWorldComposer.js?v=renderextract4"></script>
+  <script src="world/rendering/three/RendererFactoryRegistry.js?v=factories1"></script>
   <script src="world/rendering/three/MaterialFactory.js?v=runtime3"></script>
+  <script src="world/rendering/three/ThreeRenderDomains.js?v=renderdomains1"></script>
+  <script src="world/rendering/three/ModelFactoryResolver.js?v=factories2"></script>
+  <script src="world/rendering/three/ThreeTerrainMeshFactory.js?v=split3"></script>
+  <script src="world/rendering/three/ThreeBuildingModelFactory.js?v=split4"></script>
+  <script src="world/rendering/three/ThreeUnitAttachmentFactory.js?v=split1"></script>
+  <script src="world/rendering/three/ThreeUnitModelFactory.js?v=split2"></script>
   <script src="world/rendering/three/OverlayPass.js?v=runtime4"></script>
   <script src="game/systems/cookingSystem.js?v=infrastructure1"></script>
   <script src="game/systems/castleUpgradeSystem.js?v=infrastructure1"></script>
   <script src="game/systems/wildlifeSystem.js?v=runtime3"></script>
   <script src="game/systems/buildingCombatSystem.js?v=runtime4"></script>
   <script src="game/systems/projectileSystem.js?v=runtime5"></script>
-  <script src="game/rules/matchRules.js?v=architecture2"></script>
+  <script src="game/systems/resourceSystem.js?v=economy2"></script>
+  <script src="game/systems/TechTreeSystem.js?v=core-rts1"></script>
+  <script src="game/systems/ProductionQueueSystem.js?v=core-rts1"></script>
+  <script src="game/systems/AbilityEffectSystem.js?v=core-rts1"></script>
+  <script src="game/systems/workerEconomySystem.js?v=workeranim1"></script>
+  <script src="game/systems/visionSystem.js?v=vision1"></script>
+  <script src="game/systems/FormationPlanner.js?v=worldclass1"></script>
+  <script src="game/systems/towerDefenseSystem.js?v=td1"></script>
+  <script src="game/ai/data/aiProfiles.js?v=ai2"></script>
+  <script src="game/ai/core/Blackboard.js?v=ai2"></script>
+  <script src="game/ai/tactics/TargetSelector.js?v=ai2"></script>
+  <script src="game/ai/tactics/SquadController.js?v=ai2"></script>
+  <script src="game/ai/strategies/BalancedStrategy.js?v=ai2"></script>
+  <script src="game/ai/strategies/RushStrategy.js?v=ai2"></script>
+  <script src="game/ai/strategies/TurtleStrategy.js?v=ai2"></script>
+  <script src="game/ai/planners/DefensePlanner.js?v=ai2"></script>
+  <script src="game/ai/planners/AttackPlanner.js?v=ai2"></script>
+  <script src="game/ai/planners/ArmyPlanner.js?v=ai2"></script>
+  <script src="game/ai/planners/EconomyPlanner.js?v=ai2"></script>
+  <script src="game/ai/core/AIBrain.js?v=ai2"></script>
+  <script src="game/ai/core/AIPlayer.js?v=ai2"></script>
+  <script src="game/ai/td/waveTemplates.js?v=ai2"></script>
+  <script src="game/ai/td/DifficultyScaler.js?v=ai2"></script>
+  <script src="game/ai/td/WaveSpawner.js?v=ai2"></script>
+  <script src="game/ai/td/WaveDirector.js?v=ai2"></script>
+  <script src="game/systems/skirmishAiSystem.js?v=ai2"></script>
+  <script src="game/modes/GameModeRuntime.js?v=moderuntime1"></script>
+  <script src="game/rules/matchRules.js?v=td1"></script>
 
   <script>
     const canvas3d = document.getElementById('gameCanvas3d');
@@ -112,30 +200,65 @@
     window.addEventListener('resize', resizeCanvas);
   </script>
 
-  <script src="game/config/definitionRegistry.js?v=architecture2"></script>
-  <script src="ui/config.js?v=king1"></script>
+  <script src="game/config/AssetRegistry.js?v=assets1"></script>
+  <script src="game/config/AssetMetadataService.js?v=worldclass1"></script>
+  <script src="game/config/PackageManifestService.js?v=modpackages1"></script>
+  <script src="game/config/ContentPackLoader.js?v=contentpacks1"></script>
+  <script src="game/config/ScenarioRegistry.js?v=scenarios1"></script>
+  <script src="game/config/ScenarioComposer.js?v=worldclass1"></script>
+  <script src="game/config/ContentIndex.js?v=contentindex1"></script>
+  <script src="game/config/definitionRegistry.js?v=contentindex1"></script>
+  <script src="ui/config.js?v=nopack1"></script>
   <script src="ui/screens/TitleScreen.js?v=three1"></script>
   <script src="ui/screens/ModeSelectScreen.js?v=three1"></script>
-  <script src="ui/screens/GameSetupScreen.js?v=three1"></script>
-  <script src="ui/screens/ReadyRoomScreen.js?v=three1"></script>
+  <script src="ui/screens/GameSetupScreen.js?v=playersplit1"></script>
+  <script src="ui/screens/ReadyRoomScreen.js?v=volcanic1"></script>
   <script src="ui/screens/GameOverScreen.js?v=three1"></script>
   <script src="ui/screens/bootstrap.js?v=three1"></script>
+  <script src="ui/CommandTargetingController.js?v=targeting1"></script>
   <script src="ecs/entityManager.js?v=three1"></script>
+  <script src="ecs/ComponentSchemaRegistry.js?v=worldclass1"></script>
   <script src="ecs/unitComponents.js?v=three1"></script>
-  <script src="entities/unit.js?v=runtime5"></script>
+  <script src="ecs/EntityQueries.js?v=entityqueries1"></script>
+  <script src="entities/UnitCommandTypes.js?v=split1"></script>
+  <script src="entities/UnitStateFactory.js?v=split1"></script>
+  <script src="entities/UnitCommandStateService.js?v=split2"></script>
+  <script src="entities/unit.js?v=autoaggro1"></script>
   <script src="systems/processors/unitMovementProcessor.js?v=itemtarget1"></script>
-  <script src="systems/processors/unitCombatProcessor.js?v=commandbar1"></script>
-  <script src="systems/processors/unitRenderProcessor.js?v=king1"></script>
+  <script src="systems/processors/unitCombatProcessor.js?v=autoaggro1"></script>
+  <script src="systems/processors/unitRenderProcessor.js?v=workeranim1"></script>
   <script src="systems/unitMovement.js?v=three1"></script>
   <script src="systems/unitCombat.js?v=three1"></script>
   <script src="systems/unitRender.js?v=three1"></script>
   <script src="systems/physics.js?v=three1"></script>
-  <script src="world/map.js?v=runtime6"></script>
-  <script src="world/gameState.js?v=king1"></script>
-  <script src="ui/hud.js?v=runtime6"></script>
-  <script src="world/renderer3d.js?v=runtime5"></script>
+  <script src="world/navigation/NavigationService.js?v=architecture1"></script>
+  <script src="world/navigation/NavigationPlanner.js?v=worldclass1"></script>
+  <script src="world/spatial/SpatialHashGrid.js?v=worldclass1"></script>
+  <script src="world/map/MapSpriteCatalog.js?v=split1"></script>
+  <script src="world/objects/HitTestService.js?v=objectservices1"></script>
+  <script src="world/objects/WorldSelectionService.js?v=interactionservices1"></script>
+  <script src="world/objects/CarryableObjectService.js?v=interactionservices1"></script>
+  <script src="world/objects/MapBuilderBrushService.js?v=interactionservices1"></script>
+  <script src="world/objects/MapBuilderRuntimeService.js?v=worldruntimeobjects1"></script>
+  <script src="world/objects/CastleGeometryService.js?v=objectservices1"></script>
+  <script src="world/objects/CastleCommandService.js?v=worldruntimeobjects1"></script>
+  <script src="world/objects/BuildingService.js?v=buildingservices1"></script>
+  <script src="world/objects/BuildingPlacementService.js?v=buildingservices1"></script>
+  <script src="world/objects/BuildingQueryService.js?v=buildingservices1"></script>
+  <script src="world/objects/HouseService.js?v=objectfactories1"></script>
+  <script src="world/objects/HouseInteractionService.js?v=worldruntimeobjects1"></script>
+  <script src="world/objects/ResourceNodeService.js?v=objectfactories1"></script>
+  <script src="world/objects/ItemService.js?v=objectfactories1"></script>
+  <script src="world/objects/ObstacleService.js?v=objectfactories1"></script>
+  <script src="world/objects/ObjectFactoryRegistry.js?v=objectservices1"></script>
+  <script src="world/map.js?v=worldcollections1"></script>
+  <script src="world/objects/WorldObjectServices.js?v=objects1"></script>
+  <script src="world/gameState.js?v=abilities1"></script>
+  <script src="ui/hud.js?v=abilities1"></script>
+  <script src="world/renderer3d.js?v=pine1"></script>
   <script src="core/gameLoop.js?v=three1"></script>
-  <script src="systems/input.js?v=runtime6"></script>
-  <script src="core/main.js?v=runtime6"></script>
+  <script src="systems/input.js?v=attackmove1"></script>
+  <script src="core/main.js?v=commandcontract1"></script>
+  <script src="game/systems/mapBuilderSystem.js?v=builderterrain1"></script>
 </body>
 </html>

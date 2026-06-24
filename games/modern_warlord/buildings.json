@@ -1,0 +1,60 @@
+{
+  "mw_command_center": {
+    "name": "Command Center",
+    "width": 8,
+    "height": 8,
+    "hp": 1800,
+    "size": 320,
+    "cost": { "supplies": 0, "power": 0 },
+    "buildTime": 35,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "mw_reactor": {
+    "name": "Reactor",
+    "width": 3,
+    "height": 3,
+    "hp": 650,
+    "size": 110,
+    "cost": { "supplies": 800, "power": 5 },
+    "buildTime": 18,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "mw_barracks": {
+    "name": "Barracks",
+    "width": 4,
+    "height": 4,
+    "hp": 900,
+    "size": 150,
+    "cost": { "supplies": 1000, "power": 1 },
+    "buildTime": 16,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "mw_war_factory": {
+    "name": "War Factory",
+    "width": 5,
+    "height": 5,
+    "hp": 1250,
+    "size": 190,
+    "cost": { "supplies": 2200, "power": 2 },
+    "buildTime": 24,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "mw_patrol_tower": {
+    "name": "Patrol Tower",
+    "width": 2,
+    "height": 2,
+    "hp": 420,
+    "size": 70,
+    "weapon": "mw_carbine",
+    "cost": { "supplies": 800, "power": 1 },
+    "buildTime": 12,
+    "model": "arrow_tower",
+    "armorType": "structure",
+    "canTargetGround": true,
+    "canTargetAir": false
+  }
+}

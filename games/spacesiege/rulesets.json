@@ -1,0 +1,31 @@
+{
+  "spacesiege_rules": {
+    "name": "SpaceSiege Rules",
+    "summary": "Fast sci-fi economy with mineral crystals, vapor gas, supply capacity, shields, air units, and energy-based powers.",
+    "resources": {
+      "minerals": { "name": "Minerals", "storage": "stockpile", "defaultStartingAmount": 50, "gatherable": true },
+      "vapor": { "name": "Vapor Gas", "storage": "stockpile", "defaultStartingAmount": 0, "gatherable": true },
+      "supply": { "name": "Supply", "storage": "capacity", "defaultStartingAmount": 10, "gatherable": false },
+      "energy": { "name": "Energy", "storage": "unit_pool", "defaultStartingAmount": 0, "gatherable": false }
+    },
+    "damageTypes": {
+      "kinetic": { "name": "Kinetic", "modifiers": { "light": 1.1, "armored": 0.85, "structure": 0.8 } },
+      "plasma": { "name": "Plasma", "modifiers": { "shielded": 1.25, "armored": 1.0, "air": 0.85 } },
+      "explosive": { "name": "Explosive", "modifiers": { "armored": 1.25, "structure": 1.1, "light": 0.75 } }
+    },
+    "armorTags": {
+      "light": { "name": "Light" },
+      "armored": { "name": "Armored" },
+      "shielded": { "name": "Shielded" },
+      "air": { "name": "Air" },
+      "structure": { "name": "Structure" }
+    },
+    "effectTypes": {
+      "damage": { "name": "Damage" },
+      "shield": { "name": "Shield" },
+      "cloak": { "name": "Cloak" },
+      "teleport": { "name": "Teleport" },
+      "summon": { "name": "Warp In" }
+    }
+  }
+}

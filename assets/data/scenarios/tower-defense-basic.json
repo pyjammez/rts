@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "tower-defense-basic",
+  "modeId": "tower_defense",
+  "name": "Basic Tower Defense",
+  "summary": "A simple defense-pass setup with early waves and a small defending force.",
+  "map": {
+    "style": "defense_pass",
+    "size": "default_large"
+  },
+  "players": [
+    { "slot": 1, "controller": "human", "team": "red" },
+    { "slot": 2, "controller": "ai", "team": "blue", "strategy": "rush" }
+  ],
+  "startingRoster": {
+    "king": 1,
+    "worker": 2,
+    "soldier": 2,
+    "archer": 2
+  },
+  "waves": {
+    "count": 10,
+    "pathComplexity": 55
+  },
+  "resources": {
+    "gold": 250,
+    "wood": 220,
+    "stone": 0,
+    "food": 0
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "spacesiege",
+  "name": "SpaceSiege",
+  "description": "Original sci-fi RTS sample package showing how a StarCraft-like ruleset can be expressed as static data without copying names or lore.",
+  "version": "0.1.0",
+  "engineVersion": "0.2.0",
+  "author": "Open RTS",
+  "license": "CC0-1.0",
+  "homepage": "https://example.com/open-rts/spacesiege",
+  "mergeMode": "merge",
+  "dependencies": [],
+  "conflicts": [],
+  "provides": ["sci_fi_rts"],
+  "tags": ["sci-fi", "asymmetric", "sample", "static-hosted"],
+  "files": {
+    "rulesets": "rulesets.json",
+    "factions": "factions.json",
+    "units": "units.json",
+    "buildings": "buildings.json",
+    "weapons": "weapons.json",
+    "terrainPresets": "terrain-presets.json",
+    "modes": "game-modes.json"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "modern_warlord_rules": {
+    "name": "ModernWarlord Rules",
+    "summary": "Modern base-building RTS economy using supply crates, power capacity, command rank, and vehicle/infantry armor tags.",
+    "resources": {
+      "supplies": { "name": "Supplies", "storage": "stockpile", "defaultStartingAmount": 10000, "gatherable": true },
+      "power": { "name": "Power", "storage": "capacity", "defaultStartingAmount": 0, "gatherable": false },
+      "command_rank": { "name": "Command Rank", "storage": "tech_pool", "defaultStartingAmount": 0, "gatherable": false }
+    },
+    "damageTypes": {
+      "rifle": { "name": "Rifle", "modifiers": { "infantry": 1.2, "vehicle": 0.3, "structure": 0.25 } },
+      "cannon": { "name": "Cannon", "modifiers": { "vehicle": 1.2, "structure": 1.0, "infantry": 0.55 } },
+      "rocket": { "name": "Rocket", "modifiers": { "vehicle": 1.1, "air": 1.35, "structure": 0.9 } }
+    },
+    "armorTags": {
+      "infantry": { "name": "Infantry" },
+      "vehicle": { "name": "Vehicle" },
+      "air": { "name": "Air" },
+      "structure": { "name": "Structure" }
+    },
+    "effectTypes": {
+      "damage": { "name": "Damage" },
+      "reveal": { "name": "Satellite Scan" },
+      "airstrike": { "name": "Airstrike" }
+    }
+  }
+}

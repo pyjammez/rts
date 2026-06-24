@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "contentVersion": "0.2.0",
+  "name": "Open RTS Core Content",
+  "description": "Authoritative browser-loadable data files for the default Open RTS content set.",
+  "files": {
+    "abilities": "assets/data/abilities.json",
+    "weapons": "assets/data/weapons.json",
+    "rulesets": "assets/data/rulesets.json",
+    "factions": "assets/data/factions.json",
+    "units": "assets/data/units.json",
+    "unitPacks": "assets/data/unit-packs.json",
+    "buildings": "assets/data/buildings.json",
+    "assets": "assets/data/assets.json",
+    "terrainPresets": "assets/data/terrain-presets.json",
+    "modes": "assets/data/game-modes.json"
+  },
+  "required": ["abilities", "weapons", "rulesets", "factions", "units", "buildings", "terrainPresets", "modes"],
+  "optional": ["unitPacks", "assets"]
+}

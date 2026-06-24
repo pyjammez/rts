@@ -1,0 +1,52 @@
+{
+  "dc_rifle": {
+    "name": "Service Rifle",
+    "damage": 7,
+    "movingDamage": 4,
+    "range": 175,
+    "stopRange": 205,
+    "fireRate": 2.2,
+    "projectileSpeed": 520,
+    "projectileColor": "#ffd27a",
+    "projectileType": "bullet",
+    "damageType": "small_arms"
+  },
+  "dc_tank_cannon": {
+    "name": "Tank Cannon",
+    "damage": 34,
+    "movingDamage": 18,
+    "range": 220,
+    "stopRange": 255,
+    "fireRate": 0.55,
+    "projectileSpeed": 360,
+    "projectileColor": "#f4d48c",
+    "projectileType": "shell",
+    "splashRadius": 24,
+    "damageType": "cannon"
+  },
+  "dc_rocket": {
+    "name": "Guided Rocket",
+    "damage": 28,
+    "movingDamage": 16,
+    "range": 240,
+    "stopRange": 270,
+    "fireRate": 0.75,
+    "projectileSpeed": 270,
+    "projectileColor": "#d8d3bd",
+    "projectileType": "rocket",
+    "damageType": "missile"
+  },
+  "dc_artillery": {
+    "name": "Artillery Shell",
+    "damage": 48,
+    "movingDamage": 20,
+    "range": 330,
+    "stopRange": 365,
+    "fireRate": 0.28,
+    "projectileSpeed": 190,
+    "projectileColor": "#cfb07a",
+    "projectileType": "grenade",
+    "splashRadius": 90,
+    "damageType": "explosive"
+  }
+}

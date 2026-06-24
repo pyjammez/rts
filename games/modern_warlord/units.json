@@ -1,0 +1,62 @@
+{
+  "mw_dozer": {
+    "name": "Construction Dozer",
+    "hp": 165,
+    "speed": 88,
+    "size": 25,
+    "weapon": "mw_carbine",
+    "role": "Mobile construction unit",
+    "cost": { "supplies": 1000 },
+    "trainTime": 10,
+    "model": "worker",
+    "era": "modern",
+    "armorType": "vehicle",
+    "tags": ["vehicle", "builder"]
+  },
+  "mw_rifleman": {
+    "name": "Rifleman",
+    "hp": 88,
+    "speed": 108,
+    "size": 18,
+    "weapon": "mw_carbine",
+    "role": "Basic infantry",
+    "cost": { "supplies": 225 },
+    "trainTime": 5,
+    "model": "gunman",
+    "era": "modern",
+    "armorType": "infantry",
+    "tags": ["infantry", "ranged"]
+  },
+  "mw_tank": {
+    "name": "Assault Tank",
+    "hp": 310,
+    "speed": 78,
+    "size": 30,
+    "weapon": "mw_tank_cannon",
+    "role": "Main battle vehicle",
+    "cost": { "supplies": 900 },
+    "trainTime": 14,
+    "model": "knight",
+    "era": "modern",
+    "armorType": "vehicle",
+    "tags": ["vehicle", "armored"]
+  },
+  "mw_gunship": {
+    "name": "Gunship",
+    "hp": 150,
+    "speed": 150,
+    "size": 24,
+    "weapon": "mw_launcher",
+    "role": "Light aircraft",
+    "cost": { "supplies": 1200 },
+    "trainTime": 18,
+    "model": "balloon",
+    "era": "modern",
+    "movementType": "air",
+    "flightHeight": 2.3,
+    "armorType": "air",
+    "tags": ["air", "vehicle"],
+    "canTargetAir": true,
+    "canTargetGround": true
+  }
+}

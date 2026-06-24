@@ -1,0 +1,32 @@
+{
+  "battleforge_versus": {
+    "shortName": "BattleForge",
+    "name": "BattleForge Versus",
+    "summary": "Fantasy forest skirmish with gold, lumber, food capacity, and early melee/ranged units.",
+    "playable": true,
+    "startLabel": "Create BattleForge Room",
+    "teams": ["blue", "red"],
+    "allowedUnits": ["bf_peasant", "bf_footman", "bf_ranger", "bf_mage"],
+    "defaults": {
+      "enabledUnits": ["bf_peasant", "bf_footman", "bf_ranger", "bf_mage"],
+      "mapStyle": "enchanted_forest",
+      "mapSize": "default_large",
+      "waterLevel": 8,
+      "rockCount": 16,
+      "treeCount": 90,
+      "sheepCount": 8,
+      "duckCount": 3,
+      "goldMineCount": 6,
+      "houseCount": 4,
+      "startingGold": 500,
+      "startingWood": 150,
+      "startingFood": 0,
+      "playersPerTeam": 1,
+      "playerCount": 2,
+      "homesPerTeam": 1,
+      "towersPerTeam": 0,
+      "unitRoster": { "bf_peasant": 5, "bf_footman": 0, "bf_ranger": 0, "bf_mage": 0 }
+    },
+    "sections": ["map", "forces", "wildlife"]
+  }
+}

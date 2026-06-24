@@ -1,0 +1,39 @@
+{
+  "mw_carbine": {
+    "name": "Carbine",
+    "damage": 7,
+    "movingDamage": 4,
+    "range": 175,
+    "stopRange": 205,
+    "fireRate": 2,
+    "projectileSpeed": 520,
+    "projectileColor": "#ffd27a",
+    "projectileType": "bullet",
+    "damageType": "rifle"
+  },
+  "mw_tank_cannon": {
+    "name": "Tank Cannon",
+    "damage": 36,
+    "movingDamage": 18,
+    "range": 225,
+    "stopRange": 260,
+    "fireRate": 0.55,
+    "projectileSpeed": 360,
+    "projectileColor": "#f1d48b",
+    "projectileType": "shell",
+    "splashRadius": 24,
+    "damageType": "cannon"
+  },
+  "mw_launcher": {
+    "name": "Rocket Launcher",
+    "damage": 28,
+    "movingDamage": 15,
+    "range": 245,
+    "stopRange": 280,
+    "fireRate": 0.75,
+    "projectileSpeed": 280,
+    "projectileColor": "#d9d4bd",
+    "projectileType": "rocket",
+    "damageType": "rocket"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "spacesiege_versus": {
+    "shortName": "SpaceSiege",
+    "name": "SpaceSiege Versus",
+    "summary": "Small sci-fi skirmish preset with crystals, vapor gas, supply, and early ranged units.",
+    "playable": true,
+    "startLabel": "Create SpaceSiege Room",
+    "teams": ["cyan", "purple"],
+    "allowedUnits": ["ss_probe", "ss_marine", "ss_dragoon", "ss_interceptor"],
+    "defaults": {
+      "enabledUnits": ["ss_probe", "ss_marine", "ss_dragoon", "ss_interceptor"],
+      "mapStyle": "crystal_frontier",
+      "mapSize": "default_large",
+      "waterLevel": 2,
+      "rockCount": 28,
+      "treeCount": 0,
+      "sheepCount": 0,
+      "duckCount": 0,
+      "goldMineCount": 12,
+      "houseCount": 0,
+      "startingGold": 50,
+      "startingWood": 0,
+      "startingFood": 0,
+      "playersPerTeam": 1,
+      "playerCount": 2,
+      "homesPerTeam": 1,
+      "towersPerTeam": 0,
+      "unitRoster": {
+        "ss_probe": 4,
+        "ss_marine": 0,
+        "ss_dragoon": 0,
+        "ss_interceptor": 0
+      }
+    },
+    "sections": ["map", "forces"]
+  }
+}

@@ -14,6 +14,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (typeof loadGameDefinitions === 'function') {
     await loadGameDefinitions();
   }
+  if (OpenRTS.config.assets?.loadAssetManifest) {
+    await OpenRTS.config.assets.loadAssetManifest();
+  }
+  if (OpenRTS.config.scenarios?.loadScenarios) {
+    await OpenRTS.config.scenarios.loadScenarios();
+  }
   initGameScreens();
 });
 

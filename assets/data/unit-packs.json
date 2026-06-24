@@ -1,0 +1,116 @@
+{
+  "frontier_eras": {
+    "name": "Frontier Eras Sample Pack",
+    "summary": "Example moddable units across ancient, medieval, modern, future, and fantasy themes.",
+    "units": {
+      "cave_clubber": {
+        "name": "Cave Clubber",
+        "hp": 118,
+        "speed": 92,
+        "size": 22,
+        "weapon": "sword",
+        "role": "Slow ancient bruiser",
+        "model": "soldier",
+        "era": "ancient",
+        "tags": ["caveman", "melee", "starter"],
+        "abilities": ["bash"]
+      },
+      "cave_slinger": {
+        "name": "Cave Slinger",
+        "hp": 66,
+        "speed": 106,
+        "size": 18,
+        "weapon": "sling",
+        "role": "Primitive ranged skirmisher",
+        "model": "scout",
+        "era": "ancient",
+        "tags": ["caveman", "ranged"],
+        "canTargetAir": true
+      },
+      "medieval_spearman": {
+        "name": "Spearman",
+        "hp": 106,
+        "speed": 96,
+        "size": 20,
+        "weapon": "lance",
+        "role": "Reach infantry for holding lines",
+        "model": "soldier",
+        "era": "medieval",
+        "tags": ["melee", "anti-cavalry"]
+      },
+      "modern_rifleman": {
+        "name": "Rifleman",
+        "hp": 88,
+        "speed": 104,
+        "size": 19,
+        "weapon": "pistol",
+        "damage": 12,
+        "range": 190,
+        "role": "Modern line infantry",
+        "model": "gunman",
+        "era": "modern",
+        "tags": ["gunpowder", "ranged"],
+        "canTargetAir": true
+      },
+      "field_medic": {
+        "name": "Field Medic",
+        "hp": 70,
+        "speed": 112,
+        "size": 18,
+        "weapon": "sling",
+        "damage": 2,
+        "role": "Support unit placeholder for future healing rules",
+        "model": "worker",
+        "era": "modern",
+        "tags": ["support", "healer"],
+        "abilities": ["heal"]
+      },
+      "future_laser_trooper": {
+        "name": "Laser Trooper",
+        "hp": 96,
+        "speed": 110,
+        "size": 20,
+        "weapon": "crossbow",
+        "damage": 16,
+        "range": 215,
+        "projectileColor": "#85f7ff",
+        "projectileType": "bullet",
+        "role": "Future precision infantry",
+        "model": "crossbowman",
+        "era": "future",
+        "tags": ["energy", "ranged"],
+        "canTargetAir": true
+      },
+      "hover_scout": {
+        "name": "Hover Scout",
+        "hp": 72,
+        "speed": 164,
+        "size": 19,
+        "weapon": "shortbow",
+        "role": "Fast air unit for future scenarios",
+        "model": "balloon",
+        "era": "future",
+        "tags": ["air", "scout"],
+        "movementType": "air",
+        "flightHeight": 1.65,
+        "canTargetGround": true,
+        "canTargetAir": false
+      },
+      "fire_mage": {
+        "name": "Fire Mage",
+        "hp": 76,
+        "speed": 90,
+        "size": 19,
+        "weapon": "grenade",
+        "damage": 18,
+        "range": 150,
+        "projectileColor": "#ff7a2f",
+        "role": "Fantasy splash caster",
+        "model": "grenademan",
+        "era": "fantasy",
+        "tags": ["caster", "splash"],
+        "abilities": ["fireball"]
+      }
+    }
+  }
+}

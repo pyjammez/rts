@@ -1,8 +1,34 @@
 const tileSize = 32;
-const MAP_ROWS = 34;
-const MAP_COLS = 60;
+let MAP_ROWS = 34;
+let MAP_COLS = 60;
 let MAP_SEED = 0;
 const worldRuntime = OpenRTS.world.runtime.configure({ tileSize, rows: MAP_ROWS, columns: MAP_COLS });
+
+function registerWorldCollections() {
+  const collections = [
+    ['terrain', 'terrain tile rows'],
+    ['obstacles', 'obstacle tile rows'],
+    ['decorations', 'decoration tile rows'],
+    ['heights', 'height tile rows'],
+    ['sheep', 'wildlife sheep'],
+    ['ducks', 'wildlife ducks'],
+    ['horses', 'unmounted horses'],
+    ['items', 'carryable world items'],
+    ['goldMines', 'gold resource nodes'],
+    ['houses', 'neutral garrisonable houses'],
+    ['obstacleEntities', 'interactive obstacle entities'],
+    ['obstacleEntityGrid', 'obstacle entity lookup grid'],
+    ['buildings', 'team buildings']
+  ];
+  for (const [name, itemType] of collections) {
+    worldRuntime.registerCollection(name, {
+      itemType,
+      description: `Authoritative ${itemType} collection.`
+    });
+  }
+}
+
+registerWorldCollections();
 
 function replaceWorldCollection(name, value) {
   return worldRuntime.replace(name, value);
@@ -38,10 +64,20 @@ const DECOR = {
   RUIN_WALL: 4,
   STANDARD: 5,
   HUT: 6,
-  WELL: 7
+  WELL: 7,
+  HILL: 8,
+  DITCH: 9,
+  CLIFF: 10,
+  RAMP: 11
 };
 
-// Legacy alias kept for compatibility with older references.
+const HEIGHT = {
+  LOW: 0,
+  GROUND: 1,
+  HIGH: 2,
+  RAMP: 3
+};
+
 const TILE = {
   WATER: TERRAIN.WATER,
   SAND: TERRAIN.SAND,
@@ -52,45 +88,7 @@ const TILE = {
   SHRUB: OBSTACLE.SHRUB
 };
 
-const tileSprites = {
-  grass: new Image(),
-  dirt: new Image(),
-  sand: new Image(),
-  stone: new Image(),
-  transitions: {
-    'grass-dirt': new Image(),
-    'grass-sand': new Image(),
-    'dirt-grass': new Image(),
-    'dirt-sand': new Image(),
-    'sand-grass': new Image(),
-    'sand-dirt': new Image(),
-    'stone-grass': new Image(),
-    'stone-dirt': new Image(),
-    'stone-sand': new Image()
-  },
-  cobblestone: new Image(),
-  wall: new Image(),
-  wallDark: new Image(),
-  unit: new Image()
-};
-
-tileSprites.grass.src = 'assets/grass.png';
-tileSprites.sand.src = 'assets/sand.png';
-tileSprites.dirt.src = 'assets/dirt.png';
-tileSprites.stone.src = 'assets/stone.png';
-tileSprites.transitions['grass-dirt'].src = 'assets/grass-dirt.png';
-tileSprites.transitions['grass-sand'].src = 'assets/grass-sand.png';
-tileSprites.transitions['dirt-grass'].src = 'assets/dirt-grass.png';
-tileSprites.transitions['dirt-sand'].src = 'assets/dirt-sand.png';
-tileSprites.transitions['sand-grass'].src = 'assets/sand-grass.png';
-tileSprites.transitions['sand-dirt'].src = 'assets/sand-dirt.png';
-tileSprites.transitions['stone-grass'].src = 'assets/stone-grass.png';
-tileSprites.transitions['stone-dirt'].src = 'assets/stone-dirt.png';
-tileSprites.transitions['stone-sand'].src = 'assets/stone-sand.png';
-tileSprites.cobblestone.src = 'assets/cobblestone.png';
-tileSprites.wall.src = 'assets/wall.png';
-tileSprites.wallDark.src = 'assets/wall_dark.png';
-tileSprites.unit.src = 'assets/unit_sprites.svg';
+const tileSprites = OpenRTS.world.mapSprites.createTileSprites({ ImageCtor: Image });
 
 function hashNoise(x, y, seed = MAP_SEED) {
   return OpenRTS.world.terrain.hashNoise(x, y, seed);
@@ -109,6 +107,10 @@ function terrainName(terrainType) {
   if (terrainType === TERRAIN.SAND) return 'sand';
   if (terrainType === TERRAIN.DIRT) return 'dirt';
   return 'water';
+}
+
+function isVolcanicTerrain() {
+  return (window.mapConfig || mapConfig || {}).mapStyle === 'volcanic_lava';
 }
 
 function generateTerrainTile(x, y) {
@@ -135,12 +137,19 @@ function shuffleArray(arr) {
 let terrainData = replaceWorldCollection('terrain', []);
 let obstacleData = replaceWorldCollection('obstacles', []);
 let decorationData = replaceWorldCollection('decorations', []);
+let heightData = replaceWorldCollection('heights', []);
 let sheepData = replaceWorldCollection('sheep', []);
 let duckData = replaceWorldCollection('ducks', []);
 let horseData = replaceWorldCollection('horses', []);
 let itemData = replaceWorldCollection('items', []);
+let goldMineData = replaceWorldCollection('goldMines', []);
+let houseData = replaceWorldCollection('houses', []);
 let nextWildlifeId = 1;
 let nextWorldItemId = 1;
+let nextGoldMineId = 1;
+let nextHouseId = 1;
+let goldMineRevision = 0;
+let houseRevision = 0;
 let obstacleEntityData = replaceWorldCollection('obstacleEntities', []);
 let obstacleEntityGrid = replaceWorldCollection('obstacleEntityGrid', []);
 let obstacleRevision = 0;
@@ -152,6 +161,45 @@ let terrainRenderCtx = null;
 let terrainVisualCellSize = 2;
 let terrainVisualCols = 0;
 let terrainVisualTypes = [];
+let navigationService = null;
+
+function getNavigationService() {
+  if (!navigationService) {
+    navigationService = OpenRTS.world.navigation.createNavigationService({
+      tileSize,
+      terrainTypes: TERRAIN,
+      obstacleTypes: OBSTACLE,
+      decorTypes: DECOR,
+      heightLevels: HEIGHT,
+      getTerrainData: () => terrainData,
+      getObstacleData: () => obstacleData,
+      getDecorationData: () => decorationData,
+      getHeightData: () => heightData,
+      isTileBlockedByBuilding,
+      isVisualLandPoint,
+      getMapWidthPx,
+      getMapHeightPx
+    });
+  }
+  return navigationService;
+}
+
+function mapSizeDimensions(sizeId) {
+  if (sizeId === 'default_large') return { rows: 68, columns: 120 };
+  if (sizeId === 'small') return { rows: 26, columns: 44 };
+  if (sizeId === 'large') return { rows: 46, columns: 82 };
+  return { rows: 34, columns: 60 };
+}
+
+function configureMapDimensions(config = window.mapConfig || mapConfig || {}) {
+  const loaded = config.loadedMap && typeof config.loadedMap === 'object' ? config.loadedMap : null;
+  const saved = loaded?.rows && loaded?.columns
+    ? { rows: loaded.rows, columns: loaded.columns }
+    : mapSizeDimensions(config.mapBuilderSize || config.mapSize || 'medium');
+  MAP_ROWS = Math.max(16, Math.min(80, Math.floor(Number(saved.rows) || 34)));
+  MAP_COLS = Math.max(24, Math.min(120, Math.floor(Number(saved.columns) || 60)));
+  worldRuntime.configure({ tileSize, rows: MAP_ROWS, columns: MAP_COLS });
+}
 
 function computeTerrainThresholds() {
   mapConfig.terrain = OpenRTS.world.terrain.computeThresholds({
@@ -163,6 +211,7 @@ function computeTerrainThresholds() {
 }
 
 function regenerateMapData() {
+  configureMapDimensions(mapConfig);
   const seed = mapConfig.seed ?? OpenRTS.random.generateSeed();
   mapConfig.seed = seed;
   MAP_SEED = OpenRTS.random.setSeed(seed);
@@ -187,6 +236,10 @@ function regenerateMapData() {
 
   decorationData = replaceWorldCollection('decorations', Array.from({ length: MAP_ROWS }, () =>
     Array.from({ length: MAP_COLS }, () => DECOR.NONE)
+  ));
+
+  heightData = replaceWorldCollection('heights', Array.from({ length: MAP_ROWS }, () =>
+    Array.from({ length: MAP_COLS }, () => HEIGHT.GROUND)
   ));
 
   // Step 3: Collect candidate tiles
@@ -232,6 +285,8 @@ function regenerateMapData() {
   seedSheep();
   OpenRTS.systems.cooking.reset();
   seedDucks();
+  seedGoldMines();
+  seedHouses();
   horseData = replaceWorldCollection('horses', []);
   window.horseData = horseData;
   itemData = replaceWorldCollection('items', []);
@@ -240,6 +295,7 @@ function regenerateMapData() {
   rebuildObstacleEntities();
   buildingData = replaceWorldCollection('buildings', []);
   nextBuildingId = 1;
+  applyLoadedMapData(mapConfig.loadedMap);
   buildTerrainRenderCache();
   OpenRTS.events.emit(OpenRTS.events.types.WORLD_REGENERATED, {
     seed: MAP_SEED,
@@ -249,7 +305,192 @@ function regenerateMapData() {
   });
 }
 
+function applyLoadedMapData(savedMap) {
+  if (!savedMap || typeof savedMap !== 'object') return false;
+  if (!Array.isArray(savedMap.terrain) || !Array.isArray(savedMap.obstacles) || !Array.isArray(savedMap.decorations)) return false;
+  if (savedMap.terrain.length !== MAP_ROWS || savedMap.terrain[0]?.length !== MAP_COLS) return false;
+
+  terrainData = replaceWorldCollection('terrain', savedMap.terrain.map(row => row.map(value => Number(value) || TERRAIN.GRASS)));
+  obstacleData = replaceWorldCollection('obstacles', savedMap.obstacles.map(row => row.map(value => Number(value) || OBSTACLE.NONE)));
+  decorationData = replaceWorldCollection('decorations', savedMap.decorations.map(row => row.map(value => Number(value) || DECOR.NONE)));
+  const loadedHeights = Array.isArray(savedMap.heights) && savedMap.heights.length === MAP_ROWS && savedMap.heights[0]?.length === MAP_COLS
+    ? savedMap.heights
+    : Array.from({ length: MAP_ROWS }, () => Array.from({ length: MAP_COLS }, () => HEIGHT.GROUND));
+  heightData = replaceWorldCollection('heights', loadedHeights.map(row => row.map(value => {
+    const parsed = Number(value);
+    return Object.values(HEIGHT).includes(parsed) ? parsed : HEIGHT.GROUND;
+  })));
+  houseData = replaceWorldCollection('houses', []);
+  nextHouseId = 1;
+  for (const source of Array.isArray(savedMap.houses) ? savedMap.houses : []) {
+    const tileX = Math.max(0, Math.min(MAP_COLS - 2, Math.floor(Number(source.tileX) || 0)));
+    const tileY = Math.max(0, Math.min(MAP_ROWS - 2, Math.floor(Number(source.tileY) || 0)));
+    houseData.push(createNeutralHouse(tileX, tileY));
+  }
+  window.houseData = houseData;
+  houseRevision++;
+  rebuildObstacleEntities();
+  return true;
+}
+
+function touchEditedMap() {
+  obstacleRevision++;
+  houseRevision++;
+  buildTerrainRenderCache();
+}
+
+function paintMapBuilderTile(worldX, worldY, tool) {
+  const result = OpenRTS.world.mapBuilderRuntime.paintTile(worldX, worldY, {
+    tool,
+    tileSize,
+    terrain: TERRAIN,
+    obstacle: OBSTACLE,
+    decor: DECOR,
+    height: HEIGHT,
+    terrainData,
+    obstacleData,
+    decorationData,
+    heightData,
+    houses: houseData,
+    columns: MAP_COLS,
+    rows: MAP_ROWS,
+    createHouse: createNeutralHouse,
+    isInsideMap,
+    replaceHouses(nextHouses) {
+      houseData = replaceWorldCollection('houses', nextHouses);
+      window.houseData = houseData;
+    },
+    rebuildObstacles: rebuildObstacleEntities,
+    touchEditedMap
+  });
+  return !!result.changed;
+}
+
+function exportCurrentMapData(name = 'Custom Map') {
+  return OpenRTS.world.mapBuilderRuntime.exportMap({
+    id: `map-${Date.now()}`,
+    name,
+    rows: MAP_ROWS,
+    columns: MAP_COLS,
+    tileSize,
+    terrainData,
+    obstacleData,
+    decorationData,
+    heightData,
+    houses: houseData
+  });
+}
+
+function createNeutralHouse(tileX, tileY) {
+  const center = tileCenter(tileX, tileY);
+  return OpenRTS.world.objectFactories.houses.createNeutralHouse({
+    id: `house-${nextHouseId++}`,
+    tileX,
+    tileY,
+    x: center.x,
+    y: center.y,
+    tileSize,
+    onDestroyed: burnHouseNow
+  });
+}
+
+function seedHouses() {
+  houseData = replaceWorldCollection('houses', []);
+  nextHouseId = 1;
+  const desired = Math.max(0, Math.floor(Number(mapConfig.houseCount) || 0));
+  const candidates = [];
+  for (let y = 2; y < MAP_ROWS - 3; y++) {
+    for (let x = 2; x < MAP_COLS - 3; x++) {
+      let clear = true;
+      for (let yy = y; yy < y + 2 && clear; yy++) {
+        for (let xx = x; xx < x + 2; xx++) {
+          if (terrainData[yy][xx] === TERRAIN.WATER || obstacleData[yy][xx] !== OBSTACLE.NONE) clear = false;
+        }
+      }
+      if (clear) candidates.push({ x, y });
+    }
+  }
+  shuffleArray(candidates);
+  for (const site of candidates) {
+    if (houseData.length >= desired) break;
+    if (houseData.some(house => Math.hypot(house.tileX - site.x, house.tileY - site.y) < 7)) continue;
+    houseData.push(createNeutralHouse(site.x, site.y));
+  }
+  houseRevision++;
+  window.houseData = houseData;
+}
+
+function createGoldMine(tileX, tileY) {
+  const center = tileCenter(tileX, tileY);
+  const amount = 800 + Math.floor(hashNoise(tileX + 19, tileY + 31) * 300);
+  return OpenRTS.world.objectFactories.resources.createGoldMine({
+    id: `goldmine-${nextGoldMineId++}`,
+    tileX,
+    tileY,
+    x: center.x,
+    y: center.y,
+    tileSize,
+    amount,
+    onChanged: markGoldMinesDirty
+  });
+}
+
+function seedGoldMines() {
+  goldMineData = replaceWorldCollection('goldMines', []);
+  nextGoldMineId = 1;
+  const desired = Math.max(0, Math.floor(Number(mapConfig.goldMineCount) || 5));
+  const anchors = [
+    { x: 0.24, y: 0.32 },
+    { x: 0.24, y: 0.68 },
+    { x: 0.76, y: 0.32 },
+    { x: 0.76, y: 0.68 },
+    { x: 0.5, y: 0.22 },
+    { x: 0.5, y: 0.78 }
+  ];
+
+  for (let i = 0; i < desired; i++) {
+    const anchor = anchors[i % anchors.length];
+    const preferredX = Math.floor(anchor.x * MAP_COLS);
+    const preferredY = Math.floor(anchor.y * MAP_ROWS);
+    let best = null;
+    let bestScore = Infinity;
+    for (let y = 2; y < MAP_ROWS - 2; y++) {
+      for (let x = 2; x < MAP_COLS - 2; x++) {
+        if (terrainData[y][x] === TERRAIN.WATER) continue;
+        if (obstacleData[y][x] !== OBSTACLE.NONE) continue;
+        const tooClose = goldMineData.some(mine => Math.hypot(mine.tileX - x, mine.tileY - y) < 10);
+        if (tooClose) continue;
+        const score = Math.hypot(x - preferredX, y - preferredY) + hashNoise(x + i * 47, y + i * 83) * 3;
+        if (score < bestScore) {
+          best = { x, y };
+          bestScore = score;
+        }
+      }
+    }
+    if (best) goldMineData.push(createGoldMine(best.x, best.y));
+  }
+
+  goldMineRevision++;
+  window.goldMineData = goldMineData;
+}
+
 function terrainBaseColor(terrainType, shade) {
+  if (isVolcanicTerrain()) {
+    if (terrainType === TERRAIN.WATER) {
+      return `rgb(${Math.round(224 + shade * 20)}, ${Math.round(68 + shade * 18)}, ${Math.round(18 + shade * 8)})`;
+    }
+
+    if (terrainType === TERRAIN.SAND) {
+      return `rgb(${Math.round(74 + shade * 18)}, ${Math.round(69 + shade * 16)}, ${Math.round(63 + shade * 14)})`;
+    }
+
+    if (terrainType === TERRAIN.DIRT) {
+      return `rgb(${Math.round(47 + shade * 16)}, ${Math.round(45 + shade * 14)}, ${Math.round(43 + shade * 12)})`;
+    }
+
+    return `rgb(${Math.round(58 + shade * 22)}, ${Math.round(60 + shade * 20)}, ${Math.round(58 + shade * 18)})`;
+  }
+
   if (terrainType === TERRAIN.WATER) {
     const blue = Math.round(103 + shade * 22);
     return `rgb(${Math.round(47 + shade * 12)}, ${Math.round(112 + shade * 22)}, ${blue + 35})`;
@@ -275,17 +516,19 @@ function drawCachedTerrainCell(cacheCtx, terrainType, x, y, size) {
   cacheCtx.fillRect(x, y, size, size);
 
   if (terrainType === TERRAIN.GRASS && fine > 0.22) {
-    cacheCtx.fillStyle = 'rgba(208, 189, 98, 0.1)';
+    cacheCtx.fillStyle = isVolcanicTerrain() ? 'rgba(170, 160, 145, 0.08)' : 'rgba(208, 189, 98, 0.1)';
     cacheCtx.fillRect(x, y, size, size);
   }
 
   if (terrainType === TERRAIN.WATER && fine > 0.18) {
-    cacheCtx.fillStyle = 'rgba(166, 212, 229, 0.11)';
+    cacheCtx.fillStyle = isVolcanicTerrain() ? 'rgba(255, 205, 68, 0.22)' : 'rgba(166, 212, 229, 0.11)';
     cacheCtx.fillRect(x, y, size, Math.max(1, size * 0.5));
   }
 
   if (terrainType === TERRAIN.SAND && fine > 0.1) {
-    cacheCtx.fillStyle = fine > 0.28
+    cacheCtx.fillStyle = isVolcanicTerrain()
+      ? (fine > 0.28 ? 'rgba(20, 18, 17, 0.18)' : 'rgba(145, 135, 120, 0.08)')
+      : fine > 0.28
       ? 'rgba(115, 83, 42, 0.13)'
       : 'rgba(255, 238, 173, 0.12)';
     cacheCtx.fillRect(x, y, size, size);
@@ -649,31 +892,15 @@ function getLiveHorsesNearPoint(worldX, worldY, radius) {
 }
 
 function createWorldItem(item, x, y) {
-  return {
+  return OpenRTS.world.objectFactories.items.createWorldItem({
     id: nextWorldItemId++,
-    itemId: item?.id || 'field_kit',
+    item,
     x,
     y,
-    team: 'neutral',
-    objectType: 'item',
-    displayName: item?.name || 'Field Kit',
-    description: item?.description || 'A compact battlefield supply kit.',
-    hp: 12,
-    maxHp: 12,
-    size: 20,
-    pickupable: true,
-    isPickedUp: false,
-    isDead: false,
-    selected: false,
-    takeDamage(amount) {
-      this.hp = Math.max(0, this.hp - amount);
-      if (this.hp <= 0) {
-        this.isDead = true;
-        this.selected = false;
-        if (selectedWorldObject === this) selectedWorldObject = null;
-      }
+    onDestroyed(worldItem) {
+      if (selectedWorldObject === worldItem) selectedWorldObject = null;
     }
-  };
+  });
 }
 
 function dropWorldItem(item, worldX, worldY) {
@@ -695,18 +922,9 @@ function removeWorldItem(item) {
 }
 
 function getWorldItemAtPoint(worldX, worldY) {
-  if (!Array.isArray(itemData)) return null;
-  let closest = null;
-  let closestDistance = Infinity;
-  for (const item of itemData) {
-    if (item.isDead || item.isPickedUp) continue;
-    const distance = Math.hypot(item.x - worldX, item.y - worldY);
-    if (distance <= item.size && distance < closestDistance) {
-      closest = item;
-      closestDistance = distance;
-    }
-  }
-  return closest;
+  return OpenRTS.world.hitTests.nearestCircleAtPoint(itemData, worldX, worldY, {
+    include: item => !item.isDead && !item.isPickedUp
+  });
 }
 
 function getNearestPickupItem(worldX, worldY, radius = 80) {
@@ -757,41 +975,27 @@ function rebuildObstacleEntities() {
       if (obstacleType !== OBSTACLE.TREE && obstacleType !== OBSTACLE.ROCK) continue;
       const center = tileCenter(tileX, tileY);
       const isTree = obstacleType === OBSTACLE.TREE;
-      const maxHp = isTree ? 120 : 220;
-      const obstacle = {
+      const obstacle = OpenRTS.world.objectFactories.obstacles.createObstacle({
         id: `obstacle-${tileX}-${tileY}`,
-        objectType: 'obstacle',
         obstacleType,
         tileX,
         tileY,
         x: center.x,
         y: center.y,
-        size: tileSize * (isTree ? 1.35 : 1.05),
+        tileSize,
+        isTree,
         displayName: obstacleSpecies(obstacleType, tileX, tileY),
         description: isTree
           ? 'A mature natural obstacle providing cover and blocking movement.'
           : 'A dense formation of weathered stone that blocks movement.',
-        material: isTree ? 'Wood' : 'Stone',
-        hardness: isTree ? 'Medium' : 'Very high',
-        team: 'neutral',
-        pickupable: true,
-        isPickedUp: false,
-        hp: maxHp,
-        maxHp,
-        selected: false,
-        isDead: false,
-        takeDamage(amount) {
-          this.hp = Math.max(0, this.hp - amount);
-          if (this.hp <= 0) this.die();
-        },
-        die() {
-          this.isDead = true;
-          this.selected = false;
-          if (isInsideMap(this.tileX, this.tileY)) obstacleData[this.tileY][this.tileX] = OBSTACLE.NONE;
-          if (selectedWorldObject === this) selectedWorldObject = null;
+        onDestroyed(deadObstacle) {
+          if (isInsideMap(deadObstacle.tileX, deadObstacle.tileY)) {
+            obstacleData[deadObstacle.tileY][deadObstacle.tileX] = OBSTACLE.NONE;
+          }
+          if (selectedWorldObject === deadObstacle) selectedWorldObject = null;
           obstacleRevision++;
         }
-      };
+      });
       obstacleEntityData.push(obstacle);
       obstacleEntityGrid[tileY][tileX] = obstacle;
     }
@@ -802,34 +1006,122 @@ function rebuildObstacleEntities() {
 }
 
 function getObstacleAtPoint(worldX, worldY) {
-  if (!Array.isArray(obstacleEntityData)) return null;
-  let closest = null;
-  let closestDist = Infinity;
-  for (const obstacle of obstacleEntityData) {
-    if (obstacle.isDead || obstacle.isPickedUp) continue;
-    const dist = Math.hypot(obstacle.x - worldX, obstacle.y - worldY);
-    if (dist <= obstacle.size && dist < closestDist) {
-      closest = obstacle;
-      closestDist = dist;
+  return OpenRTS.world.hitTests.nearestCircleAtPoint(obstacleEntityData, worldX, worldY, {
+    include: obstacle => !obstacle.isDead && !obstacle.isPickedUp
+  });
+}
+
+function getGoldMineAtPoint(worldX, worldY) {
+  return OpenRTS.world.hitTests.nearestCircleAtPoint(goldMineData, worldX, worldY, {
+    include: mine => !mine.isDead
+  });
+}
+
+function getGoldMines() {
+  return Array.isArray(goldMineData) ? goldMineData : [];
+}
+
+function markGoldMinesDirty() {
+  goldMineRevision++;
+}
+
+function getGoldMineRevision() {
+  return goldMineRevision;
+}
+
+function getHouses() {
+  return Array.isArray(houseData) ? houseData : [];
+}
+
+function getHouseRevision() {
+  return houseRevision;
+}
+
+function markHousesDirty() {
+  houseRevision++;
+}
+
+function getHouseAtPoint(worldX, worldY) {
+  return OpenRTS.world.hitTests.nearestCircleAtPoint(houseData, worldX, worldY, {
+    include: house => !house.isDead || house.isWreck
+  });
+}
+
+function getHouseById(id) {
+  return getHouses().find(house => String(house.id) === String(id)) || null;
+}
+
+function isPointInsideHouse(house, worldX, worldY) {
+  return OpenRTS.world.houseInteractions.isPointInside(house, worldX, worldY, tileSize);
+}
+
+function getHouseDoorPoint(house) {
+  return OpenRTS.world.houseInteractions.doorPoint(house, tileSize);
+}
+
+function commandUnitIntoHouse(unit, house, append = false) {
+  return OpenRTS.world.houseInteractions.commandEnter(unit, house, { append, tileSize });
+}
+
+function commandUnitOutOfHouse(unit, worldX = null, worldY = null, append = false) {
+  return OpenRTS.world.houseInteractions.commandExit(unit, {
+    worldX,
+    worldY,
+    append,
+    tileSize,
+    getHouseById,
+    findNearestWalkablePoint,
+    markDirty: markHousesDirty
+  });
+}
+
+function burnHouseNow(house) {
+  return OpenRTS.world.houseInteractions.burnNow(house, {
+    units,
+    tileSize,
+    getHouseById,
+    findNearestWalkablePoint,
+    markDirty: markHousesDirty,
+    onDeselected(deadHouse) {
+      if (selectedWorldObject === deadHouse) selectedWorldObject = null;
+      OpenRTS.world.selection.channel('worldObjects').clearIfSelected(deadHouse);
     }
-  }
-  return closest;
+  });
+}
+
+function startBurningHouse(house) {
+  return OpenRTS.world.houseInteractions.startBurning(house, { markDirty: markHousesDirty });
+}
+
+function updateHouses(dt) {
+  OpenRTS.world.houseInteractions.updateBurning(dt, {
+    houses: getHouses(),
+    units,
+    tileSize,
+    getHouseById,
+    findNearestWalkablePoint,
+    markDirty: markHousesDirty,
+    onDeselected(deadHouse) {
+      if (selectedWorldObject === deadHouse) selectedWorldObject = null;
+      OpenRTS.world.selection.channel('worldObjects').clearIfSelected(deadHouse);
+    }
+  });
+}
+
+function updateHouseUnitInteractions() {
+  OpenRTS.world.houseInteractions.updateUnitInteractions({
+    units,
+    tileSize,
+    markDirty: markHousesDirty
+  });
 }
 
 function getNearestCarryableObject(worldX, worldY, radius = 90) {
-  let closest = getNearestPickupItem(worldX, worldY, radius);
-  let closestDistance = closest ? Math.hypot(closest.x - worldX, closest.y - worldY) : Infinity;
-
-  for (const obstacle of obstacleEntityData) {
-    if (obstacle.isDead || obstacle.isPickedUp || !obstacle.pickupable) continue;
-    const distance = Math.hypot(obstacle.x - worldX, obstacle.y - worldY);
-    const reach = radius + obstacle.size * 0.5;
-    if (distance <= reach && distance < closestDistance) {
-      closest = obstacle;
-      closestDistance = distance;
-    }
-  }
-  return closest;
+  return OpenRTS.world.carryables.findNearestCarryableObject(worldX, worldY, {
+    radius,
+    items: itemData,
+    obstacles: obstacleEntityData
+  });
 }
 
 function removeCarryableWorldObject(object) {
@@ -847,32 +1139,23 @@ function removeCarryableWorldObject(object) {
 }
 
 function canDropObstacleAt(tileX, tileY) {
-  if (!isInsideMap(tileX, tileY)) return false;
-  if (terrainData[tileY][tileX] === TERRAIN.WATER) return false;
-  if (obstacleData[tileY][tileX] !== OBSTACLE.NONE) return false;
-  if (isTileBlockedByBuilding(tileX, tileY)) return false;
-
-  const center = tileCenter(tileX, tileY);
-  if (Array.isArray(units) && units.some(unit =>
-    !unit.isDead && Math.hypot(unit.x - center.x, unit.y - center.y) < tileSize * 0.72
-  )) return false;
-  return true;
+  return OpenRTS.world.carryables.canDropObstacleAt(tileX, tileY, {
+    isInsideMap,
+    isWaterTile: (x, y) => terrainData[y]?.[x] === TERRAIN.WATER,
+    hasObstacle: (x, y) => obstacleData[y]?.[x] !== OBSTACLE.NONE,
+    isBlockedByBuilding: (x, y) => isTileBlockedByBuilding(x, y),
+    tileCenter,
+    tileSize,
+    units
+  });
 }
 
 function findObstacleDropTile(worldX, worldY) {
-  const originX = Math.floor(worldX / tileSize);
-  const originY = Math.floor(worldY / tileSize);
-  for (let radius = 0; radius <= 5; radius++) {
-    for (let offsetY = -radius; offsetY <= radius; offsetY++) {
-      for (let offsetX = -radius; offsetX <= radius; offsetX++) {
-        if (radius > 0 && Math.max(Math.abs(offsetX), Math.abs(offsetY)) !== radius) continue;
-        const tileX = originX + offsetX;
-        const tileY = originY + offsetY;
-        if (canDropObstacleAt(tileX, tileY)) return { tileX, tileY };
-      }
-    }
-  }
-  return null;
+  return OpenRTS.world.carryables.findObstacleDropTile(worldX, worldY, {
+    tileSize,
+    maxRadius: 5,
+    canDrop: canDropObstacleAt
+  });
 }
 
 function dropCarriedObstacle(item, worldX, worldY) {
@@ -894,24 +1177,22 @@ function getObstacleRevision() {
 }
 
 function clearWorldObjectSelection() {
-  if (selectedWorldObject) selectedWorldObject.selected = false;
+  OpenRTS.world.selection.channel('worldObjects').clear();
   selectedWorldObject = null;
 }
 
 function selectWorldObject(object) {
-  clearWorldObjectSelection();
-  if (!object || object.isDead) return;
-  object.selected = true;
-  selectedWorldObject = object;
+  selectedWorldObject = OpenRTS.world.selection.channel('worldObjects').select(object);
 }
 
 function getSelectedWorldObject() {
-  return selectedWorldObject && !selectedWorldObject.isDead ? selectedWorldObject : null;
+  selectedWorldObject = OpenRTS.world.selection.channel('worldObjects').get();
+  return selectedWorldObject;
 }
 
 const BUILDING_TYPES = {
-  HOME: 'home',
-  TOWER: 'tower'
+  HOME: OpenRTS.world.buildingTypes?.HOME || 'home',
+  TOWER: OpenRTS.world.buildingTypes?.TOWER || 'tower'
 };
 
 const BUILDING_STATS = {
@@ -921,37 +1202,15 @@ const BUILDING_STATS = {
 
 function createBuilding(type, team, tileX, tileY) {
   const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
-  const building = {
+  const building = OpenRTS.world.objectFactories.buildings.createBuilding({
     id: nextBuildingId++,
     type,
     team,
     tileX,
     tileY,
-    width: stats.width,
-    height: stats.height,
-    x: (tileX + stats.width * 0.5) * tileSize,
-    y: (tileY + stats.height * 0.5) * tileSize,
-    hp: stats.hp,
-    maxHp: stats.hp,
-    size: stats.size,
-    displayName: stats.name || type,
-    range: stats.range || 0,
-    damage: stats.damage || 0,
-    attackCooldown: stats.attackCooldown || 1,
-    projectileSpeed: stats.projectileSpeed || 260,
-    projectileColor: stats.projectileColor || null,
-    upgradeLevel: 0,
-    maxUpgradeLevel: 3,
-    selected: false,
-    isDead: false,
-    takeDamage(amount) {
-      this.hp = Math.max(0, this.hp - amount);
-      if (this.hp <= 0) {
-        this.isDead = true;
-        this.selected = false;
-      }
-    }
-  };
+    tileSize,
+    stats
+  });
   buildingData.push(building);
   window.buildingData = buildingData;
   return building;
@@ -977,92 +1236,78 @@ function isTileBlockedByBuilding(tileX, tileY, ignoredBuilding = null) {
 }
 
 function isCastlePassageTile(building, tileX, tileY) {
-  if (!building || building.type !== BUILDING_TYPES.HOME) return false;
-  const localX = tileX - building.tileX;
-  const localY = tileY - building.tileY;
-  return localX >= 0 && localX < building.width && localY >= 0 && localY < building.height;
+  return OpenRTS.world.castleGeometry.isPassageTile(building, tileX, tileY, {
+    homeType: BUILDING_TYPES.HOME
+  });
 }
 
 function canPlaceBuildingAt(type, tileX, tileY) {
   const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
+  return OpenRTS.world.buildingPlacement.canPlaceAt(type, tileX, tileY, {
+    stats,
+    homeType: BUILDING_TYPES.HOME,
+    isInsideMap,
+    isWaterTile: (x, y) => terrainData[y]?.[x] === TERRAIN.WATER,
+    hasObstacle: (x, y) => obstacleData[y]?.[x] !== OBSTACLE.NONE,
+    hasGoldMine: (x, y) => goldMineData.some(mine => !mine.isDead && mine.tileX === x && mine.tileY === y),
+    hasHouse: (x, y) => houseData.some(house => !house.isWreck && x >= house.tileX && x < house.tileX + house.width && y >= house.tileY && y < house.tileY + house.height),
+    isBlockedByBuilding: (x, y) => isTileBlockedByBuilding(x, y)
+  });
+}
 
-  for (let y = tileY; y < tileY + stats.height; y++) {
-    for (let x = tileX; x < tileX + stats.width; x++) {
-      if (!isInsideMap(x, y)) return false;
-      if (terrainData[y][x] === TERRAIN.WATER) return false;
-      if (obstacleData[y][x] !== OBSTACLE.NONE) return false;
-      if (isTileBlockedByBuilding(x, y)) return false;
-    }
-  }
+function findNearestBuildableSite(type, worldX, worldY, radiusTiles = 8) {
+  const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
+  return OpenRTS.world.buildingPlacement.findNearestBuildableSite(type, worldX, worldY, {
+    stats,
+    tileSize,
+    radiusTiles,
+    canPlace: canPlaceBuildingAt
+  });
+}
 
-  // Castles need a clear, three-tile-wide apron so groups can actually use
-  // the gate after spawning inside the courtyard.
-  if (type === BUILDING_TYPES.HOME) {
-    const gateTileX = tileX + Math.floor(stats.width * 0.5);
-    for (let y = tileY + stats.height; y <= tileY + stats.height + 1; y++) {
-      for (let x = gateTileX - 1; x <= gateTileX + 1; x++) {
-        if (!isInsideMap(x, y)) return false;
-        if (terrainData[y][x] === TERRAIN.WATER) return false;
-        if (obstacleData[y][x] !== OBSTACLE.NONE) return false;
-        if (isTileBlockedByBuilding(x, y)) return false;
-      }
-    }
-  }
-
-  return true;
+function buildBuildingAtTile(type, team, tileX, tileY) {
+  if (!canPlaceBuildingAt(type, tileX, tileY)) return null;
+  prepareBuildingPad(type, tileX, tileY);
+  if (!canPlaceBuildingAt(type, tileX, tileY)) return null;
+  return createBuilding(type, team, tileX, tileY);
 }
 
 function prepareBuildingPad(type, tileX, tileY) {
   const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
-  const gateTileX = tileX + Math.floor(stats.width * 0.5);
-  const minX = type === BUILDING_TYPES.HOME ? Math.min(tileX, gateTileX - 1) : tileX;
-  const maxX = type === BUILDING_TYPES.HOME ? Math.max(tileX + stats.width - 1, gateTileX + 1) : tileX + stats.width - 1;
-  const maxY = tileY + stats.height - 1 + (type === BUILDING_TYPES.HOME ? 2 : 0);
-
-  for (let y = tileY; y <= maxY; y++) {
-    for (let x = minX; x <= maxX; x++) {
-      if (!isInsideMap(x, y)) return false;
-      terrainData[y][x] = TERRAIN.GRASS;
-      obstacleData[y][x] = OBSTACLE.NONE;
-      decorationData[y][x] = DECOR.NONE;
-    }
+  const tiles = OpenRTS.world.buildingPlacement.padTiles(type, tileX, tileY, {
+    stats,
+    homeType: BUILDING_TYPES.HOME
+  });
+  for (const tile of tiles) {
+    if (!isInsideMap(tile.x, tile.y)) return false;
+    terrainData[tile.y][tile.x] = TERRAIN.GRASS;
+    obstacleData[tile.y][tile.x] = OBSTACLE.NONE;
+    decorationData[tile.y][tile.x] = DECOR.NONE;
   }
 
   buildTerrainRenderCache();
   return true;
 }
 
-function findBuildingSite(team, type, preferredXRatio, preferredYRatio) {
+function findBuildingSite(team, type, preferredXRatio, preferredYRatio, teamIndex = team === 'red' ? 0 : 1, teamCount = 2) {
   const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
-  const homeSideMin = team === 'red' ? 2 : Math.floor(MAP_COLS * 0.52);
-  const homeSideMax = team === 'red' ? Math.floor(MAP_COLS * 0.48) : MAP_COLS - stats.width - 2;
-  const preferredX = Math.floor(MAP_COLS * preferredXRatio - stats.width * 0.5);
-  const preferredY = Math.floor(MAP_ROWS * preferredYRatio - stats.height * 0.5);
-  const clampedX = Math.max(homeSideMin, Math.min(preferredX, homeSideMax));
-  const clampedY = Math.max(2, Math.min(preferredY, MAP_ROWS - stats.height - 2));
-  let best = null;
-  let bestScore = Infinity;
+  const site = OpenRTS.world.buildingPlacement.findTeamBuildingSite(team, type, preferredXRatio, preferredYRatio, {
+    stats,
+    columns: MAP_COLS,
+    rows: MAP_ROWS,
+    teamIndex,
+    teamCount,
+    canPlace: canPlaceBuildingAt
+  });
 
-  for (let y = 1; y <= MAP_ROWS - stats.height - 1; y++) {
-    for (let x = homeSideMin; x <= homeSideMax; x++) {
-      if (!canPlaceBuildingAt(type, x, y)) continue;
-      const distance = Math.hypot(x - clampedX, y - clampedY);
-      if (distance < bestScore) {
-        best = { x, y };
-        bestScore = distance;
-      }
+  if (site?.fallbackX !== undefined && type === BUILDING_TYPES.HOME) {
+    if (prepareBuildingPad(type, site.fallbackX, site.fallbackY) && canPlaceBuildingAt(type, site.fallbackX, site.fallbackY)) {
+      return { x: site.fallbackX, y: site.fallbackY };
     }
+    return null;
   }
 
-  if (!best && type === BUILDING_TYPES.HOME) {
-    const fallbackX = Math.max(homeSideMin, Math.min(clampedX, homeSideMax));
-    const fallbackY = Math.max(2, Math.min(clampedY, MAP_ROWS - stats.height - 2));
-    if (prepareBuildingPad(type, fallbackX, fallbackY) && canPlaceBuildingAt(type, fallbackX, fallbackY)) {
-      return { x: fallbackX, y: fallbackY };
-    }
-  }
-
-  return best;
+  return site;
 }
 
 function placeTeamBuildings(config = window.mapConfig || {}) {
@@ -1071,7 +1316,11 @@ function placeTeamBuildings(config = window.mapConfig || {}) {
 
   const homesPerTeam = Math.max(0, Math.floor(Number(config.homesPerTeam) || 0));
   const towersPerTeam = Math.max(0, Math.floor(Number(config.towersPerTeam) || 0));
-  const teams = Array.isArray(config.teams) && config.teams.length ? config.teams : ['red', 'blue'];
+  const teams = config.modeId === 'tower_defense'
+    ? ['red']
+    : typeof getConfiguredTeams === 'function'
+    ? getConfiguredTeams(config)
+    : Array.isArray(config.teams) && config.teams.length ? config.teams : ['red', 'blue'];
   const homeRatios = {
     red: [[0.18, 0.5], [0.22, 0.34]],
     blue: [[0.82, 0.5], [0.78, 0.66]]
@@ -1081,18 +1330,21 @@ function placeTeamBuildings(config = window.mapConfig || {}) {
     blue: [[0.69, 0.57], [0.72, 0.38], [0.65, 0.72], [0.65, 0.26]]
   };
 
-  for (const team of teams) {
-    if (team !== 'red' && team !== 'blue') continue;
+  for (let teamIndex = 0; teamIndex < teams.length; teamIndex++) {
+    const team = teams[teamIndex];
+    const sliceCenter = (teamIndex + 0.5) / Math.max(2, teams.length);
+    const defaultHomeRatios = [[sliceCenter, teamIndex % 2 === 0 ? 0.42 : 0.58]];
+    const defaultTowerRatios = [[sliceCenter, teamIndex % 2 === 0 ? 0.32 : 0.68]];
 
     for (let i = 0; i < homesPerTeam; i++) {
-      const ratios = homeRatios[team][i] || homeRatios[team][homeRatios[team].length - 1];
-      const site = findBuildingSite(team, BUILDING_TYPES.HOME, ratios[0], ratios[1]);
+      const ratios = (homeRatios[team] || defaultHomeRatios)[i] || (homeRatios[team] || defaultHomeRatios).at(-1);
+      const site = findBuildingSite(team, BUILDING_TYPES.HOME, ratios[0], ratios[1], teamIndex, teams.length);
       if (site) createBuilding(BUILDING_TYPES.HOME, team, site.x, site.y);
     }
 
     for (let i = 0; i < towersPerTeam; i++) {
-      const ratios = towerRatios[team][i] || towerRatios[team][towerRatios[team].length - 1];
-      const site = findBuildingSite(team, BUILDING_TYPES.TOWER, ratios[0], ratios[1]);
+      const ratios = (towerRatios[team] || defaultTowerRatios)[i] || (towerRatios[team] || defaultTowerRatios).at(-1);
+      const site = findBuildingSite(team, BUILDING_TYPES.TOWER, ratios[0], ratios[1], teamIndex, teams.length);
       if (site) createBuilding(BUILDING_TYPES.TOWER, team, site.x, site.y);
     }
   }
@@ -1102,8 +1354,7 @@ function placeTeamBuildings(config = window.mapConfig || {}) {
 }
 
 function getTeamHome(team) {
-  if (!Array.isArray(buildingData)) return null;
-  return buildingData.find(building => !building.isDead && building.team === team && building.type === BUILDING_TYPES.HOME) || null;
+  return OpenRTS.world.buildingQueries.teamHome(buildingData, team, BUILDING_TYPES.HOME);
 }
 
 function getBuildings() {
@@ -1111,97 +1362,41 @@ function getBuildings() {
 }
 
 function clearBuildingSelection() {
-  for (const building of getBuildings()) {
-    building.selected = false;
-  }
+  OpenRTS.world.selection.channel('buildings').clear();
+  for (const building of getBuildings()) building.selected = false;
 }
 
 function selectBuilding(building) {
   clearBuildingSelection();
-  if (building && !building.isDead) {
-    building.selected = true;
-  }
+  OpenRTS.world.selection.channel('buildings').select(building);
 }
 
 function getSelectedBuilding() {
-  return getBuildings().find(building => building.selected && !building.isDead) || null;
+  return OpenRTS.world.selection.channel('buildings').get() ||
+    getBuildings().find(building => building.selected && !building.isDead) ||
+    null;
 }
 
 function getBuildingAtPoint(worldX, worldY) {
-  if (!Array.isArray(buildingData)) return null;
-
-  let closest = null;
-  let closestDist = Infinity;
-  for (const building of buildingData) {
-    if (building.isDead) continue;
-    const halfW = building.width * tileSize * 0.72;
-    const halfH = building.height * tileSize * 0.78;
-    if (
-      worldX >= building.x - halfW &&
-      worldX <= building.x + halfW &&
-      worldY >= building.y - halfH &&
-      worldY <= building.y + halfH
-    ) {
-      const dist = Math.hypot(building.x - worldX, building.y - worldY);
-      if (dist < closestDist) {
-        closest = building;
-        closestDist = dist;
-      }
-    }
-  }
-
-  return closest;
+  return OpenRTS.world.buildingQueries.atWorldPoint(buildingData, worldX, worldY, { tileSize });
 }
 
 function getBuildingAtScreenPoint(screenX, screenY) {
-  if (!camera || !Array.isArray(buildingData)) return null;
-
-  let closest = null;
-  let closestDist = Infinity;
-  for (const building of buildingData) {
-    if (building.isDead) continue;
-    const screenBuildingX = (building.x - camera.x) * camera.zoom;
-    const screenBuildingY = (building.y - camera.y) * camera.zoom;
-    const halfW = building.width * tileSize * 0.72 * camera.zoom;
-    const halfH = building.height * tileSize * 0.78 * camera.zoom;
-
-    if (
-      screenX >= screenBuildingX - halfW &&
-      screenX <= screenBuildingX + halfW &&
-      screenY >= screenBuildingY - halfH &&
-      screenY <= screenBuildingY + halfH
-    ) {
-      const dist = Math.hypot(screenBuildingX - screenX, screenBuildingY - screenY);
-      if (dist < closestDist) {
-        closest = building;
-        closestDist = dist;
-      }
-    }
-  }
-
-  return closest;
+  return OpenRTS.world.buildingQueries.atScreenPoint(buildingData, screenX, screenY, { camera, tileSize });
 }
 
 function isCastleCourtyardPoint(building, worldX, worldY) {
-  if (!building || building.type !== BUILDING_TYPES.HOME) return false;
-  const tileX = Math.floor(worldX / tileSize);
-  const tileY = Math.floor(worldY / tileSize);
-  const localX = tileX - building.tileX;
-  const localY = tileY - building.tileY;
-  return localX >= 2 &&
-    localX <= building.width - 3 &&
-    localY >= 2 &&
-    localY <= building.height - 3;
+  return OpenRTS.world.castleGeometry.isCourtyardPoint(building, worldX, worldY, {
+    homeType: BUILDING_TYPES.HOME,
+    tileSize
+  });
 }
 
 function isPointInsideCastle(building, worldX, worldY) {
-  if (!building || building.type !== BUILDING_TYPES.HOME || building.isDead) return false;
-  const left = building.tileX * tileSize;
-  const top = building.tileY * tileSize;
-  return worldX >= left &&
-    worldX < left + building.width * tileSize &&
-    worldY >= top &&
-    worldY < top + building.height * tileSize;
+  return OpenRTS.world.castleGeometry.isPointInside(building, worldX, worldY, {
+    homeType: BUILDING_TYPES.HOME,
+    tileSize
+  });
 }
 
 function getCastleContainingPoint(worldX, worldY) {
@@ -1209,265 +1404,149 @@ function getCastleContainingPoint(worldX, worldY) {
 }
 
 function getCastleDoorPoints(building, laneIndex = 0) {
-  if (!building || building.type !== BUILDING_TYPES.HOME) return null;
-  const laneOffsets = [0, -1, 1];
-  const normalizedLane = Math.abs(Math.floor(Number(laneIndex) || 0)) % laneOffsets.length;
-  const gateTileX = building.tileX + Math.floor(building.width * 0.5) + laneOffsets[normalizedLane];
-  return {
-    inside: tileCenter(gateTileX, building.tileY + building.height - 2),
-    threshold: tileCenter(gateTileX, building.tileY + building.height - 1),
-    outside: tileCenter(gateTileX, building.tileY + building.height),
-    backY: (building.tileY - 0.5) * tileSize,
-    frontY: (building.tileY + building.height + 0.5) * tileSize,
-    leftX: (building.tileX - 0.5) * tileSize,
-    rightX: (building.tileX + building.width + 0.5) * tileSize
-  };
+  return OpenRTS.world.castleGeometry.getDoorPoints(building, laneIndex, {
+    homeType: BUILDING_TYPES.HOME,
+    tileSize
+  });
 }
 
 function issueUnitRoute(unit, points, append = false) {
-  const validPoints = points.filter(point => point && Number.isFinite(point.x) && Number.isFinite(point.y));
-  validPoints.forEach((point, index) => {
-    unit.issueMoveCommand(point.x, point.y, { append: index === 0 ? append : true });
-  });
-  return validPoints.length > 0;
+  return OpenRTS.world.castleCommands.issueRoute(unit, points, append);
 }
 
 function getCastleDoorApproach(unit, building, door) {
-  const castleBack = building.tileY * tileSize;
-  const castleFront = (building.tileY + building.height) * tileSize;
-  if (unit.y >= castleFront) return [];
-
-  const useLeft = unit.x <= building.x;
-  const sideX = useLeft ? door.leftX : door.rightX;
-  const route = [];
-  if (unit.y < castleBack) route.push({ x: sideX, y: door.backY });
-  route.push({ x: sideX, y: door.frontY });
-  return route;
+  return OpenRTS.world.castleGeometry.getDoorApproach(unit, building, door, { tileSize });
 }
 
 function commandUnitIntoCastle(unit, building, destination, append = false, laneIndex = 0) {
-  if (!unit || !building || !destination || unit.isDead || building.isDead) return false;
-  if (isPointInsideCastle(building, unit.x, unit.y)) {
-    unit.issueMoveCommand(destination.x, destination.y, { append });
-    return true;
-  }
-
-  const door = getCastleDoorPoints(building, laneIndex);
-  if (!door) return false;
-  const route = [
-    ...getCastleDoorApproach(unit, building, door),
-    door.outside,
-    door.threshold,
-    door.inside,
-    destination
-  ];
-  clearCastleTopCommand(unit);
-  return issueUnitRoute(unit, route, append);
+  return OpenRTS.world.castleCommands.commandEnter(unit, building, destination, {
+    homeType: BUILDING_TYPES.HOME,
+    tileSize,
+    laneIndex,
+    append
+  });
 }
 
 function commandUnitOutOfCastle(unit, building, destination, append = false, laneIndex = 0) {
-  if (!unit || !building || !destination || unit.isDead || building.isDead) return false;
-  const door = getCastleDoorPoints(building, laneIndex);
-  if (!door) return false;
-  clearCastleTopCommand(unit);
-  return issueUnitRoute(unit, [door.inside, door.threshold, door.outside, destination], append);
+  return OpenRTS.world.castleCommands.commandExit(unit, building, destination, {
+    homeType: BUILDING_TYPES.HOME,
+    tileSize,
+    laneIndex,
+    append
+  });
 }
 
 function getLiveBuildingsNearPoint(worldX, worldY, radius) {
-  if (!Array.isArray(buildingData)) return [];
-  return buildingData.filter(building => {
-    if (building.isDead) return false;
-    const hitRadius = Math.max(building.width, building.height) * tileSize * 0.5;
-    return Math.hypot(building.x - worldX, building.y - worldY) <= radius + hitRadius;
-  });
+  return OpenRTS.world.buildingQueries.nearPoint(buildingData, worldX, worldY, radius, { tileSize });
 }
 
 function getCastleWallSlots(building) {
-  if (!building || building.type !== BUILDING_TYPES.HOME) return [];
-
-  const slots = [];
-  const minX = building.tileX;
-  const maxX = building.tileX + building.width - 1;
-  const minY = building.tileY;
-  const maxY = building.tileY + building.height - 1;
-
-  for (let x = minX; x <= maxX; x++) slots.push({ tileX: x, tileY: minY });
-  for (let y = minY + 1; y <= maxY; y++) slots.push({ tileX: maxX, tileY: y });
-  for (let x = maxX - 1; x >= minX; x--) slots.push({ tileX: x, tileY: maxY });
-  for (let y = maxY - 1; y > minY; y--) slots.push({ tileX: minX, tileY: y });
-
-  return slots.map(slot => ({ ...slot, ...tileCenter(slot.tileX, slot.tileY) }));
+  return OpenRTS.world.castleGeometry.getWallSlots(building, {
+    homeType: BUILDING_TYPES.HOME,
+    tileSize
+  });
 }
 
 function getNearestCastleWallSlotIndex(slots, worldX, worldY) {
-  let nearestIndex = 0;
-  let nearestDistance = Infinity;
-  slots.forEach((slot, index) => {
-    const distance = Math.hypot(slot.x - worldX, slot.y - worldY);
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearestIndex = index;
-    }
-  });
-  return nearestIndex;
+  return OpenRTS.world.castleGeometry.getNearestWallSlotIndex(slots, worldX, worldY);
 }
 
 function getCastleRampPoints(building) {
-  if (!building || building.type !== BUILDING_TYPES.HOME) return null;
-  const stairY = building.tileY + Math.min(building.height - 2, Math.floor(building.height * 0.5) + 1);
-  const base = tileCenter(building.tileX + building.width - 3, stairY);
-  const top = tileCenter(building.tileX + building.width - 1, stairY);
-  const slots = getCastleWallSlots(building);
-  return {
-    base,
-    top,
-    topSlotIndex: getNearestCastleWallSlotIndex(slots, top.x, top.y)
-  };
+  return OpenRTS.world.castleGeometry.getRampPoints(building, {
+    homeType: BUILDING_TYPES.HOME,
+    tileSize
+  });
 }
 
 function getCastleWallRoute(slots, startIndex, endIndex) {
-  if (!slots.length || startIndex === endIndex) return [];
-  const clockwiseSteps = (endIndex - startIndex + slots.length) % slots.length;
-  const counterSteps = (startIndex - endIndex + slots.length) % slots.length;
-  const direction = clockwiseSteps <= counterSteps ? 1 : -1;
-  const count = Math.min(clockwiseSteps, counterSteps);
-  const route = [];
-  for (let step = 1; step <= count; step++) {
-    route.push(slots[(startIndex + direction * step + slots.length) % slots.length]);
-  }
-  return route;
+  return OpenRTS.world.castleGeometry.getWallRoute(slots, startIndex, endIndex);
 }
 
 function getCastleStairPoint(building, index = 0, total = 1, targetWorldX = null, targetWorldY = null) {
-  if (!building || building.type !== BUILDING_TYPES.HOME) return null;
-
-  const wallSlots = getCastleWallSlots(building);
-  const hasTarget = Number.isFinite(targetWorldX) && Number.isFinite(targetWorldY);
-  const targetIndex = hasTarget
-    ? getNearestCastleWallSlotIndex(wallSlots, targetWorldX, targetWorldY)
-    : 0;
-  const spreadOffset = index === 0 ? 0 : Math.ceil(index * 0.5) * (index % 2 ? 1 : -1);
-  const slot = wallSlots[(targetIndex + spreadOffset + wallSlots.length) % Math.max(1, wallSlots.length)] || {
-    x: building.x,
-    y: building.y - building.height * tileSize * 0.5 + tileSize * 0.5
-  };
-  const preferred = { x: slot.x, y: slot.y };
-  const clampedX = clamp(preferred.x, tileSize * 0.5, getMapWidthPx() - tileSize * 0.5);
-  const clampedY = clamp(preferred.y, tileSize * 0.5, getMapHeightPx() - tileSize * 0.5);
-
-  return isCommandWalkablePoint(clampedX, clampedY, tileSize * 0.45)
-    ? { x: clampedX, y: clampedY, adjusted: false }
-    : findNearestWalkablePoint(clampedX, clampedY, tileSize * 0.45) || {
-    x: clampedX,
-    y: clampedY
-  };
+  return OpenRTS.world.castleGeometry.getStairPoint(building, index, total, {
+    homeType: BUILDING_TYPES.HOME,
+    tileSize,
+    targetWorldX,
+    targetWorldY,
+    mapWidthPx: getMapWidthPx(),
+    mapHeightPx: getMapHeightPx(),
+    clamp,
+    isWalkablePoint: isCommandWalkablePoint,
+    findNearestWalkablePoint
+  });
 }
 
 function commandUnitToCastleTop(unit, building, index = 0, total = 1, append = false, targetWorldX = null, targetWorldY = null) {
-  if (!unit || !building || building.isDead || building.type !== BUILDING_TYPES.HOME) return false;
-  if (unit.isDead || unit.team !== building.team) return false;
-
-  const wallSlots = getCastleWallSlots(building);
-  const ramp = getCastleRampPoints(building);
-  const stairPoint = getCastleStairPoint(building, index, total, targetWorldX, targetWorldY);
-  if (!stairPoint || !ramp || wallSlots.length === 0) return false;
-
-  const destinationIndex = getNearestCastleWallSlotIndex(wallSlots, stairPoint.x, stairPoint.y);
-  const alreadyOnRamparts = unit.castleTopBuildingId === building.id && unit.castleRampClimbed;
-  const startIndex = alreadyOnRamparts
-    ? getNearestCastleWallSlotIndex(wallSlots, unit.x, unit.y)
-    : ramp.topSlotIndex;
-  const wallRoute = getCastleWallRoute(wallSlots, startIndex, destinationIndex);
-
-  if (alreadyOnRamparts) {
-    const route = wallRoute.length > 0 ? wallRoute : [wallSlots[destinationIndex]];
-    route.forEach((point, routeIndex) => {
-      unit.issueMoveCommand(point.x, point.y, { append: routeIndex === 0 ? append : true });
-    });
-  } else {
-    unit.issueMoveCommand(ramp.base.x, ramp.base.y, { append });
-    unit.issueMoveCommand(ramp.top.x, ramp.top.y, { append: true });
-    wallRoute.forEach(point => unit.issueMoveCommand(point.x, point.y, { append: true }));
-  }
-
-  unit.castleTopBuildingId = building.id;
-  unit.castleTopStairPoint = stairPoint;
-  unit.castleTopReached = false;
-  unit.castleRampBase = ramp.base;
-  unit.castleRampTop = ramp.top;
-  unit.castleRampClimbed = alreadyOnRamparts;
-  return true;
+  return OpenRTS.world.castleCommands.commandRampart(unit, building, {
+    homeType: BUILDING_TYPES.HOME,
+    tileSize,
+    index,
+    total,
+    append,
+    targetWorldX,
+    targetWorldY,
+    mapWidthPx: getMapWidthPx(),
+    mapHeightPx: getMapHeightPx(),
+    clamp,
+    isWalkablePoint: isCommandWalkablePoint,
+    findNearestWalkablePoint
+  });
 }
 
 function clearCastleTopCommand(unit) {
-  if (!unit) return;
-  unit.castleTopBuildingId = null;
-  unit.castleTopStairPoint = null;
-  unit.castleTopReached = false;
-  unit.castleRampBase = null;
-  unit.castleRampTop = null;
-  unit.castleRampClimbed = false;
+  OpenRTS.world.castleCommands.clearTopCommand(unit);
 }
 
 function getCastleTopDefender(building, units) {
-  if (!building || building.type !== BUILDING_TYPES.HOME) return null;
-
-  let defender = null;
-  let closestDist = Infinity;
-  for (const unit of units) {
-    if (unit.isDead || unit.team !== building.team || unit.castleTopBuildingId !== building.id) continue;
-    const stairPoint = unit.castleTopStairPoint || getCastleStairPoint(building, 0, 1);
-    const dist = stairPoint ? Math.hypot(unit.x - stairPoint.x, unit.y - stairPoint.y) : Infinity;
-
-    if (!unit.castleRampClimbed && unit.castleRampTop) {
-      const rampTopDistance = Math.hypot(unit.x - unit.castleRampTop.x, unit.y - unit.castleRampTop.y);
-      if (rampTopDistance < tileSize * 0.7) unit.castleRampClimbed = true;
-    }
-
-    if (dist < tileSize * 0.85) {
-      unit.castleTopReached = true;
-    }
-    if (unit.castleTopReached && dist < closestDist) {
-      defender = unit;
-      closestDist = dist;
-    }
-  }
-
-  return defender;
+  return OpenRTS.world.castleCommands.getTopDefender(building, units, {
+    homeType: BUILDING_TYPES.HOME,
+    tileSize,
+    mapWidthPx: getMapWidthPx(),
+    mapHeightPx: getMapHeightPx(),
+    clamp,
+    isWalkablePoint: isCommandWalkablePoint,
+    findNearestWalkablePoint
+  });
 }
 
 function isInsideMap(tileX, tileY) {
-  return tileY >= 0 && tileY < terrainData.length && tileX >= 0 && tileX < terrainData[0].length;
+  return getNavigationService().isInsideMap(tileX, tileY);
 }
 
-function isWalkableTile(tileX, tileY) {
-  if (!isInsideMap(tileX, tileY)) return false;
-
-  const terrainType = terrainData[tileY][tileX];
-  const obstacleType = obstacleData[tileY][tileX];
-
-  if (terrainType === TERRAIN.WATER) return false;
-  if (obstacleType === OBSTACLE.TREE || obstacleType === OBSTACLE.ROCK) return false;
-  if (isTileBlockedByBuilding(tileX, tileY)) return false;
-
-  return true;
+function normalizeMovementOptions(options = {}) {
+  return getNavigationService().normalizeMovementOptions(options);
 }
 
-function getMovementCost(tileX, tileY) {
-  if (!isWalkableTile(tileX, tileY)) return Infinity;
+function getTileHeightLevel(tileX, tileY) {
+  return getNavigationService().getTileHeightLevel(tileX, tileY);
+}
 
-  const terrainType = terrainData[tileY][tileX];
-  const obstacleType = obstacleData[tileY][tileX];
+function getTileTraversalHeight(tileX, tileY) {
+  return getNavigationService().getTileTraversalHeight(tileX, tileY);
+}
 
-  let cost = 1;
-  if (terrainType === TERRAIN.SAND) cost = 1.35;
-  else if (terrainType === TERRAIN.DIRT) cost = 1.15;
+function isRampTile(tileX, tileY) {
+  return getNavigationService().isRampTile(tileX, tileY);
+}
 
-  if (obstacleType === OBSTACLE.SHRUB) {
-    cost += 0.2;
-  }
+function getWorldElevation(worldX, worldY) {
+  return getNavigationService().getWorldElevation(worldX, worldY);
+}
 
-  return cost;
+function canTraverseHeightStep(fromTile, toTile) {
+  return getNavigationService().canTraverseHeightStep(fromTile, toTile);
+}
+
+function isAirMovement(options = {}) {
+  return getNavigationService().isAirMovement(options);
+}
+
+function isWalkableTile(tileX, tileY, options = {}) {
+  return getNavigationService().isWalkableTile(tileX, tileY, options);
+}
+
+function getMovementCost(tileX, tileY, options = {}) {
+  return getNavigationService().getMovementCost(tileX, tileY, options);
 }
 
 function getTransitionTarget(x, y, terrainType) {
@@ -1494,66 +1573,21 @@ function getTransitionTarget(x, y, terrainType) {
 }
 
 function drawTerrainTile(terrainType, drawX, drawY) {
-  if (terrainType === TERRAIN.WATER) {
-    ctx.fillStyle = '#2f78b7';
-    ctx.fillRect(drawX, drawY, tileSize, tileSize);
-    return;
-  }
-
-  if (terrainType === TERRAIN.GRASS) {
-    if (tileSprites.grass.complete && tileSprites.grass.naturalWidth > 0) {
-      ctx.drawImage(tileSprites.grass, drawX, drawY, tileSize, tileSize);
-    } else {
-      ctx.fillStyle = '#4a7c3f';
-      ctx.fillRect(drawX, drawY, tileSize, tileSize);
-    }
-    return;
-  }
-
-  if (terrainType === TERRAIN.SAND) {
-    if (tileSprites.sand.complete && tileSprites.sand.naturalWidth > 0) {
-      ctx.drawImage(tileSprites.sand, drawX, drawY, tileSize, tileSize);
-    } else {
-      ctx.fillStyle = '#c8b560';
-      ctx.fillRect(drawX, drawY, tileSize, tileSize);
-    }
-    return;
-  }
-
-  // DIRT
-  if (tileSprites.dirt.complete && tileSprites.dirt.naturalWidth > 0) {
-    ctx.drawImage(tileSprites.dirt, drawX, drawY, tileSize, tileSize);
-  } else {
-    ctx.fillStyle = '#8b6a3a';
-    ctx.fillRect(drawX, drawY, tileSize, tileSize);
-  }
+  OpenRTS.rendering.canvas.terrainPainter.drawTerrainTile(ctx, terrainType, drawX, drawY, {
+    terrain: TERRAIN,
+    tileSize,
+    tileSprites,
+    volcanic: isVolcanicTerrain()
+  });
 }
 
 function drawTerrainAccents(terrainType, x, y, drawX, drawY) {
-  const n = hashNoise(x + 17, y + 29);
-
-  if (terrainType === TERRAIN.WATER) {
-    ctx.save();
-    ctx.globalAlpha = 0.18;
-    ctx.strokeStyle = n > 0.5 ? '#9fd1e8' : '#1f5c91';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(drawX + 4, drawY + tileSize * (0.35 + n * 0.2));
-    ctx.quadraticCurveTo(drawX + 14, drawY + 10, drawX + 28, drawY + tileSize * (0.38 + n * 0.15));
-    ctx.stroke();
-    ctx.restore();
-    return;
-  }
-
-  if (terrainType === TERRAIN.GRASS && n > 0.72) {
-    ctx.fillStyle = n > 0.86 ? 'rgba(197, 178, 91, 0.1)' : 'rgba(15, 46, 18, 0.09)';
-    ctx.fillRect(drawX, drawY, tileSize, tileSize);
-  }
-
-  if (terrainType === TERRAIN.SAND && n > 0.65) {
-    ctx.fillStyle = 'rgba(132, 94, 43, 0.07)';
-    ctx.fillRect(drawX, drawY, tileSize, tileSize);
-  }
+  OpenRTS.rendering.canvas.terrainPainter.drawTerrainAccents(ctx, terrainType, x, y, drawX, drawY, {
+    terrain: TERRAIN,
+    tileSize,
+    noise: hashNoise,
+    volcanic: isVolcanicTerrain()
+  });
 }
 
 function drawGroundDecor(decorType, terrainType, x, y, drawX, drawY) {
@@ -1650,6 +1684,124 @@ function drawGroundDecor(decorType, terrainType, x, y, drawX, drawY) {
     return;
   }
 
+  if (decorType === DECOR.HILL) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(58, 92, 39, 0.24)';
+    ctx.beginPath();
+    ctx.ellipse(drawX + 16, drawY + 18, 15, 9, -0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(235, 239, 176, 0.28)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(drawX + 14, drawY + 15, 9, 4, -0.2, 0.1, Math.PI * 0.95);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  if (decorType === DECOR.DITCH) {
+    ctx.save();
+    const centerX = drawX + tileSize * 0.5;
+    const centerY = drawY + tileSize * 0.58;
+    ctx.fillStyle = 'rgba(25, 15, 9, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(drawX + 2, drawY + 18);
+    ctx.quadraticCurveTo(drawX + 10, drawY + 9, drawX + 22, drawY + 11);
+    ctx.quadraticCurveTo(drawX + 30, drawY + 14, drawX + 29, drawY + 22);
+    ctx.quadraticCurveTo(drawX + 18, drawY + 30, drawX + 5, drawY + 25);
+    ctx.quadraticCurveTo(drawX + 0, drawY + 22, drawX + 2, drawY + 18);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(95, 63, 34, 0.78)';
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY, 13, 6, -0.22, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(37, 24, 15, 0.92)';
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY + 1, 10, 3.6, -0.22, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(176, 126, 66, 0.72)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(drawX + 5, drawY + 14);
+    ctx.lineTo(drawX + 27, drawY + 18);
+    ctx.moveTo(drawX + 6, drawY + 24);
+    ctx.lineTo(drawX + 26, drawY + 12);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(224, 192, 125, 0.28)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 4; i++) {
+      const sx = drawX + 6 + i * 6;
+      ctx.beginPath();
+      ctx.moveTo(sx, drawY + 13 + (i % 2) * 2);
+      ctx.lineTo(sx + 3, drawY + 24 - (i % 2) * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (decorType === DECOR.CLIFF) {
+    ctx.save();
+    ctx.fillStyle = '#6c675d';
+    ctx.beginPath();
+    ctx.moveTo(drawX + 2, drawY + 6);
+    ctx.lineTo(drawX + 30, drawY + 5);
+    ctx.lineTo(drawX + 30, drawY + 27);
+    ctx.lineTo(drawX + 4, drawY + 30);
+    ctx.closePath();
+    ctx.fill();
+
+    const stones = [
+      [5, 8, 9, 8], [15, 7, 11, 7], [4, 17, 12, 8],
+      [17, 16, 10, 9], [8, 25, 10, 5], [20, 25, 8, 4]
+    ];
+    for (const [sx, sy, sw, sh] of stones) {
+      ctx.fillStyle = hashNoise(x + sx, y + sy) > 0.5 ? '#827b6f' : '#555047';
+      ctx.fillRect(drawX + sx, drawY + sy, sw, sh);
+      ctx.strokeStyle = 'rgba(34, 29, 24, 0.5)';
+      ctx.strokeRect(drawX + sx, drawY + sy, sw, sh);
+    }
+
+    ctx.strokeStyle = 'rgba(34, 27, 22, 0.68)';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(drawX + 3, drawY + 8);
+    ctx.lineTo(drawX + 29, drawY + 6);
+    ctx.moveTo(drawX + 5, drawY + 29);
+    ctx.lineTo(drawX + 30, drawY + 26);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  if (decorType === DECOR.RAMP) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(142, 118, 72, 0.34)';
+    ctx.beginPath();
+    ctx.moveTo(drawX + 4, drawY + 26);
+    ctx.lineTo(drawX + 28, drawY + 21);
+    ctx.lineTo(drawX + 24, drawY + 7);
+    ctx.lineTo(drawX + 7, drawY + 11);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(69, 50, 29, 0.38)';
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 4; i++) {
+      const yOffset = drawY + 12 + i * 4;
+      ctx.beginPath();
+      ctx.moveTo(drawX + 7 + i, yOffset);
+      ctx.lineTo(drawX + 25 - i, yOffset - 3);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+
   if (decorType === DECOR.STANDARD) {
     const poleX = drawX + tileSize * 0.54;
     const poleY = drawY + tileSize * 0.2;
@@ -1675,30 +1827,58 @@ function drawGroundDecor(decorType, terrainType, x, y, drawX, drawY) {
 
   if (decorType === DECOR.WELL) {
     ctx.save();
-    ctx.fillStyle = 'rgba(28, 14, 5, 0.23)';
+    ctx.fillStyle = 'rgba(28, 14, 5, 0.26)';
     ctx.beginPath();
-    ctx.ellipse(drawX + 16, drawY + 23, 12, 5, 0, 0, Math.PI * 2);
+    ctx.ellipse(drawX + 16, drawY + 25, 14, 6, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.fillStyle = '#736857';
+    ctx.fillStyle = '#8b8475';
     ctx.beginPath();
-    ctx.ellipse(drawX + 16, drawY + 18, 10, 6, 0, 0, Math.PI * 2);
+    ctx.ellipse(drawX + 16, drawY + 19, 12, 7, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = '#4e473c';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
     ctx.fillStyle = '#31241b';
     ctx.beginPath();
-    ctx.ellipse(drawX + 16, drawY + 17, 6, 3.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(drawX + 16, drawY + 18, 7, 4, 0, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.strokeStyle = '#6b4020';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(drawX + 9, drawY + 15);
-    ctx.lineTo(drawX + 9, drawY + 5);
-    ctx.moveTo(drawX + 23, drawY + 15);
-    ctx.lineTo(drawX + 23, drawY + 5);
-    ctx.moveTo(drawX + 8, drawY + 5);
+    ctx.moveTo(drawX + 8, drawY + 18);
+    ctx.lineTo(drawX + 8, drawY + 5);
+    ctx.moveTo(drawX + 24, drawY + 18);
     ctx.lineTo(drawX + 24, drawY + 5);
+    ctx.moveTo(drawX + 7, drawY + 5);
+    ctx.lineTo(drawX + 25, drawY + 5);
     ctx.stroke();
+
+    ctx.strokeStyle = '#2e241b';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(drawX + 16, drawY + 5);
+    ctx.lineTo(drawX + 16, drawY + 16);
+    ctx.stroke();
+
+    ctx.fillStyle = '#5b4330';
+    ctx.strokeStyle = '#2e241b';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(drawX + 13, drawY + 15);
+    ctx.lineTo(drawX + 19, drawY + 15);
+    ctx.lineTo(drawX + 18, drawY + 21);
+    ctx.lineTo(drawX + 14, drawY + 21);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#6b4020';
+    ctx.beginPath();
+    ctx.arc(drawX + 16, drawY + 5, 2.3, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
     return;
   }
@@ -1736,22 +1916,12 @@ function drawGroundDecor(decorType, terrainType, x, y, drawX, drawY) {
 }
 
 function drawTransitions(x, y, terrainType, drawX, drawY) {
-  // Only draw a subtle shoreline tint where water meets land
-  if (terrainType !== TERRAIN.WATER) return;
-
-  const neighbors = [
-    { x: x + 1, y }, { x: x - 1, y },
-    { x, y: y + 1 }, { x, y: y - 1 }
-  ];
-
-  const hasLandNeighbor = neighbors.some(n =>
-    isInsideMap(n.x, n.y) && terrainData[n.y][n.x] !== TERRAIN.WATER
-  );
-
-  if (hasLandNeighbor) {
-    ctx.fillStyle = 'rgba(255, 240, 180, 0.15)';
-    ctx.fillRect(drawX, drawY, tileSize, tileSize);
-  }
+  OpenRTS.rendering.canvas.terrainPainter.drawTransitions(ctx, x, y, terrainType, drawX, drawY, {
+    terrain: TERRAIN,
+    terrainData,
+    tileSize,
+    isInsideMap
+  });
 }
 
 function drawIrregularRock(x, y, drawX, drawY) {
@@ -1896,37 +2066,67 @@ function drawOakTree(x, y, drawX, drawY) {
 function drawPineTree(x, y, drawX, drawY) {
   const baseX = drawX + tileSize * (0.5 + (hashNoise(x + 421, y + 97) - 0.5) * 0.12);
   const baseY = drawY + tileSize * 0.92;
-  const height = tileSize * (2.55 + hashNoise(x + 617, y + 211) * 0.55);
-  const width = tileSize * (0.88 + hashNoise(x + 89, y + 613) * 0.18);
+  const height = tileSize * (2.7 + hashNoise(x + 617, y + 211) * 0.6);
+  const width = tileSize * (0.95 + hashNoise(x + 89, y + 613) * 0.22);
+  const lean = (hashNoise(x + 337, y + 991) - 0.5) * tileSize * 0.16;
 
   ctx.save();
   ctx.fillStyle = 'rgba(14, 8, 3, 0.25)';
   ctx.beginPath();
-  ctx.ellipse(baseX + 4, baseY + 2, width * 0.42, tileSize * 0.13, 0, 0, Math.PI * 2);
+  ctx.ellipse(baseX + 5, baseY + 2, width * 0.5, tileSize * 0.14, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = '#6a3b1d';
-  ctx.fillRect(baseX - 4, baseY - height * 0.52, 8, height * 0.55);
+  const trunkTopX = baseX + lean;
+  const trunkTopY = baseY - height * 0.86;
+  ctx.strokeStyle = '#6a3b1d';
+  ctx.lineWidth = 8;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(baseX, baseY);
+  ctx.quadraticCurveTo(baseX + lean * 0.35, baseY - height * 0.45, trunkTopX, trunkTopY);
+  ctx.stroke();
 
-  const layers = 5;
+  ctx.strokeStyle = 'rgba(37, 20, 10, 0.35)';
+  ctx.lineWidth = 1.2;
+  for (let i = 1; i < 8; i++) {
+    const t = i / 8;
+    const px = baseX + lean * t * t;
+    const py = baseY - height * t * 0.82;
+    ctx.beginPath();
+    ctx.moveTo(px - 3, py);
+    ctx.lineTo(px + 4, py - 3);
+    ctx.stroke();
+  }
+
+  const layers = 8;
   for (let i = 0; i < layers; i++) {
     const t = i / (layers - 1);
-    const layerY = baseY - height * (0.22 + t * 0.65);
-    const layerWidth = width * (1.1 - t * 0.45);
-    ctx.fillStyle = i % 2 === 0 ? '#173d25' : '#215630';
+    const layerY = baseY - height * (0.19 + t * 0.68);
+    const layerX = baseX + lean * (0.18 + t * 0.75) + (hashNoise(x + i * 19, y + 31) - 0.5) * tileSize * 0.16;
+    const layerWidth = width * (1.25 - t * 0.78) * (0.92 + hashNoise(x + i * 7, y + 17) * 0.18);
+    const layerDepth = tileSize * (0.28 - t * 0.09);
+    ctx.fillStyle = i % 3 === 0 ? '#173d25' : i % 3 === 1 ? '#215630' : '#12331f';
     ctx.beginPath();
-    ctx.moveTo(baseX, layerY - height * 0.18);
-    ctx.lineTo(baseX - layerWidth * 0.55, layerY + tileSize * 0.18);
-    ctx.lineTo(baseX + layerWidth * 0.55, layerY + tileSize * 0.18);
+    ctx.moveTo(layerX, layerY - layerDepth * 0.75);
+    ctx.bezierCurveTo(layerX - layerWidth * 0.32, layerY - layerDepth * 0.2, layerX - layerWidth * 0.56, layerY + layerDepth * 0.2, layerX - layerWidth * 0.48, layerY + layerDepth);
+    ctx.quadraticCurveTo(layerX, layerY + layerDepth * 0.62, layerX + layerWidth * 0.5, layerY + layerDepth);
+    ctx.bezierCurveTo(layerX + layerWidth * 0.58, layerY + layerDepth * 0.18, layerX + layerWidth * 0.3, layerY - layerDepth * 0.22, layerX, layerY - layerDepth * 0.75);
     ctx.closePath();
     ctx.fill();
+
+    ctx.strokeStyle = 'rgba(171, 207, 129, 0.16)';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(layerX - layerWidth * 0.34, layerY + layerDepth * 0.08);
+    ctx.lineTo(layerX + layerWidth * 0.28, layerY - layerDepth * 0.22);
+    ctx.stroke();
   }
 
   ctx.fillStyle = 'rgba(120, 166, 86, 0.2)';
   ctx.beginPath();
-  ctx.moveTo(baseX - width * 0.2, baseY - height * 0.78);
-  ctx.lineTo(baseX, baseY - height * 0.92);
-  ctx.lineTo(baseX + width * 0.08, baseY - height * 0.72);
+  ctx.moveTo(trunkTopX - width * 0.16, trunkTopY + height * 0.05);
+  ctx.lineTo(trunkTopX, trunkTopY - height * 0.05);
+  ctx.lineTo(trunkTopX + width * 0.12, trunkTopY + height * 0.08);
   ctx.closePath();
   ctx.fill();
   ctx.restore();
@@ -1935,45 +2135,51 @@ function drawPineTree(x, y, drawX, drawY) {
 function drawPalmTree(x, y, drawX, drawY) {
   const baseX = drawX + tileSize * (0.5 + (hashNoise(x + 1821, y + 97) - 0.5) * 0.16);
   const baseY = drawY + tileSize * 0.92;
-  const height = tileSize * (2.35 + hashNoise(x + 17, y + 1439) * 0.5);
-  const lean = (hashNoise(x + 311, y + 1709) - 0.5) * tileSize * 0.42;
+  const height = tileSize * (2.55 + hashNoise(x + 17, y + 1439) * 0.6);
+  const lean = (hashNoise(x + 311, y + 1709) - 0.5) * tileSize * 0.58;
   const topX = baseX + lean;
   const topY = baseY - height;
 
   ctx.save();
-  ctx.fillStyle = 'rgba(14, 8, 3, 0.22)';
+  ctx.fillStyle = 'rgba(14, 8, 3, 0.24)';
   ctx.beginPath();
-  ctx.ellipse(baseX + 5, baseY + 2, tileSize * 0.36, tileSize * 0.11, 0, 0, Math.PI * 2);
+  ctx.ellipse(baseX + 5, baseY + 2, tileSize * 0.42, tileSize * 0.13, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = '#8a5529';
-  ctx.lineWidth = 9;
+  const trunkGradient = ctx.createLinearGradient(baseX - 8, baseY, topX + 8, topY);
+  trunkGradient.addColorStop(0, '#6f411f');
+  trunkGradient.addColorStop(0.48, '#9c6835');
+  trunkGradient.addColorStop(1, '#5a351b');
+  ctx.strokeStyle = trunkGradient;
+  ctx.lineWidth = 11;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(baseX, baseY);
   ctx.quadraticCurveTo(baseX + lean * 0.32, baseY - height * 0.52, topX, topY);
   ctx.stroke();
 
-  ctx.strokeStyle = 'rgba(68, 37, 15, 0.28)';
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 6; i++) {
-    const t = i / 6;
+  for (let i = 1; i < 12; i++) {
+    const t = i / 12;
     const yPos = baseY - height * t;
-    const xPos = baseX + lean * t * 0.75;
+    const xPos = baseX + lean * (t * 0.82 - t * (1 - t) * 0.16);
+    const width = 8 - t * 3.4;
+    ctx.strokeStyle = i % 2 ? 'rgba(68, 37, 15, 0.42)' : 'rgba(219, 151, 79, 0.22)';
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
-    ctx.moveTo(xPos - 4, yPos);
-    ctx.lineTo(xPos + 6, yPos - 5);
+    ctx.moveTo(xPos - width, yPos + 1);
+    ctx.lineTo(xPos + width, yPos - 4);
     ctx.stroke();
   }
 
-  const fronds = 7;
+  const fronds = 12;
   for (let i = 0; i < fronds; i++) {
-    const angle = -Math.PI * 0.92 + (i / (fronds - 1)) * Math.PI * 1.55;
-    const length = tileSize * (0.85 + hashNoise(x + i * 41, y + 907) * 0.35);
+    const angle = -Math.PI * 1.08 + (i / (fronds - 1)) * Math.PI * 1.86;
+    const length = tileSize * (0.9 + hashNoise(x + i * 41, y + 907) * 0.48);
+    const droop = 0.45 + hashNoise(x + i * 13, y + 233) * 0.42;
     const endX = topX + Math.cos(angle) * length;
-    const endY = topY + Math.sin(angle) * length * 0.55;
-    ctx.strokeStyle = i % 2 === 0 ? '#2f7a3d' : '#3f8c45';
-    ctx.lineWidth = 7;
+    const endY = topY + Math.sin(angle) * length * droop + tileSize * 0.12;
+    ctx.strokeStyle = i % 3 === 0 ? '#276d35' : i % 3 === 1 ? '#3f9046' : '#2f7c3b';
+    ctx.lineWidth = 7.5 - Math.abs(i - fronds * 0.5) * 0.2;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(topX, topY);
@@ -1984,12 +2190,27 @@ function drawPalmTree(x, y, drawX, drawY) {
       endY
     );
     ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(199, 225, 132, 0.28)';
+    ctx.lineWidth = 1;
+    for (let rib = 1; rib <= 3; rib++) {
+      const t = rib / 4;
+      const midX = topX + (endX - topX) * t;
+      const midY = topY + (endY - topY) * t;
+      ctx.beginPath();
+      ctx.moveTo(midX, midY);
+      ctx.lineTo(midX + Math.cos(angle + 0.8) * 5, midY + Math.sin(angle + 0.8) * 3);
+      ctx.stroke();
+    }
   }
 
   ctx.fillStyle = '#5f3a1a';
-  ctx.beginPath();
-  ctx.arc(topX, topY + 2, 5, 0, Math.PI * 2);
-  ctx.fill();
+  for (let i = 0; i < 4; i++) {
+    const angle = i / 4 * Math.PI * 2 + hashNoise(x + 77, y + 31);
+    ctx.beginPath();
+    ctx.arc(topX + Math.cos(angle) * 4, topY + 5 + Math.sin(angle) * 3, 3.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -2292,6 +2513,118 @@ function drawHorse(horse) {
   ctx.restore();
 }
 
+function drawGoldMine(mine) {
+  const depletion = mine.maxAmount > 0 ? 1 - (mine.amount / mine.maxAmount) : 1;
+  const pulse = Math.sin(performance.now() * 0.002 + mine.tileX) * 0.08;
+  ctx.save();
+  ctx.translate(mine.x, mine.y);
+
+  ctx.fillStyle = 'rgba(23, 12, 4, 0.2)';
+  ctx.beginPath();
+  ctx.ellipse(0, tileSize * 0.54, tileSize * 1.48, tileSize * 0.48, -0.08, 0, Math.PI * 2);
+  ctx.fill();
+
+  const rocks = 18;
+  for (let i = 0; i < rocks; i++) {
+    const angle = (i / rocks) * Math.PI * 2 + hashNoise(mine.tileX + i, mine.tileY) * 0.4;
+    const radius = tileSize * (0.18 + hashNoise(mine.tileX + i * 9, mine.tileY + 3) * 0.82);
+    const size = tileSize * (0.24 + hashNoise(mine.tileX + i * 5, mine.tileY + 11) * 0.28) * (1 - depletion * 0.35);
+    ctx.save();
+    ctx.translate(Math.cos(angle) * radius, Math.sin(angle) * radius * 0.72);
+    ctx.rotate(angle * 0.35);
+    ctx.fillStyle = i % 2 ? '#625b51' : '#777066';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, size * 1.25, size * 0.82, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(31, 25, 19, 0.38)';
+    ctx.stroke();
+    if (i % 3 !== 0 && depletion < 0.9) {
+      ctx.fillStyle = `rgba(222, 171, 45, ${0.78 + pulse})`;
+      ctx.beginPath();
+      ctx.ellipse(size * 0.18, -size * 0.06, size * 0.35, size * 0.16, -0.25, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function drawNeutralHouse(house) {
+  const w = house.width * tileSize;
+  const h = house.height * tileSize;
+  const occupied = (house.occupants?.length || 0) > 0;
+  ctx.save();
+  ctx.translate(house.x, house.y);
+
+  ctx.fillStyle = 'rgba(20, 10, 4, 0.28)';
+  ctx.beginPath();
+  ctx.ellipse(0, h * 0.36, w * 0.54, h * 0.18, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (house.isWreck) {
+    ctx.fillStyle = '#2c2520';
+    ctx.fillRect(-w * 0.42, -h * 0.2, w * 0.84, h * 0.48);
+    ctx.strokeStyle = '#16110d';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.38, -h * 0.18);
+    ctx.lineTo(w * 0.34, h * 0.22);
+    ctx.moveTo(w * 0.36, -h * 0.2);
+    ctx.lineTo(-w * 0.3, h * 0.24);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  ctx.fillStyle = occupied ? '#8b6540' : '#9d7145';
+  ctx.strokeStyle = '#3b2414';
+  ctx.lineWidth = 2;
+  ctx.fillRect(-w * 0.4, -h * 0.18, w * 0.8, h * 0.5);
+  ctx.strokeRect(-w * 0.4, -h * 0.18, w * 0.8, h * 0.5);
+
+  ctx.fillStyle = '#3f2717';
+  ctx.fillRect(-w * 0.08, h * 0.06, w * 0.16, h * 0.26);
+
+  if (!occupied) {
+    ctx.fillStyle = '#624128';
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.52, -h * 0.16);
+    ctx.lineTo(0, -h * 0.56);
+    ctx.lineTo(w * 0.52, -h * 0.16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = 'rgba(40, 22, 10, 0.35)';
+    ctx.fillRect(-w * 0.28, -h * 0.1, w * 0.56, h * 0.3);
+  }
+
+  if (house.burning) {
+    const t = performance.now() * 0.006;
+    for (let i = 0; i < 5; i++) {
+      const fx = (i - 2) * w * 0.13;
+      const fy = -h * 0.2 + Math.sin(t + i) * 3;
+      ctx.fillStyle = i % 2 ? '#f4b03a' : '#c94322';
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - h * 0.24);
+      ctx.quadraticCurveTo(fx + 8, fy - h * 0.06, fx, fy + h * 0.08);
+      ctx.quadraticCurveTo(fx - 8, fy - h * 0.06, fx, fy - h * 0.24);
+      ctx.fill();
+    }
+  }
+
+  if (house.selected) {
+    ctx.strokeStyle = 'rgba(255, 225, 140, 0.95)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.34, w * 0.52, h * 0.16, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawObstacle(obstacleType, x, y, drawX, drawY) {
   if (obstacleType === OBSTACLE.NONE) return;
 
@@ -2360,31 +2693,20 @@ function renderMap() {
 }
 
 function renderWaterRipples(camX, camY, viewWidth, viewHeight) {
-  const startX = Math.max(0, Math.floor(camX / tileSize));
-  const endX = Math.min(MAP_COLS - 1, Math.floor((camX + viewWidth) / tileSize) + 1);
-  const startY = Math.max(0, Math.floor(camY / tileSize));
-  const endY = Math.min(MAP_ROWS - 1, Math.floor((camY + viewHeight) / tileSize) + 1);
-  const now = performance.now() * 0.001;
-
-  ctx.save();
-  ctx.strokeStyle = 'rgba(184, 222, 231, 0.22)';
-  ctx.lineWidth = 1;
-  for (let y = startY; y <= endY; y++) {
-    for (let x = startX; x <= endX; x++) {
-      if (terrainData[y][x] !== TERRAIN.WATER) continue;
-      const n = hashNoise(x + 5009, y + 911);
-      if (n < 0.82) continue;
-      const phase = now * 1.4 + n * Math.PI * 2;
-      const ripple = 4 + (Math.sin(phase) + 1) * 3;
-      const cx = x * tileSize + tileSize * (0.25 + hashNoise(x + 31, y + 47) * 0.5);
-      const cy = y * tileSize + tileSize * (0.25 + hashNoise(x + 79, y + 11) * 0.5);
-      ctx.globalAlpha = 0.35 + Math.sin(phase) * 0.15;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, ripple * 1.7, ripple * 0.55, 0.1, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
+  OpenRTS.rendering.canvas.terrainPainter.renderWaterRipples(ctx, {
+    camX,
+    camY,
+    viewWidth,
+    viewHeight,
+    terrainData,
+    rows: MAP_ROWS,
+    columns: MAP_COLS,
+    terrain: TERRAIN,
+    tileSize,
+    timeSeconds: performance.now() * 0.001,
+    noise: hashNoise,
+    volcanic: isVolcanicTerrain()
+  });
 }
 
 function drawBuilding(building, layer = 'full') {
@@ -2411,7 +2733,7 @@ function drawBuilding(building, layer = 'full') {
 }
 
 function getTeamAccent(team) {
-  return team === 'red' ? '#b63b32' : '#2f66b7';
+  return typeof getTeamColor === 'function' ? getTeamColor(team) : (team === 'red' ? '#b63b32' : '#2f66b7');
 }
 
 function drawBuildingSelection(building) {
@@ -2775,90 +3097,27 @@ function drawTowerBuilding(building) {
 }
 
 function renderWorldObjects(units, ctx, debug = {}) {
-  const camX = camera ? camera.x : 0;
-  const camY = camera ? camera.y : 0;
-  const zoom = camera ? camera.zoom : 1;
-  const viewWidth = camera ? camera.viewportWidth / zoom : canvas.width;
-  const viewHeight = camera ? camera.viewportHeight / zoom : canvas.height;
-  const startX = Math.max(0, Math.floor((camX - tileSize * 3) / tileSize));
-  const endX = Math.min(MAP_COLS - 1, Math.floor((camX + viewWidth + tileSize * 3) / tileSize));
-  const startY = Math.max(0, Math.floor((camY - tileSize * 4) / tileSize));
-  const endY = Math.min(MAP_ROWS - 1, Math.floor((camY + viewHeight + tileSize * 2) / tileSize));
-  const drawList = [];
-
-  for (let y = startY; y <= endY; y++) {
-    for (let x = startX; x <= endX; x++) {
-      const obstacleType = obstacleData[y][x];
-      if (obstacleType === OBSTACLE.NONE) continue;
-      drawList.push({
-        type: 'obstacle',
-        sortY: y * tileSize + (obstacleType === OBSTACLE.TREE ? tileSize * 0.9 : tileSize * 0.72),
-        obstacleType,
-        x,
-        y
-      });
-    }
-  }
-
-  for (const sheep of sheepData) {
-    if (sheep.isMounted) continue;
-    if (sheep.x < camX - 40 || sheep.x > camX + viewWidth + 40 || sheep.y < camY - 40 || sheep.y > camY + viewHeight + 40) continue;
-    drawList.push({ type: 'sheep', sortY: sheep.y + 12, sheep });
-  }
-
-  for (const roast of OpenRTS.systems.cooking.getRoasts()) {
-    if (roast.x < camX - 50 || roast.x > camX + viewWidth + 50 || roast.y < camY - 50 || roast.y > camY + viewHeight + 50) continue;
-    drawList.push({ type: 'roast', sortY: roast.y + 18, roast });
-  }
-
-  for (const duck of duckData) {
-    if (duck.x < camX - 40 || duck.x > camX + viewWidth + 40 || duck.y < camY - 40 || duck.y > camY + viewHeight + 40) continue;
-    drawList.push({ type: 'duck', sortY: duck.y + 8, duck });
-  }
-
-  for (const horse of horseData) {
-    if (horse.isDead) continue;
-    if (horse.x < camX - 50 || horse.x > camX + viewWidth + 50 || horse.y < camY - 50 || horse.y > camY + viewHeight + 50) continue;
-    drawList.push({ type: 'horse', sortY: horse.y + 14, horse });
-  }
-
-  for (const worldItem of itemData) {
-    if (worldItem.isDead || worldItem.isPickedUp) continue;
-    if (worldItem.x < camX - 30 || worldItem.x > camX + viewWidth + 30 || worldItem.y < camY - 30 || worldItem.y > camY + viewHeight + 30) continue;
-    drawList.push({ type: 'world-item', sortY: worldItem.y + 10, worldItem });
-  }
-
-  for (const building of buildingData) {
-    if (building.isDead) continue;
-    if (building.x < camX - 120 || building.x > camX + viewWidth + 120 || building.y < camY - 140 || building.y > camY + viewHeight + 90) continue;
-    if (building.type === BUILDING_TYPES.HOME) {
-      drawList.push({
-        type: 'building',
-        layer: 'base',
-        sortY: building.y - building.height * tileSize * 0.52,
-        building
-      });
-      drawList.push({
-        type: 'building',
-        layer: 'front',
-        sortY: building.y + building.height * tileSize * 0.42,
-        building
-      });
-    } else {
-      drawList.push({
-        type: 'building',
-        layer: 'full',
-        sortY: building.y + building.height * tileSize * 0.34,
-        building
-      });
-    }
-  }
-
-  for (const unit of units) {
-    drawList.push({ type: 'unit', sortY: unit.y + unit.size * 0.5, unit });
-  }
-
-  drawList.sort((a, b) => a.sortY - b.sortY);
+  const drawList = OpenRTS.rendering.canvas.renderLists.createWorldObjectDrawList({
+    camera,
+    canvasWidth: canvas.width,
+    canvasHeight: canvas.height,
+    tileSize,
+    rows: MAP_ROWS,
+    columns: MAP_COLS,
+    obstacleData,
+    obstacleNone: OBSTACLE.NONE,
+    obstacleTree: OBSTACLE.TREE,
+    homeType: BUILDING_TYPES.HOME,
+    sheep: sheepData,
+    roasts: OpenRTS.systems.cooking.getRoasts(),
+    ducks: duckData,
+    horses: horseData,
+    items: itemData,
+    goldMines: goldMineData,
+    houses: houseData,
+    buildings: buildingData,
+    units
+  });
 
   for (const item of drawList) {
     if (item.type === 'obstacle') {
@@ -2875,6 +3134,10 @@ function renderWorldObjects(units, ctx, debug = {}) {
       drawHorse(item.horse);
     } else if (item.type === 'world-item') {
       drawWorldItem(item.worldItem);
+    } else if (item.type === 'gold-mine') {
+      drawGoldMine(item.mine);
+    } else if (item.type === 'house') {
+      drawNeutralHouse(item.house);
     } else if (item.type === 'unit') {
       if (window.UnitComponents && window.UnitComponents.render) {
         const renderComp = window.UnitComponents.render.get(item.unit.id);
@@ -2900,27 +3163,8 @@ function getMapHeightPx() {
   return terrainData.length * tileSize;
 }
 
-function canSpawnAt(x, y, unitSize = 20) {
-  const offsets = [
-    { dx: -unitSize / 2, dy: -unitSize / 2 },
-    { dx: unitSize / 2, dy: -unitSize / 2 },
-    { dx: -unitSize / 2, dy: unitSize / 2 },
-    { dx: unitSize / 2, dy: unitSize / 2 }
-  ];
-
-  for (const offset of offsets) {
-    const cornerX = x + offset.dx;
-    const cornerY = y + offset.dy;
-
-    const tileX = Math.floor(cornerX / tileSize);
-    const tileY = Math.floor(cornerY / tileSize);
-
-    if (!isWalkableTile(tileX, tileY)) {
-      return false;
-    }
-  }
-
-  return true;
+function canSpawnAt(x, y, unitSize = 20, options = {}) {
+  return getNavigationService().canSpawnAt(x, y, unitSize, options);
 }
 
 function tileCenter(tileX, tileY) {
@@ -2948,49 +3192,12 @@ function isVisualLandPoint(worldX, worldY) {
   return generateVisualTerrainType(worldX, worldY) !== TERRAIN.WATER;
 }
 
-function isCommandWalkablePoint(worldX, worldY, unitSize = 20) {
-  return canSpawnAt(worldX, worldY, unitSize) && isVisualLandPoint(worldX, worldY);
+function isCommandWalkablePoint(worldX, worldY, unitSize = 20, options = {}) {
+  return getNavigationService().isCommandWalkablePoint(worldX, worldY, unitSize, options);
 }
 
-function findNearestWalkablePoint(worldX, worldY, unitSize = 20, maxRadius = 16) {
-  if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return null;
-  if (!terrainData || terrainData.length === 0) return null;
-
-  const clampedX = Math.max(unitSize * 0.5, Math.min(worldX, getMapWidthPx() - unitSize * 0.5));
-  const clampedY = Math.max(unitSize * 0.5, Math.min(worldY, getMapHeightPx() - unitSize * 0.5));
-
-  if (isCommandWalkablePoint(clampedX, clampedY, unitSize)) {
-    return { x: clampedX, y: clampedY, adjusted: false };
-  }
-
-  let best = null;
-  let bestDistance = Infinity;
-  const maxDistance = maxRadius * tileSize;
-  const searchStep = Math.max(4, Math.floor(tileSize / 4));
-
-  for (let radius = searchStep; radius <= maxDistance; radius += searchStep) {
-    for (let dy = -radius; dy <= radius; dy += searchStep) {
-      for (let dx = -radius; dx <= radius; dx += searchStep) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
-
-        const candidateX = Math.max(unitSize * 0.5, Math.min(clampedX + dx, getMapWidthPx() - unitSize * 0.5));
-        const candidateY = Math.max(unitSize * 0.5, Math.min(clampedY + dy, getMapHeightPx() - unitSize * 0.5));
-        if (!isCommandWalkablePoint(candidateX, candidateY, unitSize)) continue;
-
-        const distance = Math.hypot(candidateX - clampedX, candidateY - clampedY);
-        if (distance < bestDistance) {
-          best = { x: candidateX, y: candidateY };
-          bestDistance = distance;
-        }
-      }
-    }
-
-    if (best) {
-      return { x: best.x, y: best.y, adjusted: true };
-    }
-  }
-
-  return null;
+function findNearestWalkablePoint(worldX, worldY, unitSize = 20, maxRadius = 16, options = {}) {
+  return getNavigationService().findNearestWalkablePoint(worldX, worldY, unitSize, maxRadius, options);
 }
 
 function randomSpotOnMap() {
@@ -3009,104 +3216,10 @@ function randomSpotOnMap() {
   return { x: tileSize / 2, y: tileSize / 2 };
 }
 
-function hasLineOfSight(startTile, endTile) {
-  const x0 = startTile.x;
-  const y0 = startTile.y;
-  const x1 = endTile.x;
-  const y1 = endTile.y;
-
-  const dx = Math.abs(x1 - x0);
-  const dy = Math.abs(y1 - y0);
-  const sx = x0 < x1 ? 1 : -1;
-  const sy = y0 < y1 ? 1 : -1;
-  let err = dx - dy;
-
-  let x = x0;
-  let y = y0;
-
-  while (true) {
-    if (!isWalkableTile(x, y)) {
-      return false;
-    }
-
-    if (x === x1 && y === y1) break;
-
-    const e2 = 2 * err;
-
-    let nextX = x;
-    let nextY = y;
-
-    if (e2 > -dy) {
-      err -= dy;
-      nextX += sx;
-    }
-    if (e2 < dx) {
-      err += dx;
-      nextY += sy;
-    }
-
-    const movingDiagonally = (nextX !== x) && (nextY !== y);
-    if (movingDiagonally) {
-      const side1Blocked = !isWalkableTile(nextX, y);
-      const side2Blocked = !isWalkableTile(x, nextY);
-
-      if (side1Blocked || side2Blocked) {
-        return false;
-      }
-    }
-
-    x = nextX;
-    y = nextY;
-  }
-
-  return true;
+function hasLineOfSight(startTile, endTile, options = {}) {
+  return getNavigationService().hasLineOfSight(startTile, endTile, options);
 }
 
-function smoothPath(path) {
-  if (!path || path.length === 0) return [];
-
-  const newPath = [];
-  let currentIndex = 0;
-
-  while (currentIndex < path.length - 1) {
-    let furthest = path.length - 1;
-    let found = false;
-
-    while (furthest > currentIndex + 1) {
-      const start = path[currentIndex];
-      const end = path[furthest];
-
-      const movingDiagonally = Math.abs(end.x - start.x) > 0 && Math.abs(end.y - start.y) > 0;
-
-      let blockedDiagonal = false;
-      if (movingDiagonally) {
-        const side1Blocked = !isWalkableTile(end.x, start.y);
-        const side2Blocked = !isWalkableTile(start.x, end.y);
-        blockedDiagonal = side1Blocked || side2Blocked;
-      }
-
-      if (!blockedDiagonal && hasLineOfSight(start, end)) {
-        found = true;
-        break;
-      }
-
-      furthest--;
-    }
-
-    if (!found) {
-      furthest = currentIndex + 1;
-    }
-
-    newPath.push(path[furthest]);
-
-    if (furthest <= currentIndex) break;
-    currentIndex = furthest;
-  }
-
-  const lastTile = path[path.length - 1];
-  if (!newPath.some(t => t.x === lastTile.x && t.y === lastTile.y)) {
-    newPath.push(lastTile);
-  }
-
-  return newPath;
+function smoothPath(path, options = {}) {
+  return getNavigationService().smoothPath(path, options);
 }

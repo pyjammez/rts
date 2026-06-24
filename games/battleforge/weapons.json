@@ -1,0 +1,38 @@
+{
+  "bf_axe": {
+    "name": "War Axe",
+    "damage": 13,
+    "movingDamage": 8,
+    "range": 46,
+    "stopRange": 62,
+    "fireRate": 1.05,
+    "projectileSpeed": 0,
+    "projectileType": "melee",
+    "damageType": "blade",
+    "melee": true
+  },
+  "bf_longbow": {
+    "name": "Longbow",
+    "damage": 9,
+    "movingDamage": 5,
+    "range": 215,
+    "stopRange": 245,
+    "fireRate": 1.35,
+    "projectileSpeed": 320,
+    "projectileColor": "#c38f50",
+    "projectileType": "arrow",
+    "damageType": "pierce"
+  },
+  "bf_spellbolt": {
+    "name": "Spellbolt",
+    "damage": 18,
+    "movingDamage": 10,
+    "range": 190,
+    "stopRange": 225,
+    "fireRate": 0.9,
+    "projectileSpeed": 250,
+    "projectileColor": "#82e2ff",
+    "projectileType": "magic",
+    "damageType": "magic"
+  }
+}

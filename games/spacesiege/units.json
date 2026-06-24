@@ -1,0 +1,62 @@
+{
+  "ss_probe": {
+    "name": "Field Probe",
+    "hp": 70,
+    "speed": 118,
+    "size": 18,
+    "weapon": "ss_particle_rifle",
+    "role": "Worker and structure starter",
+    "cost": { "minerals": 50, "supply": 1 },
+    "trainTime": 8,
+    "model": "worker",
+    "era": "sci_fi",
+    "armorType": "light",
+    "tags": ["worker", "light"]
+  },
+  "ss_marine": {
+    "name": "Pulse Marine",
+    "hp": 95,
+    "speed": 104,
+    "size": 19,
+    "weapon": "ss_particle_rifle",
+    "role": "Core ranged infantry",
+    "cost": { "minerals": 50, "supply": 1 },
+    "trainTime": 6,
+    "model": "gunman",
+    "era": "sci_fi",
+    "armorType": "light",
+    "tags": ["infantry", "light", "ranged"]
+  },
+  "ss_dragoon": {
+    "name": "Shield Walker",
+    "hp": 190,
+    "speed": 82,
+    "size": 28,
+    "weapon": "ss_plasma_cannon",
+    "role": "Armored ranged walker",
+    "cost": { "minerals": 125, "vapor": 50, "supply": 2 },
+    "trainTime": 14,
+    "model": "knight",
+    "era": "sci_fi",
+    "armorType": "armored",
+    "tags": ["armored", "shielded"]
+  },
+  "ss_interceptor": {
+    "name": "Sky Lancer",
+    "hp": 145,
+    "speed": 156,
+    "size": 23,
+    "weapon": "ss_lancer_missile",
+    "role": "Air superiority craft",
+    "cost": { "minerals": 150, "vapor": 100, "supply": 2 },
+    "trainTime": 18,
+    "model": "balloon",
+    "era": "sci_fi",
+    "movementType": "air",
+    "flightHeight": 2.4,
+    "armorType": "air",
+    "tags": ["air", "armored"],
+    "canTargetAir": true,
+    "canTargetGround": true
+  }
+}

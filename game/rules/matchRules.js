@@ -22,6 +22,7 @@
     teams,
     initialHomesByTeam,
     initialKingsByTeam,
+    initialUnitsByTeam,
     aliveUnits,
     buildings
   }) {
@@ -58,6 +59,7 @@
     }
 
     for (const team of teams) {
+      if ((initialUnitsByTeam?.[team] || 0) <= 0) continue;
       const hasLiveUnit = liveUnits.some(unit => unit.team === team && !unit.isDead);
       if (!hasLiveUnit) {
         const winner = opponentOf(teams, team);

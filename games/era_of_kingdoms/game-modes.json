@@ -1,0 +1,32 @@
+{
+  "era_of_kingdoms_versus": {
+    "shortName": "Kingdoms",
+    "name": "Era Of Kingdoms Versus",
+    "summary": "Historical skirmish with food, wood, gold, stone, villagers, infantry, archers, and cavalry.",
+    "playable": true,
+    "startLabel": "Create Kingdoms Room",
+    "teams": ["blue", "gold"],
+    "allowedUnits": ["eok_villager", "eok_spearman", "eok_archer", "eok_cavalry"],
+    "defaults": {
+      "enabledUnits": ["eok_villager", "eok_spearman", "eok_archer", "eok_cavalry"],
+      "mapStyle": "temperate_valley",
+      "mapSize": "default_large",
+      "waterLevel": 10,
+      "rockCount": 22,
+      "treeCount": 80,
+      "sheepCount": 12,
+      "duckCount": 5,
+      "goldMineCount": 6,
+      "houseCount": 4,
+      "startingGold": 100,
+      "startingWood": 200,
+      "startingFood": 200,
+      "playersPerTeam": 1,
+      "playerCount": 2,
+      "homesPerTeam": 1,
+      "towersPerTeam": 0,
+      "unitRoster": { "eok_villager": 6, "eok_spearman": 0, "eok_archer": 0, "eok_cavalry": 0 }
+    },
+    "sections": ["map", "forces", "wildlife"]
+  }
+}

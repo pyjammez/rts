@@ -62,20 +62,21 @@ function processUnitMovement(unit, dt) {
 
   const nextX = unit.x + dirX * moveAmount;
   const nextY = unit.y + dirY * moveAmount;
+  const movementOptions = unit.getMovementOptions ? unit.getMovementOptions() : { movementType: unit.movementType || 'ground', unit };
 
-  if (canSpawnAt(nextX, nextY, unit.size)) {
+  if (canSpawnAt(nextX, nextY, unit.size, movementOptions)) {
     unit.x = nextX;
     unit.y = nextY;
     moved = true;
   } else {
     const tryX = unit.x + dirX * Math.min(moveAmount, dist);
-    if (canSpawnAt(tryX, unit.y)) {
+    if (canSpawnAt(tryX, unit.y, unit.size, movementOptions)) {
       unit.x = tryX;
       moved = true;
     }
 
     const tryY = unit.y + dirY * Math.min(moveAmount, dist);
-    if (canSpawnAt(unit.x, tryY)) {
+    if (canSpawnAt(unit.x, tryY, unit.size, movementOptions)) {
       unit.y = tryY;
       moved = true;
     }
@@ -87,14 +88,14 @@ function processUnitMovement(unit, dt) {
 
       const sideAX = unit.x + perpX * nudge;
       const sideAY = unit.y + perpY * nudge;
-      if (canSpawnAt(sideAX, sideAY, unit.size)) {
+      if (canSpawnAt(sideAX, sideAY, unit.size, movementOptions)) {
         unit.x = sideAX;
         unit.y = sideAY;
         moved = true;
       } else {
         const sideBX = unit.x - perpX * nudge;
         const sideBY = unit.y - perpY * nudge;
-        if (canSpawnAt(sideBX, sideBY, unit.size)) {
+        if (canSpawnAt(sideBX, sideBY, unit.size, movementOptions)) {
           unit.x = sideBX;
           unit.y = sideBY;
           moved = true;

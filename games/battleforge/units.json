@@ -1,0 +1,58 @@
+{
+  "bf_peasant": {
+    "name": "Peasant",
+    "hp": 85,
+    "speed": 100,
+    "size": 18,
+    "weapon": "bf_axe",
+    "role": "Worker and builder",
+    "cost": { "gold": 75, "food": 1 },
+    "trainTime": 9,
+    "model": "worker",
+    "era": "fantasy",
+    "armorType": "light",
+    "tags": ["worker", "light"]
+  },
+  "bf_footman": {
+    "name": "Footman",
+    "hp": 150,
+    "speed": 88,
+    "size": 22,
+    "weapon": "bf_axe",
+    "role": "Armored melee infantry",
+    "cost": { "gold": 140, "lumber": 20, "food": 2 },
+    "trainTime": 12,
+    "model": "soldier",
+    "era": "fantasy",
+    "armorType": "heavy",
+    "tags": ["infantry", "heavy", "melee"]
+  },
+  "bf_ranger": {
+    "name": "Ranger",
+    "hp": 105,
+    "speed": 104,
+    "size": 19,
+    "weapon": "bf_longbow",
+    "role": "Ranged forest unit",
+    "cost": { "gold": 130, "lumber": 35, "food": 2 },
+    "trainTime": 13,
+    "model": "archer",
+    "era": "fantasy",
+    "armorType": "light",
+    "tags": ["infantry", "ranged"]
+  },
+  "bf_mage": {
+    "name": "Battle Mage",
+    "hp": 95,
+    "speed": 96,
+    "size": 20,
+    "weapon": "bf_spellbolt",
+    "role": "Magic damage support",
+    "cost": { "gold": 180, "lumber": 60, "food": 3, "mana": 0 },
+    "trainTime": 18,
+    "model": "crossbowman",
+    "era": "fantasy",
+    "armorType": "light",
+    "tags": ["caster", "ranged"]
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "bf_town_hall": {
+    "name": "Town Hall",
+    "width": 8,
+    "height": 8,
+    "hp": 1500,
+    "size": 300,
+    "cost": { "gold": 385, "lumber": 185 },
+    "buildTime": 40,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "bf_farm": {
+    "name": "Farmstead",
+    "width": 3,
+    "height": 3,
+    "hp": 420,
+    "size": 90,
+    "cost": { "gold": 80, "lumber": 25, "food": 6 },
+    "buildTime": 16,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "bf_barracks": {
+    "name": "War Lodge",
+    "width": 4,
+    "height": 4,
+    "hp": 900,
+    "size": 150,
+    "cost": { "gold": 180, "lumber": 60 },
+    "buildTime": 28,
+    "model": "castle",
+    "armorType": "structure"
+  },
+  "bf_guard_tower": {
+    "name": "Guard Tower",
+    "width": 2,
+    "height": 2,
+    "hp": 500,
+    "size": 75,
+    "weapon": "bf_longbow",
+    "cost": { "gold": 120, "lumber": 70 },
+    "buildTime": 22,
+    "model": "arrow_tower",
+    "armorType": "structure",
+    "canTargetGround": true,
+    "canTargetAir": true
+  }
+}

@@ -136,4 +136,18 @@
   });
   app.diagnostics.simulation = service;
   app.runtime?.registerService('simulation-snapshots', service);
+  app.diagnostics?.register?.('simulation', () => {
+    try {
+      return {
+        schemaVersion: SCHEMA_VERSION,
+        current: captureCurrent()
+      };
+    } catch (error) {
+      return {
+        schemaVersion: SCHEMA_VERSION,
+        status: 'unavailable',
+        reason: error.message
+      };
+    }
+  });
 })(globalThis);

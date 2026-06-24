@@ -1,0 +1,32 @@
+{
+  "ultimate_extinction_versus": {
+    "shortName": "Extinction",
+    "name": "UltimateExtinction Versus",
+    "summary": "Large-scale robot-war starter preset with metal, energy, build power, commanders, bots, and aircraft.",
+    "playable": true,
+    "startLabel": "Create Extinction Room",
+    "teams": ["red", "blue"],
+    "allowedUnits": ["ue_commander", "ue_constructor", "ue_raider", "ue_assault_mech", "ue_strike_plane"],
+    "defaults": {
+      "enabledUnits": ["ue_commander", "ue_constructor", "ue_raider", "ue_assault_mech", "ue_strike_plane"],
+      "mapStyle": "metal_plateau",
+      "mapSize": "default_large",
+      "waterLevel": 4,
+      "rockCount": 52,
+      "treeCount": 4,
+      "sheepCount": 0,
+      "duckCount": 0,
+      "goldMineCount": 14,
+      "houseCount": 0,
+      "startingGold": 1000,
+      "startingWood": 0,
+      "startingFood": 0,
+      "playersPerTeam": 1,
+      "playerCount": 2,
+      "homesPerTeam": 1,
+      "towersPerTeam": 0,
+      "unitRoster": { "ue_commander": 1, "ue_constructor": 1, "ue_raider": 0, "ue_assault_mech": 0, "ue_strike_plane": 0 }
+    },
+    "sections": ["map", "forces"]
+  }
+}

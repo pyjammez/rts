@@ -1,0 +1,50 @@
+{
+  "eok_tool": {
+    "name": "Work Tool",
+    "damage": 4,
+    "movingDamage": 3,
+    "range": 42,
+    "stopRange": 56,
+    "fireRate": 1.1,
+    "projectileSpeed": 0,
+    "projectileType": "melee",
+    "damageType": "melee",
+    "melee": true
+  },
+  "eok_spear": {
+    "name": "Spear",
+    "damage": 11,
+    "movingDamage": 7,
+    "range": 48,
+    "stopRange": 64,
+    "fireRate": 1,
+    "projectileSpeed": 0,
+    "projectileType": "melee",
+    "damageType": "melee",
+    "melee": true
+  },
+  "eok_bow": {
+    "name": "Bow",
+    "damage": 8,
+    "movingDamage": 5,
+    "range": 205,
+    "stopRange": 235,
+    "fireRate": 1.25,
+    "projectileSpeed": 320,
+    "projectileColor": "#bd8955",
+    "projectileType": "arrow",
+    "damageType": "pierce"
+  },
+  "eok_lance": {
+    "name": "Lance",
+    "damage": 16,
+    "movingDamage": 10,
+    "range": 52,
+    "stopRange": 70,
+    "fireRate": 0.9,
+    "projectileSpeed": 0,
+    "projectileType": "melee",
+    "damageType": "melee",
+    "melee": true
+  }
+}

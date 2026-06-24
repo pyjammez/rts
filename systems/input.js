@@ -78,73 +78,29 @@ function getWheelPixelMultiplier(event) {
 
 function handleCameraGesture(event, screenX, screenY) {
   const multiplier = getWheelPixelMultiplier(event);
-  const deltaX = event.deltaX * multiplier;
   const deltaY = event.deltaY * multiplier;
-
-  // Chromium reports a trackpad pinch as a ctrl-modified wheel gesture.
-  if (event.ctrlKey) {
-    const zoomFactor = clamp(Math.exp(-deltaY * 0.012), 0.8, 1.25);
-    zoomAtScreenPoint(screenX, screenY, zoomFactor);
-    return;
-  }
-
-  const panScale = 1 / Math.max(0.25, camera.zoom);
-  camera.x += deltaX * panScale;
-  camera.y += deltaY * panScale;
-  if (typeof clampCameraPosition === 'function') clampCameraPosition();
+  const zoomFactor = clamp(Math.exp(-deltaY * 0.0028), 0.82, 1.22);
+  zoomAtScreenPoint(screenX, screenY, zoomFactor);
 }
 
 window.handleCameraGesture = handleCameraGesture;
 
-function getFormationOffset(index, totalUnits, spacing = 36) {
-  const cols = Math.max(1, Math.ceil(Math.sqrt(totalUnits)));
-  const rows = Math.ceil(totalUnits / cols);
-
-  const col = index % cols;
-  const row = Math.floor(index / cols);
-
-  const originX = (cols - 1) * spacing * 0.5;
-  const originY = (rows - 1) * spacing * 0.5;
-
-  return {
-    x: col * spacing - originX,
-    y: row * spacing - originY
-  };
-}
-
 function getFirstAliveSelectedTeam() {
-  const firstSelected = units.find(u => u.selected && !u.isDead);
+  const registrySelected = OpenRTS.entities?.query?.selectedUnits?.();
+  const firstSelected = registrySelected?.[0] || units.find(u => u.selected && !u.isDead);
   return firstSelected ? firstSelected.team : null;
 }
 
-function enqueueUnitCommand(type, payload) {
-  return OpenRTS.commands.enqueue({ type, payload });
-}
-
-function enqueueAttackCommands(commandedUnits, target, targetKind, append) {
-  for (const unit of commandedUnits) {
-    enqueueUnitCommand(OpenRTS.commands.types.ATTACK, {
-      unitId: unit.id,
-      targetId: target.id,
-      targetKind,
-      append: !!append
-    });
-  }
-}
-
-function enqueueMountCommand(unit, sheep, append) {
-  enqueueUnitCommand(OpenRTS.commands.types.MOUNT, {
-    unitId: unit.id,
-    sheepId: sheep.id,
-    append: !!append
-  });
-}
-
 function getUnitAtWorldPoint(worldX, worldY) {
+  const picked = OpenRTS.entities?.picker?.pickAtPoint?.(worldX, worldY, {
+    category: 'unit'
+  });
+  if (picked?.source) return picked.source;
+
   let clickedUnit = null;
 
   for (const unit of units) {
-    if (unit.isDead) continue;
+    if (unit.isDead || unit.hiddenInHouse) continue;
     if (
       worldX >= unit.x - unit.size / 2 &&
       worldX <= unit.x + unit.size / 2 &&
@@ -160,9 +116,16 @@ function getUnitAtWorldPoint(worldX, worldY) {
 }
 
 function getInspectableAtWorldPoint(worldX, worldY) {
+  const picked = OpenRTS.entities?.picker?.pickAtPoint?.(worldX, worldY, {
+    category: ['wildlife', 'resource', 'house', 'item', 'obstacle']
+  });
+  if (picked?.source) return picked.source;
+
   return (typeof getSheepAtPoint === 'function' && getSheepAtPoint(worldX, worldY)) ||
     (typeof getDuckAtPoint === 'function' && getDuckAtPoint(worldX, worldY)) ||
     (typeof getHorseAtPoint === 'function' && getHorseAtPoint(worldX, worldY)) ||
+    (typeof getGoldMineAtPoint === 'function' && getGoldMineAtPoint(worldX, worldY)) ||
+    (typeof getHouseAtPoint === 'function' && getHouseAtPoint(worldX, worldY)) ||
     (typeof getWorldItemAtPoint === 'function' && getWorldItemAtPoint(worldX, worldY)) ||
     (typeof getObstacleAtPoint === 'function' && getObstacleAtPoint(worldX, worldY)) ||
     null;
@@ -188,8 +151,12 @@ function isUnitVisibleOnScreen(unit) {
 function selectVisibleFactionUnits(team) {
   let selectedAny = false;
 
+  const visibleUnits = OpenRTS.entities?.query?.aliveUnits
+    ? OpenRTS.entities.query.aliveUnits({ team }).filter(isUnitVisibleOnScreen)
+    : units.filter(unit => !unit.isDead && unit.team === team && isUnitVisibleOnScreen(unit));
+  const visibleIds = new Set(visibleUnits.map(unit => unit.id));
   units.forEach(unit => {
-    unit.selected = !unit.isDead && unit.team === team && isUnitVisibleOnScreen(unit);
+    unit.selected = visibleIds.has(unit.id);
     if (unit.selected) selectedAny = true;
   });
 
@@ -266,16 +233,22 @@ canvas.addEventListener('mouseup', (e) => {
       const minY = Math.min(startWorld.y, endWorld.y);
       const maxY = Math.max(startWorld.y, endWorld.y);
 
-        const selectedInBox = units.filter(u =>
-          !u.isDead &&
-          u.x >= minX && u.x <= maxX &&
-          u.y >= minY && u.y <= maxY
-        );
+        const selectedInBox = OpenRTS.entities?.query?.entitiesInBox
+          ? OpenRTS.entities.query.entitiesInBox({ minX, maxX, minY, maxY }, {
+              category: 'unit',
+              lifecycle: 'alive',
+              predicate: entity => !entity.source?.hiddenInHouse
+            }).map(entity => entity.source)
+          : units.filter(u =>
+            !u.isDead && !u.hiddenInHouse &&
+            u.x >= minX && u.x <= maxX &&
+            u.y >= minY && u.y <= maxY
+          );
         const selectedTeam = selectedInBox.length > 0 ? selectedInBox[0].team : null;
 
         // Enforce single-faction control group selection.
         units.forEach(u => {
-          u.selected = !!selectedTeam && !u.isDead && u.team === selectedTeam &&
+          u.selected = !!selectedTeam && !u.isDead && !u.hiddenInHouse && u.team === selectedTeam &&
             u.x >= minX && u.x <= maxX && u.y >= minY && u.y <= maxY;
         });
         if (typeof clearBuildingSelection === 'function') clearBuildingSelection();
@@ -284,27 +257,20 @@ canvas.addEventListener('mouseup', (e) => {
     } else {
         // single click selection
       const { x, y } = screenToWorld(selectionEnd.x, selectionEnd.y);
-        let clickedUnit = null;
-        const clickedSheep = typeof getSheepAtPoint === 'function'
-          ? getSheepAtPoint(x, y)
-          : null;
-        const clickedDuck = typeof getDuckAtPoint === 'function'
-          ? getDuckAtPoint(x, y)
-          : null;
-        const clickedHorse = typeof getHorseAtPoint === 'function'
-          ? getHorseAtPoint(x, y)
-          : null;
-        const clickedItem = typeof getWorldItemAtPoint === 'function'
-          ? getWorldItemAtPoint(x, y)
-          : null;
-        const clickedObstacle = typeof getObstacleAtPoint === 'function'
-          ? getObstacleAtPoint(x, y)
-          : null;
-        const clickedBuilding = typeof use3DRenderer === 'function' && use3DRenderer()
+        const picked = OpenRTS.entities?.picker?.pickAllAtPoint?.(x, y) || {};
+        let clickedUnit = picked.unit?.source || null;
+        const clickedSheep = picked.sheep?.source || (typeof getSheepAtPoint === 'function' ? getSheepAtPoint(x, y) : null);
+        const clickedDuck = picked.duck?.source || (typeof getDuckAtPoint === 'function' ? getDuckAtPoint(x, y) : null);
+        const clickedHorse = picked.horse?.source || (typeof getHorseAtPoint === 'function' ? getHorseAtPoint(x, y) : null);
+        const clickedGoldMine = picked.goldMine?.source || (typeof getGoldMineAtPoint === 'function' ? getGoldMineAtPoint(x, y) : null);
+        const clickedHouse = picked.house?.source || (typeof getHouseAtPoint === 'function' ? getHouseAtPoint(x, y) : null);
+        const clickedItem = picked.item?.source || (typeof getWorldItemAtPoint === 'function' ? getWorldItemAtPoint(x, y) : null);
+        const clickedObstacle = picked.obstacle?.source || (typeof getObstacleAtPoint === 'function' ? getObstacleAtPoint(x, y) : null);
+        const clickedBuilding = picked.building?.source || (typeof use3DRenderer === 'function' && use3DRenderer()
           ? (typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(x, y) : null)
           : (typeof getBuildingAtScreenPoint === 'function'
               ? getBuildingAtScreenPoint(selectionEnd.x, selectionEnd.y)
-              : (typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(x, y) : null));
+              : (typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(x, y) : null)));
 
         const selectedUnits = units.filter(u => u.selected && !u.isDead);
         const selectedTeam = selectedUnits.length > 0 ? selectedUnits[0].team : null;
@@ -312,8 +278,8 @@ canvas.addEventListener('mouseup', (e) => {
         // is a unit within the spot I clicked?
         // this checks below and right of the pointer.
         // it also breaks out of the loop when it finds it to avoid unecessary comparisons
-        for (const u of units) {
-            if (u.isDead) continue;
+        for (const u of clickedUnit ? [] : units) {
+            if (u.isDead || u.hiddenInHouse) continue;
             if (x >= u.x - u.size/2 && x <= u.x + u.size/2 && y >= u.y - u.size/2 && y <= u.y + u.size/2) {
                 clickedUnit = u;
                 break;
@@ -321,34 +287,55 @@ canvas.addEventListener('mouseup', (e) => {
         }
 
         const clickedWildlife = clickedDuck;
-        const clickedInspectable = clickedSheep || clickedDuck || clickedHorse || clickedItem || clickedObstacle;
+        const clickedInspectable = clickedSheep || clickedDuck || clickedHorse || clickedGoldMine || clickedHouse || clickedItem || clickedObstacle;
         if (clickedSheep && selectedUnits.length > 0 && selectedTeam) {
             const rider = selectedUnits.find(u => u.team === selectedTeam && !u.mountType && !u.mountTarget);
             if (rider) {
               addCommandClickMarker(clickedSheep.x, clickedSheep.y, 'green');
-              enqueueMountCommand(rider, clickedSheep, e.shiftKey);
+              OpenRTS.commandIntents.unit.enqueueMount(rider, clickedSheep, e.shiftKey);
             }
         } else if (clickedWildlife && selectedUnits.length > 0 && selectedTeam) {
             addCommandClickMarker(clickedWildlife.x, clickedWildlife.y, 'red');
-            enqueueAttackCommands(selectedUnits.filter(unit => unit.team === selectedTeam), clickedWildlife, 'duck', e.shiftKey);
+            OpenRTS.commandIntents.unit.enqueueAttackGroup(selectedUnits.filter(unit => unit.team === selectedTeam), clickedWildlife, 'duck', e.shiftKey);
         } else if (clickedUnit && selectedUnits.length > 0 && selectedTeam && clickedUnit.team !== selectedTeam) {
             // Attack command: selected team targets clicked enemy unit
-            enqueueAttackCommands(selectedUnits.filter(unit => unit.team === selectedTeam), clickedUnit, 'unit', e.shiftKey);
+            OpenRTS.commandIntents.unit.enqueueAttackGroup(selectedUnits.filter(unit => unit.team === selectedTeam), clickedUnit, 'unit', e.shiftKey);
         } else if (clickedUnit) {
             // if we did land on a unit deselect all then select one
             units.forEach(u => u.selected = false);
             if (typeof clearBuildingSelection === 'function') clearBuildingSelection();
             if (typeof clearWorldObjectSelection === 'function') clearWorldObjectSelection();
             clickedUnit.selected = true;
+        } else if (clickedHouse && selectedUnits.length > 0 && selectedTeam && !clickedHouse.isWreck) {
+            selectedUnits.filter(unit => unit.team === selectedTeam).forEach(unit => {
+              OpenRTS.commandIntents.unit.enqueue(OpenRTS.commands.types.HOUSE_ENTER, {
+                unitId: unit.id,
+                houseId: clickedHouse.id,
+                append: e.shiftKey
+              });
+            });
+            addCommandClickMarker(clickedHouse.x, clickedHouse.y, 'green');
         } else if (clickedInspectable) {
             selectInspectableObject(clickedInspectable);
         } else if (clickedBuilding && selectedUnits.length > 0 && selectedTeam && clickedBuilding.team !== selectedTeam) {
             addCommandClickMarker(clickedBuilding.x, clickedBuilding.y, 'red');
-            enqueueAttackCommands(selectedUnits.filter(unit => unit.team === selectedTeam), clickedBuilding, 'building', e.shiftKey);
+            OpenRTS.commandIntents.unit.enqueueAttackGroup(selectedUnits.filter(unit => unit.team === selectedTeam), clickedBuilding, 'building', e.shiftKey);
         } else if (clickedBuilding) {
             units.forEach(u => u.selected = false);
             if (typeof clearWorldObjectSelection === 'function') clearWorldObjectSelection();
             if (typeof selectBuilding === 'function') selectBuilding(clickedBuilding);
+        } else if (selectedUnits.length > 0 && selectedTeam) {
+            const moveResult = OpenRTS.commandIntents.unit.enqueueMoveGroupToWorld(
+              selectedUnits.filter(unit => unit.team === selectedTeam),
+              { x, y },
+              e.shiftKey
+            );
+            if (moveResult.marker) addCommandClickMarker(moveResult.marker.x, moveResult.marker.y, moveResult.marker.color);
+            if (moveResult.issued === 0) {
+              units.forEach(u => u.selected = false);
+              if (typeof clearBuildingSelection === 'function') clearBuildingSelection();
+              if (typeof clearWorldObjectSelection === 'function') clearWorldObjectSelection();
+            }
         } else {
             // if we didn't click on anything, deselect all
             units.forEach(u => u.selected = false);
@@ -374,12 +361,13 @@ canvas.addEventListener('click', (e) => {
 
   const mouse = getMousePos(e);
   const world = screenToWorld(mouse.x, mouse.y);
-  if (getUnitAtWorldPoint(world.x, world.y) || getInspectableAtWorldPoint(world.x, world.y)) return;
-  const clickedBuilding = typeof use3DRenderer === 'function' && use3DRenderer()
+  const picked = OpenRTS.entities?.picker?.pickAllAtPoint?.(world.x, world.y) || {};
+  if (picked.unit?.source || picked.wildlife?.source || picked.resource?.source || picked.house?.source || picked.item?.source || picked.obstacle?.source || getUnitAtWorldPoint(world.x, world.y) || getInspectableAtWorldPoint(world.x, world.y)) return;
+  const clickedBuilding = picked.building?.source || (typeof use3DRenderer === 'function' && use3DRenderer()
     ? (typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(world.x, world.y) : null)
     : (typeof getBuildingAtScreenPoint === 'function'
         ? getBuildingAtScreenPoint(mouse.x, mouse.y)
-        : (typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(world.x, world.y) : null));
+        : (typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(world.x, world.y) : null)));
 
   if (!clickedBuilding) return;
 
@@ -388,7 +376,7 @@ canvas.addEventListener('click', (e) => {
 
   if (selectedUnits.length > 0 && selectedTeam && clickedBuilding.team !== selectedTeam) {
     addCommandClickMarker(clickedBuilding.x, clickedBuilding.y, 'red');
-    enqueueAttackCommands(selectedUnits.filter(unit => unit.team === selectedTeam), clickedBuilding, 'building', e.shiftKey);
+    OpenRTS.commandIntents.unit.enqueueAttackGroup(selectedUnits.filter(unit => unit.team === selectedTeam), clickedBuilding, 'building', e.shiftKey);
     return;
   }
 
@@ -416,25 +404,44 @@ canvas.addEventListener('contextmenu', (e) => {
   const world = screenToWorld(mouse.x, mouse.y);
 
   // Check whether right-click landed on a unit
-  let clickedUnit = null;
-  for (const u of units) {
-    if (u.isDead) continue;
+  const picked = OpenRTS.entities?.picker?.pickAllAtPoint?.(world.x, world.y) || {};
+  let clickedUnit = picked.unit?.source || null;
+  for (const u of clickedUnit ? [] : units) {
+    if (u.isDead || u.hiddenInHouse) continue;
     if (world.x >= u.x - u.size / 2 && world.x <= u.x + u.size / 2 && world.y >= u.y - u.size / 2 && world.y <= u.y + u.size / 2) {
       clickedUnit = u;
       break;
     }
   }
-  const clickedSheep = typeof getSheepAtPoint === 'function'
+  const clickedSheep = picked.sheep?.source || (typeof getSheepAtPoint === 'function'
     ? getSheepAtPoint(world.x, world.y)
-    : null;
-  const clickedBuilding = typeof use3DRenderer === 'function' && use3DRenderer()
+    : null);
+  const clickedBuilding = picked.building?.source || (typeof use3DRenderer === 'function' && use3DRenderer()
     ? (typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(world.x, world.y) : null)
     : (typeof getBuildingAtScreenPoint === 'function'
         ? getBuildingAtScreenPoint(mouse.x, mouse.y)
-        : (typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(world.x, world.y) : null));
+        : (typeof getBuildingAtPoint === 'function' ? getBuildingAtPoint(world.x, world.y) : null)));
+  const clickedHouse = picked.house?.source || (typeof getHouseAtPoint === 'function'
+    ? getHouseAtPoint(world.x, world.y)
+    : null);
 
   const selectedUnits = units.filter(unit => unit.selected && !unit.isDead);
-  if (selectedUnits.length === 0) return;
+  if (selectedUnits.length === 0) {
+    const selectedHouse = typeof getSelectedWorldObject === 'function' ? getSelectedWorldObject() : null;
+    if (selectedHouse?.objectType === 'house' && Array.isArray(selectedHouse.occupants) && selectedHouse.occupants.length > 0) {
+      selectedHouse.occupants.forEach((unitId, index) => {
+        const offset = OpenRTS.commandIntents.unit.getFormationOffset(index, selectedHouse.occupants.length);
+        OpenRTS.commandIntents.unit.enqueue(OpenRTS.commands.types.HOUSE_EXIT, {
+          unitId,
+          x: world.x + offset.x,
+          y: world.y + offset.y,
+          append: false
+        });
+      });
+      addCommandClickMarker(world.x, world.y, 'green');
+    }
+    return;
+  }
   const selectedTeam = getFirstAliveSelectedTeam();
   if (!selectedTeam) return;
   const controllableUnits = selectedUnits.filter(u => u.team === selectedTeam);
@@ -443,21 +450,35 @@ canvas.addEventListener('contextmenu', (e) => {
     const rider = controllableUnits.find(unit => !unit.mountType && !unit.mountTarget);
     if (rider) {
       addCommandClickMarker(clickedSheep.x, clickedSheep.y, 'green');
-      enqueueMountCommand(rider, clickedSheep, e.shiftKey);
+      OpenRTS.commandIntents.unit.enqueueMount(rider, clickedSheep, e.shiftKey);
     }
+    return;
+  }
+
+  if (clickedHouse && !clickedHouse.isWreck) {
+    let routed = 0;
+    controllableUnits.forEach(unit => {
+      OpenRTS.commandIntents.unit.enqueue(OpenRTS.commands.types.HOUSE_ENTER, {
+        unitId: unit.id,
+        houseId: clickedHouse.id,
+        append: e.shiftKey
+      });
+      routed++;
+    });
+    if (routed > 0) addCommandClickMarker(clickedHouse.x, clickedHouse.y, 'green');
     return;
   }
 
   // Right-click enemy = attack command (locked target until dead)
   if (clickedUnit && clickedUnit.team !== selectedTeam) {
     addCommandClickMarker(world.x, world.y, 'red');
-    enqueueAttackCommands(controllableUnits, clickedUnit, 'unit', e.shiftKey);
+    OpenRTS.commandIntents.unit.enqueueAttackGroup(controllableUnits, clickedUnit, 'unit', e.shiftKey);
     return;
   }
 
   if (clickedBuilding && clickedBuilding.team !== selectedTeam) {
     addCommandClickMarker(clickedBuilding.x, clickedBuilding.y, 'red');
-    enqueueAttackCommands(controllableUnits, clickedBuilding, 'building', e.shiftKey);
+    OpenRTS.commandIntents.unit.enqueueAttackGroup(controllableUnits, clickedBuilding, 'building', e.shiftKey);
     return;
   }
 
@@ -469,7 +490,7 @@ canvas.addEventListener('contextmenu', (e) => {
   ) {
     let stationed = 0;
     controllableUnits.forEach((unit, index) => {
-      enqueueUnitCommand(OpenRTS.commands.types.CASTLE_RAMPART, {
+      OpenRTS.commandIntents.unit.enqueue(OpenRTS.commands.types.CASTLE_RAMPART, {
         unitId: unit.id,
         buildingId: clickedBuilding.id,
         index,
@@ -495,10 +516,10 @@ canvas.addEventListener('contextmenu', (e) => {
   ) {
     let routed = 0;
     controllableUnits.forEach((unit, index) => {
-      const offset = getFormationOffset(index, controllableUnits.length, 24);
-      const destination = findNearestWalkablePoint(world.x + offset.x, world.y + offset.y, unit.size);
+      const offset = OpenRTS.commandIntents.unit.getFormationOffset(index, controllableUnits.length, 24);
+      const destination = findNearestWalkablePoint(world.x + offset.x, world.y + offset.y, unit.size, 16, unit.getMovementOptions ? unit.getMovementOptions() : {});
       if (!destination) return;
-      enqueueUnitCommand(OpenRTS.commands.types.CASTLE_ENTER, {
+      OpenRTS.commandIntents.unit.enqueue(OpenRTS.commands.types.CASTLE_ENTER, {
         unitId: unit.id,
         buildingId: clickedBuilding.id,
         x: destination.x,
@@ -513,49 +534,27 @@ canvas.addEventListener('contextmenu', (e) => {
   }
 
   // Otherwise right-click ground/friendly = move command
-  const baseDestination = findNearestWalkablePoint(world.x, world.y, controllableUnits[0] ? controllableUnits[0].size : 20);
-  if (!baseDestination) return;
-
-  controllableUnits.forEach((unit, index) => {
-    const offset = getFormationOffset(index, controllableUnits.length);
-    const targetX = clamp(baseDestination.x + offset.x, unit.size * 0.5, getMapWidthPx() - unit.size * 0.5);
-    const targetY = clamp(baseDestination.y + offset.y, unit.size * 0.5, getMapHeightPx() - unit.size * 0.5);
-    const destination = findNearestWalkablePoint(targetX, targetY, unit.size);
-
-    if (destination) {
-      const occupiedCastle = typeof getCastleContainingPoint === 'function'
-        ? getCastleContainingPoint(unit.x, unit.y)
-        : null;
-      if (occupiedCastle && !isPointInsideCastle(occupiedCastle, destination.x, destination.y)) {
-        enqueueUnitCommand(OpenRTS.commands.types.CASTLE_EXIT, {
-          unitId: unit.id,
-          buildingId: occupiedCastle.id,
-          x: destination.x,
-          y: destination.y,
-          append: e.shiftKey,
-          laneIndex: index
-        });
-        return;
-      }
-      enqueueUnitCommand(OpenRTS.commands.types.MOVE, {
-        unitId: unit.id,
-        x: destination.x,
-        y: destination.y,
-        append: e.shiftKey
-      });
-    }
-  });
-
-  addCommandClickMarker(baseDestination.x, baseDestination.y, 'green');
+  const moveResult = OpenRTS.commandIntents.unit.enqueueMoveGroupToWorld(controllableUnits, world, e.shiftKey);
+  if (moveResult.marker) addCommandClickMarker(moveResult.marker.x, moveResult.marker.y, moveResult.marker.color);
 });
 
 window.addEventListener('keydown', (e) => {
+  const activeTag = document.activeElement?.tagName?.toLowerCase();
+  const isTyping = activeTag === 'input' || activeTag === 'textarea' || document.activeElement?.isContentEditable;
   if (e.key === 'Escape' && typeof cancelItemActionTargeting === 'function') {
     cancelItemActionTargeting();
   }
+  if (!isTyping && e.key.toLowerCase() === 'a' && !e.metaKey && !e.ctrlKey && !e.altKey && typeof toggleItemActionTargeting === 'function') {
+    const selectedUnits = units.filter(unit => unit.selected && !unit.isDead);
+    if (selectedUnits.length > 0) {
+      e.preventDefault();
+      toggleItemActionTargeting('attack-move');
+      return;
+    }
+  }
   if (e.key === 'w' || e.key === 'ArrowUp') inputState.up = true;
   if (e.key === 's' || e.key === 'ArrowDown') inputState.down = true;
-  if (e.key === 'a' || e.key === 'ArrowLeft') inputState.left = true;
+  if (e.key === 'ArrowLeft') inputState.left = true;
   if (e.key === 'd' || e.key === 'ArrowRight') inputState.right = true;
 
   if (e.key === 'p') toggleDebugFlag('showPaths');

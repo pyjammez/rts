@@ -1,0 +1,12 @@
+{
+  "metal_plateau": {
+    "name": "Metal Plateau",
+    "waterLevel": 4,
+    "rockCount": 52,
+    "treeCount": 4,
+    "sheepCount": 0,
+    "duckCount": 0,
+    "goldMineCount": 14,
+    "houseCount": 0
+  }
+}

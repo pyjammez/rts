@@ -2,10 +2,11 @@
   "coastal_grassland": {
     "name": "Coastal Grassland",
     "waterLevel": 10,
-    "rockCount": 15,
+    "rockCount": 20,
     "treeCount": 30,
-    "sheepCount": 12,
-    "duckCount": 5
+    "sheepCount": 10,
+    "duckCount": 5,
+    "goldMineCount": 5
   },
   "defense_pass": {
     "name": "Defense Pass",
@@ -22,5 +23,15 @@
     "treeCount": 8,
     "sheepCount": 0,
     "duckCount": 0
+  },
+  "volcanic_lava": {
+    "name": "Volcanic Lava Flats",
+    "waterLevel": 18,
+    "rockCount": 60,
+    "treeCount": 0,
+    "sheepCount": 0,
+    "duckCount": 0,
+    "goldMineCount": 4,
+    "houseCount": 0
   }
 }

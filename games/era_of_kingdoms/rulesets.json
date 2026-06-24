@@ -1,0 +1,30 @@
+{
+  "era_of_kingdoms_rules": {
+    "name": "Era Of Kingdoms Rules",
+    "summary": "Historical economy with food, wood, gold, stone, population capacity, villagers, infantry, archers, cavalry, and defensive towers.",
+    "resources": {
+      "food": { "name": "Food", "storage": "stockpile", "defaultStartingAmount": 200, "gatherable": true },
+      "wood": { "name": "Wood", "storage": "stockpile", "defaultStartingAmount": 200, "gatherable": true },
+      "gold": { "name": "Gold", "storage": "stockpile", "defaultStartingAmount": 100, "gatherable": true },
+      "stone": { "name": "Stone", "storage": "stockpile", "defaultStartingAmount": 100, "gatherable": true },
+      "population": { "name": "Population", "storage": "capacity", "defaultStartingAmount": 10, "gatherable": false }
+    },
+    "damageTypes": {
+      "melee": { "name": "Melee", "modifiers": { "infantry": 1.0, "cavalry": 0.9, "structure": 0.55 } },
+      "pierce": { "name": "Pierce", "modifiers": { "infantry": 1.0, "cavalry": 0.85, "structure": 0.4 } },
+      "siege": { "name": "Siege", "modifiers": { "structure": 1.6, "infantry": 0.65, "cavalry": 0.75 } }
+    },
+    "armorTags": {
+      "villager": { "name": "Villager" },
+      "infantry": { "name": "Infantry" },
+      "cavalry": { "name": "Cavalry" },
+      "structure": { "name": "Structure" }
+    },
+    "effectTypes": {
+      "damage": { "name": "Damage" },
+      "gather": { "name": "Gather" },
+      "build": { "name": "Build" },
+      "research": { "name": "Research" }
+    }
+  }
+}

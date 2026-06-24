@@ -1,0 +1,12 @@
+{
+  "enchanted_forest": {
+    "name": "Enchanted Forest",
+    "waterLevel": 8,
+    "rockCount": 16,
+    "treeCount": 90,
+    "sheepCount": 8,
+    "duckCount": 3,
+    "goldMineCount": 6,
+    "houseCount": 4
+  }
+}

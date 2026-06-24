@@ -78,10 +78,12 @@
   }
 
   function isValidTarget(projectile, target) {
-    return !!target &&
-      !target.isDead &&
-      target !== projectile.shooter &&
-      target.team !== projectile.team;
+    if (!target || target.isDead || target === projectile.shooter || target.team === projectile.team) return false;
+    const shooter = projectile.shooter || {};
+    const targetIsAir = target.movementType === 'air' || target.airborne === true;
+    if (targetIsAir && !shooter.canTargetAir) return false;
+    if (!targetIsAir && shooter.canTargetGround === false) return false;
+    return true;
   }
 
   function applyImpactDamage(projectile, directTarget, dependencies) {

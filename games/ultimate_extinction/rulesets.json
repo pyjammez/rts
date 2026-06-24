@@ -1,0 +1,30 @@
+{
+  "ultimate_extinction_rules": {
+    "name": "UltimateExtinction Rules",
+    "summary": "Large-scale robot RTS economy built around metal, energy, build power, wreckage, and radar coverage.",
+    "resources": {
+      "metal": { "name": "Metal", "storage": "stockpile", "defaultStartingAmount": 1000, "gatherable": true },
+      "energy": { "name": "Energy", "storage": "flow", "defaultStartingAmount": 1000, "gatherable": false },
+      "build_power": { "name": "Build Power", "storage": "capacity", "defaultStartingAmount": 0, "gatherable": false },
+      "radar": { "name": "Radar Coverage", "storage": "tech_pool", "defaultStartingAmount": 0, "gatherable": false }
+    },
+    "damageTypes": {
+      "laser": { "name": "Laser", "modifiers": { "light": 1.1, "heavy": 0.85, "air": 0.8 } },
+      "shell": { "name": "Shell", "modifiers": { "heavy": 1.15, "structure": 1.0, "light": 0.8 } },
+      "missile": { "name": "Missile", "modifiers": { "air": 1.35, "heavy": 0.9, "structure": 0.85 } }
+    },
+    "armorTags": {
+      "light": { "name": "Light Bot" },
+      "heavy": { "name": "Heavy Unit" },
+      "air": { "name": "Air" },
+      "structure": { "name": "Structure" },
+      "commander": { "name": "Commander" }
+    },
+    "effectTypes": {
+      "damage": { "name": "Damage" },
+      "build": { "name": "Build" },
+      "repair": { "name": "Repair" },
+      "reclaim": { "name": "Reclaim" }
+    }
+  }
+}

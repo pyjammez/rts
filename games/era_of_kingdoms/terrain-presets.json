@@ -1,0 +1,12 @@
+{
+  "temperate_valley": {
+    "name": "Temperate Valley",
+    "waterLevel": 10,
+    "rockCount": 22,
+    "treeCount": 80,
+    "sheepCount": 12,
+    "duckCount": 5,
+    "goldMineCount": 6,
+    "houseCount": 4
+  }
+}
