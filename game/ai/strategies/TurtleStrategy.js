@@ -14,7 +14,6 @@
 
     choosePrimaryPlan(blackboard) {
       if (blackboard.get('threats', []).length > 0) return 'defend';
-      if (blackboard.get('rangedUnits', []).length < this.profile.rampartDefenders) return 'rally';
       if (blackboard.waveCooldown <= 0 && blackboard.get('assaultUnits', []).length >= this.profile.attackReadiness) {
         return 'attack';
       }

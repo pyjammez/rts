@@ -1,12 +1,14 @@
 {
   "dry_oil_basin": {
     "name": "Dry Oil Basin",
+    "description": "Open industrial oil basin with almost no foliage, wide armor lanes, and exposed supply fields.",
+    "visualStyle": "industrial_desert",
     "waterLevel": 0,
-    "rockCount": 36,
-    "treeCount": 3,
+    "rockCount": 42,
+    "treeCount": 0,
     "sheepCount": 0,
     "duckCount": 0,
-    "goldMineCount": 10,
-    "houseCount": 6
+    "goldMineCount": 12,
+    "houseCount": 3
   }
 }

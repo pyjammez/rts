@@ -13,7 +13,7 @@
     { "slot": 2, "controller": "ai", "team": "blue", "strategy": "balanced" }
   ],
   "startingRoster": {
-    "king": 1,
+    "king": 0,
     "worker": 5
   },
   "startingBuildings": {

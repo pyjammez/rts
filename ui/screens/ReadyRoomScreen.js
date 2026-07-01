@@ -14,10 +14,14 @@ function formatUnitRoster(roster) {
 function getReviewRows(mode) {
   const terrain = getTerrainPreset(mapConfig.mapStyle);
   const activeSlots = typeof getActivePlayerSlots === 'function' ? getActivePlayerSlots(mapConfig) : [];
+  const factionNames = activeSlots
+    .map(slot => getFactionDefinition(slot.factionId)?.name || slot.factionId)
+    .filter(Boolean);
   const rows = [
     ['Mode', mode.name],
     ['Players', `${activeSlots.length || mapConfig.playerCount || 2} of ${mapConfig.playerCount || 2} slots filled`],
     ['Teams', activeSlots.length ? activeSlots.map(slot => getFlagOption(slot.flag).name).join(' vs ') : 'Configured in room'],
+    ['Factions', factionNames.length ? factionNames.join(' vs ') : 'Configured in room'],
     ['Terrain', terrain.name],
     ['Map Detail', `${mapConfig.waterLevel || 0}% ${mapConfig.mapStyle === 'volcanic_lava' ? 'lava' : 'water'}, ${mapConfig.rockCount || 0} rock outcrops, ${mapConfig.treeCount || 0} trees`]
   ];
@@ -181,8 +185,30 @@ function createFlagSelect(slot, index) {
   return select;
 }
 
+function createFactionSelect(slot, index) {
+  const select = document.createElement('select');
+  select.className = 'flag-select';
+  select.ariaLabel = `Faction for slot ${index + 1}`;
+  const factions = typeof getFactionCatalog === 'function' ? getFactionCatalog(mapConfig.modeId) : [];
+
+  for (const faction of factions) {
+    const option = document.createElement('option');
+    option.value = faction.id;
+    option.textContent = faction.name || faction.id;
+    option.selected = faction.id === slot.factionId;
+    select.appendChild(option);
+  }
+
+  select.addEventListener('change', event => {
+    setPlayerSlotFaction(index, event.target.value);
+    renderWaitingRoom();
+  });
+  return select;
+}
+
 function createWaitingRoomSlot(slot, index) {
   const flag = getFlagOption(slot.flag);
+  const faction = getFactionDefinition(slot.factionId);
   const row = document.createElement('div');
   row.className = `waiting-room-slot ${slot.controller === 'open' ? 'is-open' : ''}`;
 
@@ -194,7 +220,7 @@ function createWaitingRoomSlot(slot, index) {
   const title = document.createElement('strong');
   title.textContent = `Slot ${index + 1}`;
   const subtitle = document.createElement('span');
-  subtitle.textContent = slot.name;
+  subtitle.textContent = `${slot.name} / ${faction?.name || slot.factionId || 'Faction'}`;
   copy.appendChild(title);
   copy.appendChild(subtitle);
   identity.appendChild(copy);
@@ -202,6 +228,7 @@ function createWaitingRoomSlot(slot, index) {
   const controls = document.createElement('div');
   controls.className = 'slot-controls';
   controls.appendChild(createFlagSelect(slot, index));
+  controls.appendChild(createFactionSelect(slot, index));
   controls.appendChild(createSlotController(slot, index));
 
   row.appendChild(identity);

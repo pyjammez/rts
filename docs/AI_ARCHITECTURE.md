@@ -20,7 +20,7 @@ Planners generate intent, not direct actions.
 
 - `DefensePlanner`: decides when the AI must defend its castle.
 - `AttackPlanner`: decides when to attack or harass.
-- `ArmyPlanner`: prepares tactical positions such as castle ramparts.
+- `ArmyPlanner`: reserved for future army composition and staging decisions.
 - `EconomyPlanner`: currently upgrades the castle; later this is where workers, resources, expansion, and production budgets belong.
 
 ## Tactics
@@ -28,7 +28,7 @@ Planners generate intent, not direct actions.
 Tactics convert intent into command-bus orders.
 
 - `TargetSelector`: chooses units, kings, castles, and buildings to attack.
-- `SquadController`: emits move, attack, rampart, and upgrade commands.
+- `SquadController`: emits move, attack, and upgrade commands.
 
 ## Strategies
 

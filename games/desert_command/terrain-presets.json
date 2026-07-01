@@ -1,12 +1,14 @@
 {
   "desert_oilfield": {
     "name": "Desert Oilfield",
+    "description": "Sparse desert raid map with rocky ambush channels, scattered houses, and fewer income nodes.",
+    "visualStyle": "desert_raid",
     "waterLevel": 0,
-    "rockCount": 36,
-    "treeCount": 2,
+    "rockCount": 58,
+    "treeCount": 1,
     "sheepCount": 0,
     "duckCount": 0,
-    "goldMineCount": 8,
-    "houseCount": 6
+    "goldMineCount": 5,
+    "houseCount": 10
   }
 }

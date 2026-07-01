@@ -177,7 +177,7 @@ test('house interaction service controls enter exit and burning lifecycle', () =
   assert.ok(dirtyCount >= 2);
 });
 
-test('castle command service issues castle entry and rampart commands', () => {
+test('castle command service treats castles as solid non-enterable buildings', () => {
   const context = loadOpenRTSScript('../../world/objects/CastleGeometryService.js');
   loadOpenRTSScript('../../world/objects/CastleCommandService.js', context);
   const castleCommands = context.OpenRTS.world.castleCommands;
@@ -192,18 +192,12 @@ test('castle command service issues castle entry and rampart commands', () => {
     issueMoveCommand(x, y, options) { this.commands.push({ x, y, append: !!options?.append }); return true; }
   };
 
-  assert.equal(castleCommands.commandEnter(unit, building, { x: 464, y: 464 }, { tileSize: 32, homeType: 'home' }), true);
-  assert.ok(unit.commands.length >= 3);
-  assert.equal(castleCommands.commandRampart(unit, building, {
-    tileSize: 32,
-    homeType: 'home',
-    mapWidthPx: 2000,
-    mapHeightPx: 2000
-  }), true);
-  unit.x = unit.castleTopStairPoint.x;
-  unit.y = unit.castleTopStairPoint.y;
-  unit.castleTopReached = true;
-  assert.equal(castleCommands.getTopDefender(building, [unit], { tileSize: 32, homeType: 'home' }), unit);
+  assert.equal(castleCommands.commandEnter(unit, building, { x: 464, y: 464 }, { tileSize: 32, homeType: 'home' }), false);
+  assert.equal(castleCommands.commandRampart(unit, building, { tileSize: 32, homeType: 'home' }), false);
+  assert.equal(castleCommands.getTopDefender(building, [unit], { tileSize: 32, homeType: 'home' }), null);
+  assert.equal(unit.commands.length, 0);
+  assert.equal(castleCommands.issueRoute(unit, [{ x: 240, y: 650 }]), true);
+  assert.equal(unit.commands.length, 1);
 });
 
 test('map builder runtime orchestrates brush paint and export without owning globals', () => {
@@ -359,6 +353,82 @@ test('building services create damageable buildings and expose reusable queries'
   assert.equal(context.OpenRTS.world.buildingQueries.teamHome([building, tower], 'red').id, 'castle-red');
   assert.equal(context.OpenRTS.world.buildingQueries.atWorldPoint([building, tower], building.x, building.y, { tileSize: 32 }).id, 'castle-red');
   assert.equal(context.OpenRTS.world.buildingQueries.nearPoint([building, tower], building.x, building.y, 10, { tileSize: 32 }).length, 1);
+});
+
+test('unit comparison roster fallback uses allowed package units instead of hardcoded soldier', () => {
+  const context = loadOpenRTSScript('../../world/gameState.js', {
+    mapConfig: {
+      modeId: 'unit_comparison',
+      enabledUnits: ['ue_constructor', 'ue_raider']
+    },
+    UNIT_DEFINITIONS: {
+      ue_constructor: { id: 'ue_constructor', name: 'Constructor Bot' },
+      ue_raider: { id: 'ue_raider', name: 'Raider Bot' }
+    },
+    getGameModeDefinition: () => ({
+      allowedUnits: ['ue_constructor', 'ue_raider']
+    }),
+    getUnitDefinition: unitType => ({
+      id: unitType,
+      maxPerTeam: 80
+    })
+  });
+
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.getComparisonUnitList({ soldier: 5 }, null, context.mapConfig))),
+    ['ue_constructor']
+  );
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.getComparisonUnitList({ ue_raider: 2 }, null, context.mapConfig))),
+    ['ue_raider', 'ue_raider']
+  );
+});
+
+test('unit comparison mode allows temporary player micro control', () => {
+  const context = loadOpenRTSScript('../../world/gameState.js', {
+    mapConfig: { modeId: 'unit_comparison' }
+  });
+  const attacker = {
+    id: 1,
+    team: 'red',
+    x: 0,
+    y: 0,
+    isDead: false,
+    hiddenInHouse: false,
+    comparisonManualControlTime: 0,
+    issueAttackCommand(target) {
+      this.attackOrderTarget = target;
+      this.attackOrders = (this.attackOrders || 0) + 1;
+    },
+    isEnemyValid(other) {
+      return !!other && !other.isDead && other.team !== this.team;
+    }
+  };
+  const defender = {
+    id: 2,
+    team: 'blue',
+    x: 30,
+    y: 0,
+    isDead: false,
+    hiddenInHouse: false,
+    issueAttackCommand(target) {
+      this.attackOrderTarget = target;
+    },
+    isEnemyValid(other) {
+      return !!other && !other.isDead && other.team !== this.team;
+    }
+  };
+
+  context.markComparisonUnitManualControl(attacker, 1);
+  context.updateActiveGameMode(0.25, [attacker, defender]);
+
+  assert.equal(attacker.attackOrderTarget, undefined);
+  assert.equal(attacker.comparisonManualControlTime, 0.75);
+
+  context.updateActiveGameMode(0.8, [attacker, defender]);
+
+  assert.equal(attacker.attackOrderTarget, defender);
+  assert.equal(attacker.attackOrders, 1);
 });
 
 test('building placement service validates footprints, castle aprons, and nearest sites', () => {

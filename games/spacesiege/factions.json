@@ -1,35 +1,12 @@
 {
-  "stellar_union": {
-    "name": "Stellar Union",
-    "summary": "Disciplined infantry and walkers with balanced air support.",
+  "ss_humans": {
+    "name": "Humans",
+    "summary": "Disciplined ranged infantry, defensive tech, and reliable air support.",
     "ruleset": "spacesiege_rules",
     "theme": "crystal_frontier",
     "color": "#47a8ff",
     "startingResources": { "minerals": 50, "vapor": 0, "supply": 10, "energy": 0 },
-    "startingUnits": { "ss_probe": 4 },
-    "startingBuildings": { "ss_nexus": 1 },
-    "units": ["ss_probe", "ss_marine", "ss_dragoon", "ss_interceptor"],
-    "buildings": ["ss_nexus", "ss_pylon", "ss_gateway", "ss_defense_spire"],
-    "techTree": {
-      "rootBuildings": ["ss_nexus"],
-      "unlocks": {
-        "ss_nexus": ["ss_probe", "ss_pylon", "ss_gateway"],
-        "ss_gateway": ["ss_marine", "ss_dragoon", "ss_defense_spire", "ss_interceptor"]
-      }
-    },
-    "production": {
-      "ss_nexus": { "train": ["ss_probe"], "research": [] },
-      "ss_gateway": { "train": ["ss_marine", "ss_dragoon", "ss_interceptor"], "research": [] }
-    }
-  },
-  "void_clans": {
-    "name": "Void Clans",
-    "summary": "Aggressive raiders with cheaper infantry and quick air harassment.",
-    "ruleset": "spacesiege_rules",
-    "theme": "crystal_frontier",
-    "color": "#b55cff",
-    "startingResources": { "minerals": 50, "vapor": 0, "supply": 10, "energy": 0 },
-    "startingUnits": { "ss_probe": 4 },
+    "startingUnits": { "ss_probe": 4, "ss_marine": 1 },
     "startingBuildings": { "ss_nexus": 1 },
     "units": ["ss_probe", "ss_marine", "ss_interceptor"],
     "buildings": ["ss_nexus", "ss_pylon", "ss_gateway", "ss_defense_spire"],
@@ -38,6 +15,52 @@
       "unlocks": {
         "ss_nexus": ["ss_probe", "ss_pylon", "ss_gateway"],
         "ss_gateway": ["ss_marine", "ss_interceptor", "ss_defense_spire"]
+      }
+    },
+    "production": {
+      "ss_nexus": { "train": ["ss_probe"], "research": [] },
+      "ss_gateway": { "train": ["ss_marine", "ss_interceptor"], "research": [] }
+    }
+  },
+  "ss_cybernetic": {
+    "name": "Cybernetic",
+    "summary": "Shielded machine walkers with smaller armies and stronger individual units.",
+    "ruleset": "spacesiege_rules",
+    "theme": "crystal_frontier",
+    "color": "#b55cff",
+    "startingResources": { "minerals": 50, "vapor": 0, "supply": 10, "energy": 0 },
+    "startingUnits": { "ss_probe": 4 },
+    "startingBuildings": { "ss_nexus": 1 },
+    "units": ["ss_probe", "ss_dragoon", "ss_interceptor"],
+    "buildings": ["ss_nexus", "ss_pylon", "ss_gateway", "ss_defense_spire"],
+    "techTree": {
+      "rootBuildings": ["ss_nexus"],
+      "unlocks": {
+        "ss_nexus": ["ss_probe", "ss_pylon", "ss_gateway"],
+        "ss_gateway": ["ss_dragoon", "ss_interceptor", "ss_defense_spire"]
+      }
+    },
+    "production": {
+      "ss_nexus": { "train": ["ss_probe"], "research": [] },
+      "ss_gateway": { "train": ["ss_dragoon", "ss_interceptor"], "research": [] }
+    }
+  },
+  "ss_aliens": {
+    "name": "Aliens",
+    "summary": "Aggressive swarm-like raiders with quick infantry pressure and fast air harassment.",
+    "ruleset": "spacesiege_rules",
+    "theme": "crystal_frontier",
+    "color": "#7ccf4a",
+    "startingResources": { "minerals": 50, "vapor": 0, "supply": 10, "energy": 0 },
+    "startingUnits": { "ss_probe": 5 },
+    "startingBuildings": { "ss_nexus": 1 },
+    "units": ["ss_probe", "ss_marine", "ss_interceptor"],
+    "buildings": ["ss_nexus", "ss_pylon", "ss_gateway", "ss_defense_spire"],
+    "techTree": {
+      "rootBuildings": ["ss_nexus"],
+      "unlocks": {
+        "ss_nexus": ["ss_probe", "ss_pylon", "ss_gateway"],
+        "ss_gateway": ["ss_marine", "ss_interceptor"]
       }
     },
     "production": {

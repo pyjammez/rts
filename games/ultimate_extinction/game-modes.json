@@ -1,31 +1,47 @@
 {
   "ultimate_extinction_versus": {
     "shortName": "Extinction",
-    "name": "UltimateExtinction Versus",
-    "summary": "Large-scale robot-war starter preset with metal, energy, build power, commanders, bots, and aircraft.",
+    "name": "Ultimate Destruction Versus",
+    "summary": "Huge robot macro-war starter preset with metal fields, energy economy, commanders, walker bots, hover tanks, and aircraft.",
     "playable": true,
-    "startLabel": "Create Extinction Room",
+    "startLabel": "Create Ultimate Destruction Room",
     "teams": ["red", "blue"],
-    "allowedUnits": ["ue_commander", "ue_constructor", "ue_raider", "ue_assault_mech", "ue_strike_plane"],
+    "allowedUnits": ["ue_commander", "ue_constructor", "ue_raider", "ue_spider_bot", "ue_hover_tank", "ue_assault_mech", "ue_plasma_tank", "ue_strike_plane"],
     "defaults": {
-      "enabledUnits": ["ue_commander", "ue_constructor", "ue_raider", "ue_assault_mech", "ue_strike_plane"],
+      "enabledUnits": ["ue_commander", "ue_constructor", "ue_raider", "ue_spider_bot", "ue_hover_tank", "ue_assault_mech", "ue_plasma_tank", "ue_strike_plane"],
       "mapStyle": "metal_plateau",
+      "visualStyle": "metal_wasteland",
       "mapSize": "default_large",
       "waterLevel": 4,
-      "rockCount": 52,
+      "rockCount": 80,
       "treeCount": 4,
       "sheepCount": 0,
       "duckCount": 0,
-      "goldMineCount": 14,
+      "goldMineCount": 20,
       "houseCount": 0,
-      "startingGold": 1000,
-      "startingWood": 0,
+      "startingGold": 2000,
+      "startingWood": 3000,
       "startingFood": 0,
       "playersPerTeam": 1,
       "playerCount": 2,
-      "homesPerTeam": 1,
+      "homesPerTeam": 0,
       "towersPerTeam": 0,
-      "unitRoster": { "ue_commander": 1, "ue_constructor": 1, "ue_raider": 0, "ue_assault_mech": 0, "ue_strike_plane": 0 }
+      "unitRoster": {
+        "ue_commander": 1,
+        "ue_constructor": 0,
+        "ue_raider": 0,
+        "ue_spider_bot": 0,
+        "ue_hover_tank": 0,
+        "ue_assault_mech": 0,
+        "ue_plasma_tank": 0,
+        "ue_strike_plane": 0
+      }
+    },
+    "rules": {
+      "identity": "large_scale_robot_macro",
+      "economyPace": "streaming",
+      "reclaim": true,
+      "signature": "massive metal fields, commander start, constructor swarms, walker robots, hover tanks, and aircraft"
     },
     "sections": ["map", "forces"]
   }

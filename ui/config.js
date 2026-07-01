@@ -87,10 +87,10 @@ const SETTING_FIELDS = {
     { key: 'arenaSize', label: 'Arena Size', type: 'range', min: 20, max: 100, suffix: '%' }
   ],
   comparison_left: [
-    { key: 'leftUnitRoster', label: 'Left Team Units', type: 'unitRoster', allowZeroRequired: true }
+    { key: 'leftUnitRoster', rosterKey: 'leftUnitRoster', label: 'Left Team Units', type: 'unitRoster', allowZeroRequired: true }
   ],
   comparison_right: [
-    { key: 'rightUnitRoster', label: 'Right Team Units', type: 'unitRoster', allowZeroRequired: true }
+    { key: 'rightUnitRoster', rosterKey: 'rightUnitRoster', label: 'Right Team Units', type: 'unitRoster', allowZeroRequired: true }
   ],
   map_builder: [
     { key: 'mapBuilderSize', label: 'Map Size', type: 'select', options: getMapBuilderSizeOptions },
@@ -142,21 +142,64 @@ function setSelectedModeId(modeId) {
 }
 
 function getUnitOptions(modeId = selectedModeId) {
-  const mode = getGameModeDefinition(modeId);
-  const selectedUnits = Array.isArray(mapConfig.enabledUnits) && mapConfig.enabledUnits.length
-    ? mapConfig.enabledUnits
-    : Array.isArray(mode.allowedUnits) && mode.allowedUnits.length
-      ? mode.allowedUnits
-      : Object.keys(UNIT_DEFINITIONS);
-
-  return selectedUnits
+  return getAvailableUnitIds(modeId)
     .map(unitId => getUnitDefinition(unitId))
     .filter(Boolean)
     .map(unit => ({ value: unit.id, label: unit.name }));
 }
 
+function getFactionCatalog(modeId = selectedModeId) {
+  const mode = getGameModeDefinition(modeId);
+  const allowedUnits = new Set(Array.isArray(mode.allowedUnits) && mode.allowedUnits.length
+    ? mode.allowedUnits
+    : Object.keys(UNIT_DEFINITIONS || {}));
+  return Object.entries(FACTION_DEFINITIONS || {})
+    .map(([id, faction]) => ({ ...faction, id: faction.id || id }))
+    .filter(faction => {
+      const units = Array.isArray(faction.units) ? faction.units : [];
+      return units.length === 0 || units.some(unitId => allowedUnits.has(unitId));
+    });
+}
+
+function getDefaultFactionId(index = 0, modeId = selectedModeId) {
+  const factions = getFactionCatalog(modeId);
+  return factions[index % Math.max(1, factions.length)]?.id || 'kingdoms';
+}
+
+function getSelectedFactionIds(config = mapConfig, modeId = config.modeId || selectedModeId) {
+  const valid = new Set(getFactionCatalog(modeId).map(faction => faction.id));
+  return normalizePlayerSlots(config)
+    .filter(slot => slot.controller !== 'open')
+    .map(slot => slot.factionId)
+    .filter(factionId => valid.has(factionId));
+}
+
+function getFactionUnitIds(factionId) {
+  const faction = getFactionDefinition(factionId);
+  return Array.isArray(faction?.units) ? faction.units : [];
+}
+
+function getAvailableUnitIds(modeId = selectedModeId) {
+  const mode = getGameModeDefinition(modeId);
+  const modeUnits = Array.isArray(mode.allowedUnits) && mode.allowedUnits.length
+    ? mode.allowedUnits
+    : Object.keys(UNIT_DEFINITIONS || {});
+  const selectedFactionIds = getSelectedFactionIds(mapConfig, modeId);
+  const factionUnits = new Set(selectedFactionIds.flatMap(getFactionUnitIds));
+  const baseUnits = factionUnits.size > 0
+    ? modeUnits.filter(unitId => factionUnits.has(unitId))
+    : modeUnits;
+  const enabledUnits = Array.isArray(mapConfig.enabledUnits) && mapConfig.enabledUnits.length
+    ? mapConfig.enabledUnits.filter(unitId => baseUnits.includes(unitId))
+    : baseUnits;
+  return enabledUnits.filter(unitId => !!(window.UNIT_DEFINITIONS || {})[unitId]);
+}
+
 function getTerrainPresetOptions() {
-  return Object.values(TERRAIN_PRESETS).map(preset => ({ value: preset.id, label: preset.name }));
+  return Object.entries(TERRAIN_PRESETS).map(([id, preset]) => ({
+    value: preset.id || id,
+    label: preset.name || titleCase(preset.id || id)
+  }));
 }
 
 function getMapBuilderSizeOptions() {
@@ -207,13 +250,15 @@ function getTeamColor(team) {
   return getFlagOption(team).color;
 }
 
-function createDefaultPlayerSlots(count = 2) {
+function createDefaultPlayerSlots(count = 2, options = {}) {
   const playerCount = Math.max(2, Math.min(8, Math.floor(Number(count) || 2)));
+  const modeId = options.modeId || selectedModeId;
   return Array.from({ length: playerCount }, (_, index) => ({
     id: `slot-${index + 1}`,
     name: index === 0 ? 'You' : index === 1 ? 'AI Opponent' : `Open Slot ${index + 1}`,
     controller: index === 0 ? 'human' : index === 1 ? 'ai' : 'open',
     flag: PLAYER_FLAG_OPTIONS[index]?.id || PLAYER_FLAG_OPTIONS[0].id,
+    factionId: getDefaultFactionId(index, modeId),
     ready: index < 2
   }));
 }
@@ -221,6 +266,9 @@ function createDefaultPlayerSlots(count = 2) {
 function normalizePlayerSlots(config = mapConfig) {
   const requestedCount = Math.max(2, Math.min(8, Math.floor(Number(config.playerCount) || 2)));
   const sourceSlots = Array.isArray(config.playerSlots) ? config.playerSlots : [];
+  const modeId = config.modeId || selectedModeId;
+  const factionOptions = getFactionCatalog(modeId);
+  const validFactions = new Set(factionOptions.map(faction => faction.id));
   const usedFlags = new Set();
   const slots = [];
 
@@ -236,12 +284,16 @@ function normalizePlayerSlots(config = mapConfig) {
     const controller = ['human', 'ai', 'open'].includes(source.controller)
       ? source.controller
       : index === 0 ? 'human' : index === 1 ? 'ai' : 'open';
+    const factionId = validFactions.has(source.factionId)
+      ? source.factionId
+      : getDefaultFactionId(index, modeId);
 
     slots.push({
       id: source.id || `slot-${index + 1}`,
       name: source.name || (index === 0 ? 'You' : controller === 'ai' ? `AI ${index + 1}` : `Open Slot ${index + 1}`),
       controller,
       flag,
+      factionId,
       ready: controller !== 'open'
     });
   }
@@ -285,6 +337,16 @@ function setPlayerSlotFlag(slotIndex, flag) {
   normalizePlayerSlots(mapConfig);
 }
 
+function setPlayerSlotFaction(slotIndex, factionId) {
+  normalizePlayerSlots(mapConfig);
+  const slot = mapConfig.playerSlots[slotIndex];
+  const validFactions = new Set(getFactionCatalog(mapConfig.modeId).map(faction => faction.id));
+  if (!slot || !validFactions.has(factionId)) return;
+  slot.factionId = factionId;
+  normalizeEnabledUnits();
+  normalizePlayerSlots(mapConfig);
+}
+
 function getActivePlayerSlots(config = mapConfig) {
   return normalizePlayerSlots(config).filter(slot => slot.controller !== 'open');
 }
@@ -314,7 +376,7 @@ function mergeModeDefaults(modeId) {
     playerCount: defaults.playerCount || mode.teams.length || 2,
     playerSlots: Array.isArray(defaults.playerSlots)
       ? structuredClone(defaults.playerSlots)
-      : createDefaultPlayerSlots(defaults.playerCount || mode.teams.length || 2),
+      : createDefaultPlayerSlots(defaults.playerCount || mode.teams.length || 2, { modeId: mode.id }),
     terrain: {}
   };
   normalizePlayerSlots(mapConfig);
@@ -548,14 +610,21 @@ function createStartingCountInput(unit, roster, field) {
 
 function normalizeEnabledUnits() {
   const mode = getGameModeDefinition(mapConfig.modeId);
-  const fallback = Array.isArray(mode.allowedUnits) ? mode.allowedUnits : Object.keys(UNIT_DEFINITIONS || {});
+  const selectedFactionIds = getSelectedFactionIds(mapConfig, mapConfig.modeId);
+  const factionUnits = new Set(selectedFactionIds.flatMap(getFactionUnitIds));
+  const modeUnits = Array.isArray(mode.allowedUnits) && mode.allowedUnits.length
+    ? mode.allowedUnits
+    : Object.keys(UNIT_DEFINITIONS || {});
+  const fallback = factionUnits.size > 0
+    ? modeUnits.filter(unitId => factionUnits.has(unitId))
+    : modeUnits;
   const enabled = new Set(Array.isArray(mapConfig.enabledUnits) && mapConfig.enabledUnits.length ? mapConfig.enabledUnits : fallback);
 
   for (const unit of typeof getUnitCatalog === 'function' ? getUnitCatalog() : []) {
-    if (unit.requiredPerTeam) enabled.add(unit.id);
+    if (unit.requiredPerTeam && fallback.includes(unit.id)) enabled.add(unit.id);
   }
 
-  mapConfig.enabledUnits = [...enabled].filter(unitId => !!(window.UNIT_DEFINITIONS || {})[unitId]);
+  mapConfig.enabledUnits = [...enabled].filter(unitId => fallback.includes(unitId) && !!(window.UNIT_DEFINITIONS || {})[unitId]);
   mapConfig.unitOverrides = mapConfig.unitOverrides && typeof mapConfig.unitOverrides === 'object'
     ? mapConfig.unitOverrides
     : {};
@@ -746,7 +815,7 @@ function titleCase(value) {
 
 function applyTerrainPreset(presetId) {
   const preset = getTerrainPreset(presetId);
-  mapConfig.mapStyle = preset.id;
+  mapConfig.mapStyle = preset.id || presetId;
   mapConfig.waterLevel = preset.waterLevel;
   mapConfig.rockCount = preset.rockCount;
   mapConfig.treeCount = preset.treeCount;
@@ -771,6 +840,9 @@ Object.assign(window, {
   getSelectedModeId,
   setSelectedModeId,
   getUnitOptions,
+  getFactionCatalog,
+  getSelectedFactionIds,
+  getAvailableUnitIds,
   getTerrainPresetOptions,
   PLAYER_FLAG_OPTIONS,
   getFlagOption,
@@ -780,6 +852,7 @@ Object.assign(window, {
   setPlayerCount,
   setPlayerSlotController,
   setPlayerSlotFlag,
+  setPlayerSlotFaction,
   getActivePlayerSlots,
   setPanelVisible,
   mergeModeDefaults,

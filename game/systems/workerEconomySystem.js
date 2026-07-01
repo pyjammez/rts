@@ -12,7 +12,38 @@
   const BUILD_SECONDS = Object.freeze({ tower: 5.5 });
 
   function isWorker(unit) {
-    return !!unit && !unit.isDead && unit.unitType === 'worker';
+    if (!unit || unit.isDead) return false;
+    const tags = Array.isArray(unit.tags) ? unit.tags : [];
+    const abilities = Array.isArray(unit.abilities) ? unit.abilities : [];
+    return unit.unitType === 'worker' ||
+      unit.model === 'worker' ||
+      tags.includes('worker') ||
+      tags.includes('builder') ||
+      tags.includes('villager') ||
+      abilities.includes('build') ||
+      abilities.includes('gather');
+  }
+
+  function getBuildingDefinitionFor(type) {
+    return typeof getBuildingDefinition === 'function' ? getBuildingDefinition(type) : null;
+  }
+
+  function getBuildCost(type) {
+    const definition = getBuildingDefinitionFor(type);
+    return definition?.cost || BUILD_COSTS[type] || {};
+  }
+
+  function getBuildSeconds(type) {
+    const definition = getBuildingDefinitionFor(type);
+    const configured = Number(definition?.buildTime);
+    if (Number.isFinite(configured) && configured > 0) return configured;
+    return BUILD_SECONDS[type] || 4;
+  }
+
+  function canBuildBuilding(type) {
+    if (!type) return false;
+    if (type in BUILD_COSTS) return true;
+    return !!getBuildingDefinitionFor(type);
   }
 
   function clearJob(unit) {
@@ -56,11 +87,11 @@
 
   function startBuild(unit, buildingType, worldX, worldY) {
     if (!isWorker(unit)) return false;
-    const type = buildingType === 'tower' ? 'tower' : null;
+    const type = canBuildBuilding(buildingType) ? buildingType : null;
     if (!type || typeof findNearestBuildableSite !== 'function') return false;
     const site = findNearestBuildableSite(type, worldX, worldY, 8);
     if (!site) return false;
-    const cost = BUILD_COSTS[type] || {};
+    const cost = getBuildCost(type);
     if (!app.systems.resources?.spend(unit.team, cost)) return false;
     const target = { x: (site.x + 0.5) * tileSize, y: (site.y + 0.5) * tileSize, size: tileSize * 1.2 };
     unit.workerJob = {
@@ -70,7 +101,7 @@
       tileY: site.y,
       target,
       progress: 0,
-      required: BUILD_SECONDS[type] || 4,
+      required: getBuildSeconds(type),
       range: tileSize * 1.3
     };
     unit.attackOrderTarget = null;
@@ -176,6 +207,9 @@
     RESOURCE_YIELDS,
     reset() {},
     isWorker,
+    canBuildBuilding,
+    getBuildCost,
+    getBuildSeconds,
     startGather,
     startBuild,
     update,

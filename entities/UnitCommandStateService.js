@@ -2,19 +2,9 @@
   const app = root.OpenRTS = root.OpenRTS || {};
   app.entities = app.entities || {};
 
-  function clearCastleState(unit) {
-    unit.castleTopBuildingId = null;
-    unit.castleTopStairPoint = null;
-    unit.castleTopReached = false;
-    unit.castleRampBase = null;
-    unit.castleRampTop = null;
-    unit.castleRampClimbed = false;
-  }
-
   function resetForImmediateCommand(unit, {
     clearAttack = true,
     clearAutoEngage = true,
-    clearCastle = true,
     clearMount = true,
     clearItems = true
   } = {}) {
@@ -26,7 +16,6 @@
       unit.currentEnemy = null;
     }
     if (clearAutoEngage) unit.autoEngageTarget = null;
-    if (clearCastle) clearCastleState(unit);
     if (clearMount) unit.clearMountTarget();
   }
 
@@ -43,7 +32,6 @@
   }
 
   app.entities.unitCommandState = Object.freeze({
-    clearCastleState,
     resetForImmediateCommand,
     executeOrQueue
   });

@@ -1,6 +1,6 @@
 {
-  "river_kingdom": {
-    "name": "River Kingdom",
+  "eok_river_crown": {
+    "name": "River Crown",
     "summary": "Balanced historical civilization with strong economy and mixed infantry.",
     "ruleset": "era_of_kingdoms_rules",
     "theme": "temperate_valley",
@@ -10,43 +10,35 @@
     "startingBuildings": { "eok_town_center": 1 },
     "units": ["eok_villager", "eok_spearman", "eok_archer", "eok_cavalry"],
     "buildings": ["eok_town_center", "eok_house", "eok_barracks", "eok_archery_range", "eok_watch_tower"],
-    "techTree": {
-      "rootBuildings": ["eok_town_center"],
-      "unlocks": {
-        "eok_town_center": ["eok_villager", "eok_house", "eok_barracks", "eok_archery_range"],
-        "eok_barracks": ["eok_spearman", "eok_watch_tower"],
-        "eok_archery_range": ["eok_archer", "eok_cavalry"]
-      }
-    },
-    "production": {
-      "eok_town_center": { "train": ["eok_villager"], "research": [] },
-      "eok_barracks": { "train": ["eok_spearman"], "research": [] },
-      "eok_archery_range": { "train": ["eok_archer", "eok_cavalry"], "research": [] }
-    }
+    "techTree": { "rootBuildings": ["eok_town_center"], "unlocks": { "eok_town_center": ["eok_villager", "eok_house", "eok_barracks", "eok_archery_range"], "eok_barracks": ["eok_spearman", "eok_watch_tower"], "eok_archery_range": ["eok_archer", "eok_cavalry"] } },
+    "production": { "eok_town_center": { "train": ["eok_villager"], "research": [] }, "eok_barracks": { "train": ["eok_spearman"], "research": [] }, "eok_archery_range": { "train": ["eok_archer", "eok_cavalry"], "research": [] } }
   },
-  "hill_empire": {
-    "name": "Hill Empire",
-    "summary": "Defensive historical civilization with stone towers and sturdy infantry.",
+  "eok_highland_realm": {
+    "name": "Highland Realm",
+    "summary": "Defensive civilization with stone towers, sturdy spearmen, and fewer mounted options.",
     "ruleset": "era_of_kingdoms_rules",
     "theme": "temperate_valley",
     "color": "#b28d32",
-    "startingResources": { "food": 200, "wood": 200, "gold": 100, "stone": 100, "population": 10 },
+    "startingResources": { "food": 200, "wood": 200, "gold": 100, "stone": 150, "population": 10 },
     "startingUnits": { "eok_villager": 6 },
     "startingBuildings": { "eok_town_center": 1 },
     "units": ["eok_villager", "eok_spearman", "eok_archer"],
     "buildings": ["eok_town_center", "eok_house", "eok_barracks", "eok_archery_range", "eok_watch_tower"],
-    "techTree": {
-      "rootBuildings": ["eok_town_center"],
-      "unlocks": {
-        "eok_town_center": ["eok_villager", "eok_house", "eok_barracks"],
-        "eok_barracks": ["eok_spearman", "eok_archery_range", "eok_watch_tower"],
-        "eok_archery_range": ["eok_archer"]
-      }
-    },
-    "production": {
-      "eok_town_center": { "train": ["eok_villager"], "research": [] },
-      "eok_barracks": { "train": ["eok_spearman"], "research": [] },
-      "eok_archery_range": { "train": ["eok_archer"], "research": [] }
-    }
+    "techTree": { "rootBuildings": ["eok_town_center"], "unlocks": { "eok_town_center": ["eok_villager", "eok_house", "eok_barracks"], "eok_barracks": ["eok_spearman", "eok_archery_range", "eok_watch_tower"], "eok_archery_range": ["eok_archer"] } },
+    "production": { "eok_town_center": { "train": ["eok_villager"], "research": [] }, "eok_barracks": { "train": ["eok_spearman"], "research": [] }, "eok_archery_range": { "train": ["eok_archer"], "research": [] } }
+  },
+  "eok_steppe_khans": {
+    "name": "Steppe Khans",
+    "summary": "Mobile civilization with cavalry access and lighter static defense.",
+    "ruleset": "era_of_kingdoms_rules",
+    "theme": "temperate_valley",
+    "color": "#8a58c8",
+    "startingResources": { "food": 250, "wood": 175, "gold": 125, "stone": 75, "population": 10 },
+    "startingUnits": { "eok_villager": 6 },
+    "startingBuildings": { "eok_town_center": 1 },
+    "units": ["eok_villager", "eok_spearman", "eok_cavalry"],
+    "buildings": ["eok_town_center", "eok_house", "eok_barracks", "eok_archery_range"],
+    "techTree": { "rootBuildings": ["eok_town_center"], "unlocks": { "eok_town_center": ["eok_villager", "eok_house", "eok_barracks", "eok_archery_range"], "eok_barracks": ["eok_spearman"], "eok_archery_range": ["eok_cavalry"] } },
+    "production": { "eok_town_center": { "train": ["eok_villager"], "research": [] }, "eok_barracks": { "train": ["eok_spearman"], "research": [] }, "eok_archery_range": { "train": ["eok_cavalry"], "research": [] } }
   }
 }

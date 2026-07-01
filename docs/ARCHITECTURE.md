@@ -84,7 +84,7 @@ Do not add new top-level globals. Existing globals are compatibility adapters an
 
 `OpenRTS.entities.unitCommandTypes` owns local command queue constants for `Unit`. Player/network/replay commands still belong to `OpenRTS.commands`; this module is only for the unit's internal executor queue.
 
-`OpenRTS.entities.unitCommandState` owns local `Unit` command reset and append/execute policy. `Unit` still executes concrete commands, but common state clearing for movement, attacks, mounts, items, and castle ramparts belongs here so each command method does not drift into its own reset rules.
+`OpenRTS.entities.unitCommandState` owns local `Unit` command reset and append/execute policy. `Unit` still executes concrete commands, but common state clearing for movement, attacks, mounts, and items belongs here so each command method does not drift into its own reset rules.
 
 `OpenRTS.entities.query` and `OpenRTS.entities.picker` are the public read-side APIs for gameplay object lookup. Selection, click targeting, box selection, AI, and renderer adapters should query these services instead of scanning `units`, `sheepData`, `buildingData`, or other raw collections directly.
 
@@ -116,15 +116,15 @@ Do not add new top-level globals. Existing globals are compatibility adapters an
 
 `OpenRTS.world.mapBuilderRuntime` owns map-builder orchestration for converting world coordinates to brush edits, calling refresh hooks, and exporting reusable map data. `world/map.js` remains the adapter that supplies current grid arrays and compatibility globals.
 
-`OpenRTS.world.castleGeometry` owns castle-specific geometry: gates, lane ordering, courtyard checks, ramp points, wall slots, and wall routes. Castle command functions may still live in `world/map.js` while the migration continues, but they should ask this service for geometry rather than recalculating it inline.
+`OpenRTS.world.castleGeometry` owns castle footprint checks. Castles and other buildings are solid map blockers; units do not path through doors, courtyards, stairs, or wall tops.
 
-`OpenRTS.world.castleCommands` owns castle command execution: entering through gates, exiting, issuing rampart movement, clearing rampart state, and resolving rampart defenders. It depends on `OpenRTS.world.castleGeometry` for route geometry and keeps command mutation out of the geometry layer.
+`OpenRTS.world.castleCommands` intentionally does not expose enter/exit/rampart behavior. The RTS interaction model is solid buildings plus explicit garrison-capable structures, where units walk to the structure, disappear, and are represented by an occupant count.
 
 `OpenRTS.world.houseInteractions` owns neutral-house interaction behavior: door points, inside tests, enter/exit commands, burning lifecycle, occupant damage, and unit hiding/unhiding. House creation remains in `OpenRTS.world.objectFactories.houses`.
 
 `OpenRTS.world.objectFactories.buildings` owns building entity construction and damage lifecycle. `OpenRTS.world.buildingPlacement` owns buildability, castle apron requirements, pad tile planning, and team spawn-site search. `OpenRTS.world.buildingQueries` owns team-home lookup, live building filters, world-space picking, screen-space picking, and proximity searches. Building features should enter these services before adding more branching to `world/map.js`.
 
-`OpenRTS.world.objects` is the domain API for interactive map objects and building navigation. It currently delegates some queries into legacy `world/map.js` functions, but external callers should use this service for houses, resources, obstacles, carryable items, buildings, castle navigation, and map-builder object operations. This lets each domain move out of `world/map.js` without changing callers again.
+`OpenRTS.world.objects` is the domain API for interactive map objects. It currently delegates some queries into legacy `world/map.js` functions, but external callers should use this service for houses, resources, obstacles, carryable items, buildings, and map-builder object operations. This lets each domain move out of `world/map.js` without changing callers again.
 
 `OpenRTS.rendering` selects renderers by priority. The Three.js renderer can decline a frame while it initializes, allowing the Canvas 2D renderer to provide a reliable fallback without branching in the main loop.
 
@@ -156,19 +156,29 @@ Do not add new top-level globals. Existing globals are compatibility adapters an
 
 `OpenRTS.rendering.dynamicWorldComposer` owns assembly of dynamic Three.js scene content: units, wildlife, roasts, items, selected-object markers, projectiles, and impact effects. `world/renderer3d.js` supplies model factories and current sources, but this service owns per-frame composition order and lifecycle filtering.
 
+`OpenRTS.rendering.dynamicWorldComposer.createDynamicPool()` owns persistent dynamic render-object reuse. It prevents the renderer from clearing and recreating every dynamic mesh each frame, tracks visual keys for state changes, prunes stale visuals, and supports transform syncing for live entities.
+
 `OpenRTS.rendering.projectileVisuals` owns Three.js visual construction for projectile and impact-effect renderables. Projectile simulation remains in `OpenRTS.systems.projectiles`; renderers translate projectile descriptions into meshes through this service.
 
-`OpenRTS.rendering.entityElevation` owns renderer-facing elevation composition for terrain height, castle rampart height, and air-unit flight height. Unit model builders should ask this service for placement height rather than recomputing movement-layer policy inline.
+`OpenRTS.rendering.entityElevation` owns renderer-facing elevation composition for terrain height and air-unit flight height. Unit model builders should ask this service for placement height rather than recomputing movement-layer policy inline.
 
 `OpenRTS.rendering.treeWind` owns ambient tree-crown animation. Renderers should pass crown meshes and time into this service, keeping cosmetic animation math separate from scene construction and gameplay state.
 
 `OpenRTS.rendering.factoryRegistry` owns logical renderer factories. Procedural or imported renderables should register factories by ids such as `unit.worker` or `building.castle`, allowing content assets to resolve without adding more hardcoded renderer branches.
 
+`OpenRTS.rendering.optimization` owns reusable browser-performance policies for Three.js: LOD selection, shadow budget decisions, static chunk planning, dynamic world-view culling, and instancing batch planning. Renderer code should use these services rather than embedding one-off thresholds throughout model factories.
+
+The same optimization service also owns render health contracts: frame budgets, quality-tier selection, static chunk diffs, LOD batch plans, viewport summaries, and diagnostic health reports. These are data-only policies so future debug overlays, automatic quality scaling, and map-builder dirty rebuilds can share one vocabulary.
+
+`OpenRTS.rendering.staticInstanceBatcher` owns creation of `THREE.InstancedMesh` batches for repeated static objects. Static composers should use it for large sets of identical renderables such as rock boulders, future tree submeshes, and other map decoration pieces.
+
 `OpenRTS.rendering.modelFactoryResolver` is the bridge between content asset ids and renderable construction. Renderers should ask it to resolve an entity's logical model, call the registered factory when one exists, and fall back to the current procedural model only as a compatibility path. This is the migration point for imported GLB/GLTF models, LOD variants, texture packs, and mod-supplied render factories.
+
+`OpenRTS.rendering.renderAssetAudit` owns 3D model-contract readiness checks for static-hosted mods. It compares unit/building model ids, asset manifest entries, imported model metadata, LOD metadata, animation metadata, and registered renderer factories. Modders can run `npm run audit:render` or `node tools/render-audit.mjs --game <package-id>` before uploading packages to S3.
 
 `OpenRTS.rendering.threeUnitAttachments` owns Three.js construction for weapons and carried-object visual attachments on unit models. Unit body builders should call this service rather than embedding every weapon mesh directly in `world/renderer3d.js`.
 
-`OpenRTS.rendering.threeUnitModels` owns procedural Three.js unit body construction, including selection rings, mount/rider bodies, castle rampart elevation, worker gathering tools, and weapon attachment dispatch. `world/renderer3d.js` should instantiate this factory and treat it as the fallback body renderer while imported model support matures.
+`OpenRTS.rendering.threeUnitModels` owns procedural Three.js unit body construction, including selection rings, mount/rider bodies, worker gathering tools, and weapon attachment dispatch. `world/renderer3d.js` should instantiate this factory and treat it as the fallback body renderer while imported model support matures.
 
 `OpenRTS.systems.wildlife` owns sheep, duck, and horse wandering. It receives world queries and a named deterministic random stream as dependencies, keeping animal behavior independent from map storage and rendering.
 
@@ -182,7 +192,7 @@ Do not add new top-level globals. Existing globals are compatibility adapters an
 
 `OpenRTS.systems.abilityEffects` owns generic ability effect execution for damage, healing, buffs/debuffs, cooldown checks, resource-cost checks, and custom effect handlers such as reveal, summon, airstrike, cloak, or superweapon. Ability data should describe effects; game-mode systems provide the target/source context and specialized handlers.
 
-`OpenRTS.systems.buildingCombat` owns building cooldowns, target selection, attack range, and projectile requests. Castle rampart occupancy and projectile allocation are injected by the composition root, so the combat policy does not depend on map globals or a concrete projectile class.
+`OpenRTS.systems.buildingCombat` owns building cooldowns, target selection, attack range, and projectile requests. Buildings fire from their own stats and do not depend on units walking inside or on top of their geometry.
 
 `OpenRTS.systems.projectiles` owns projectile pooling, movement, collision requests, splash falloff, impact effects, and 2D projectile rendering. Units and buildings submit projectile descriptions instead of constructing projectile classes directly.
 
@@ -191,6 +201,14 @@ Do not add new top-level globals. Existing globals are compatibility adapters an
 `OpenRTS.config.definitions.contentIndex` is the shared catalog API for unit search, facets, resolved weapon stats, resolved abilities, factions, rulesets, damage modifiers, and lightweight content diagnostics. Setup UI, AI composition, editors, and future mod browsers should use this index instead of reimplementing catalog scans.
 
 `OpenRTS.config.packageManifests` owns the static game-package contract for S3-hosted mods: manifest normalization, safe package-relative file resolution, semantic version checks, engine compatibility checks, dependency ordering, conflict/provides/tags metadata, deterministic fingerprints, and versioned package-lock envelopes. Package loaders, validators, mod browsers, save games, and multiplayer lobbies should use this service to identify exactly which content bundle is active.
+
+`OpenRTS.config.contentSchemas` owns browser-safe catalog schema descriptions and validation for units, weapons, buildings, abilities, rulesets, factions, terrain presets, and modes. Runtime tools, package reports, setup UI, and future mod editors should use this service to explain and validate content fields instead of scattering one-off shape checks.
+
+`OpenRTS.config.packageReports` owns static package capability reports. It summarizes resources, damage types, armor tags, units, buildings, terrain presets, modes, and diagnostics such as missing cross-references. `OpenRTS.config.gamePackages` attaches reports to loaded packages, and `npm run report:packages` exposes the same idea to mod authors from the command line without a compiler or backend.
+
+`games/index.json` is the S3-friendly package catalog. Static hosting cannot rely on directory listing, so this index declares which packages are available, their manifest paths, categories, tags, featured state, and style summaries. `OpenRTS.config.gamePackages.loadGamePackageIndex()` loads it, `listAvailableGamePackages()` searches it, and `loadIndexedGamePackage(id)` resolves a package by catalog entry. `npm run validate` enforces that every package folder is indexed and every indexed manifest exists.
+
+`ui/screens/ModeSelectScreen.js` renders package discovery from `OpenRTS.config.gamePackages` instead of hardcoded folders. Selecting a package updates the `?game=<package-id>` URL and lets the normal static definition loader reload the page with the selected package. This keeps S3 package selection deterministic and shareable by URL.
 
 `assets/data/rulesets.json` defines the mechanics vocabulary for a game variant: resource ids, storage behavior, damage types, armor tags, effect types, and damage-vs-armor multipliers. This is the layer that lets a medieval RTS, modern RTS, fantasy RTS, or SpaceCraft-like sci-fi RTS use different resource and combat rules without branching engine code.
 

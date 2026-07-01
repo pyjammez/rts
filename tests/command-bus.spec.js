@@ -135,6 +135,14 @@ test('command bus exposes a distinct attack-move command type', () => {
   assert.equal(context.OpenRTS.commands.types.ATTACK_MOVE, 'unit.attack-move');
 });
 
+test('command bus supports immutable public API with sanctioned command module extensions', () => {
+  const context = loadOpenRTSScript('../../game/commands/CommandBus.js');
+  loadOpenRTSScript('../../game/commands/GameplayCommandHandlers.js', context);
+
+  assert.equal(typeof context.OpenRTS.commands.gameplayHandlers.createRegistrar, 'function');
+  assert.equal(Object.isFrozen(context.OpenRTS.commands), true);
+});
+
 test('command bus validates payload schemas and reports registered command metadata', () => {
   const context = loadOpenRTSScript('../../game/commands/CommandBus.js');
   const commands = context.OpenRTS.commands;

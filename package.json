@@ -6,6 +6,9 @@
   "scripts": {
     "test": "node --test tests/*.spec.js",
     "validate": "node tools/validate-config.mjs",
+    "report:packages": "node tools/package-report.mjs",
+    "schema:dump": "node tools/schema-dump.mjs",
+    "audit:render": "node tools/render-audit.mjs",
     "check": "npm run validate && npm test",
     "serve": "python3 -m http.server 8000"
   }

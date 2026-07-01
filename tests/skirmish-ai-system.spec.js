@@ -64,7 +64,6 @@ test('skirmish AI prioritizes defending its castle from nearby attackers', () =>
     attacks.push(command);
     return true;
   });
-  context.OpenRTS.commands.register(context.OpenRTS.commands.types.CASTLE_RAMPART, () => true);
   context.OpenRTS.commands.register(context.OpenRTS.commands.types.CASTLE_UPGRADE, () => true);
 
   context.mapConfig = {
@@ -95,15 +94,10 @@ test('skirmish AI prioritizes defending its castle from nearby attackers', () =>
   assert.equal(context.OpenRTS.systems.skirmishAi.getDebugState()[0].lastPlan, 'defend');
 });
 
-test('skirmish AI prepares its castle with ranged rampart defenders and king upgrades', () => {
+test('skirmish AI upgrades its castle without issuing removed rampart orders', () => {
   const context = loadAiContext();
-  const ramparts = [];
   const upgrades = [];
   context.OpenRTS.commands.register(context.OpenRTS.commands.types.ATTACK, () => true);
-  context.OpenRTS.commands.register(context.OpenRTS.commands.types.CASTLE_RAMPART, command => {
-    ramparts.push(command);
-    return true;
-  });
   context.OpenRTS.commands.register(context.OpenRTS.commands.types.CASTLE_UPGRADE, command => {
     upgrades.push(command);
     return true;
@@ -133,8 +127,7 @@ test('skirmish AI prepares its castle with ranged rampart defenders and king upg
   });
 
   context.OpenRTS.commands.process(1, {});
-  assert.equal(ramparts.length, 2);
   assert.equal(upgrades.length, 1);
-  assert.deepEqual(ramparts.map(command => command.payload.unitId), [2, 3]);
+  assert.equal(context.OpenRTS.commands.types.CASTLE_RAMPART, undefined);
   assert.equal(upgrades[0].payload.kingId, 1);
 });

@@ -5,13 +5,12 @@
   function unitElevation({
     unit,
     terrainElevation = 0,
-    castleElevation = 0,
     defaultFlightHeight = 2.2
   } = {}) {
     const flightElevation = unit?.movementType === 'air'
       ? Number(unit.flightHeight || defaultFlightHeight)
       : 0;
-    return terrainElevation + castleElevation + flightElevation;
+    return terrainElevation + flightElevation;
   }
 
   app.rendering.entityElevation = Object.freeze({

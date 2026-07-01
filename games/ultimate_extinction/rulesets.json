@@ -1,6 +1,6 @@
 {
   "ultimate_extinction_rules": {
-    "name": "UltimateExtinction Rules",
+    "name": "Ultimate Destruction Rules",
     "summary": "Large-scale robot RTS economy built around metal, energy, build power, wreckage, and radar coverage.",
     "resources": {
       "metal": { "name": "Metal", "storage": "stockpile", "defaultStartingAmount": 1000, "gatherable": true },

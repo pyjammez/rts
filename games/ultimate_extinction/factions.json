@@ -1,48 +1,44 @@
 {
-  "core_directive": {
+  "ue_core_directive": {
     "name": "Core Directive",
-    "summary": "Heavy robot army with strong commanders and durable mechs.",
+    "summary": "Heavy robot army with strong commanders, durable mechs, and siege armor.",
     "ruleset": "ultimate_extinction_rules",
     "theme": "metal_plateau",
     "color": "#d34b4b",
     "startingResources": { "metal": 1000, "energy": 1000, "build_power": 10, "radar": 0 },
-    "startingUnits": { "ue_commander": 1, "ue_constructor": 1 },
-    "startingBuildings": { "ue_command_core": 1 },
-    "units": ["ue_commander", "ue_constructor", "ue_raider", "ue_assault_mech", "ue_strike_plane"],
+    "startingUnits": { "ue_commander": 1 },
+    "startingBuildings": {},
+    "units": ["ue_commander", "ue_constructor", "ue_assault_mech", "ue_plasma_tank", "ue_strike_plane"],
     "buildings": ["ue_command_core", "ue_metal_extractor", "ue_solar_array", "ue_bot_lab", "ue_laser_turret"],
-    "techTree": {
-      "rootBuildings": ["ue_command_core"],
-      "unlocks": {
-        "ue_command_core": ["ue_commander", "ue_constructor", "ue_metal_extractor", "ue_solar_array", "ue_bot_lab"],
-        "ue_bot_lab": ["ue_raider", "ue_assault_mech", "ue_strike_plane", "ue_laser_turret"]
-      }
-    },
-    "production": {
-      "ue_command_core": { "train": ["ue_constructor"], "research": [] },
-      "ue_bot_lab": { "train": ["ue_raider", "ue_assault_mech", "ue_strike_plane"], "research": [] }
-    }
+    "techTree": { "rootBuildings": ["ue_command_core"], "unlocks": { "ue_command_core": ["ue_commander", "ue_constructor", "ue_metal_extractor", "ue_solar_array", "ue_bot_lab"], "ue_bot_lab": ["ue_assault_mech", "ue_plasma_tank", "ue_strike_plane", "ue_laser_turret"] } },
+    "production": { "ue_command_core": { "train": ["ue_constructor"], "research": [] }, "ue_bot_lab": { "train": ["ue_assault_mech", "ue_plasma_tank", "ue_strike_plane"], "research": [] } }
   },
-  "frontier_machine": {
-    "name": "Frontier Machine",
-    "summary": "Fast robot army with cheaper raiders and air pressure.",
+  "ue_arm_vanguard": {
+    "name": "Arm Vanguard",
+    "summary": "Mobile robot army with raiders, spider bots, hover tanks, and fast air pressure.",
     "ruleset": "ultimate_extinction_rules",
     "theme": "metal_plateau",
     "color": "#4c8dd6",
     "startingResources": { "metal": 1000, "energy": 1000, "build_power": 10, "radar": 0 },
-    "startingUnits": { "ue_commander": 1, "ue_constructor": 1 },
-    "startingBuildings": { "ue_command_core": 1 },
-    "units": ["ue_commander", "ue_constructor", "ue_raider", "ue_strike_plane"],
+    "startingUnits": { "ue_commander": 1 },
+    "startingBuildings": {},
+    "units": ["ue_commander", "ue_constructor", "ue_raider", "ue_spider_bot", "ue_hover_tank", "ue_strike_plane"],
     "buildings": ["ue_command_core", "ue_metal_extractor", "ue_solar_array", "ue_bot_lab", "ue_laser_turret"],
-    "techTree": {
-      "rootBuildings": ["ue_command_core"],
-      "unlocks": {
-        "ue_command_core": ["ue_commander", "ue_constructor", "ue_metal_extractor", "ue_solar_array", "ue_bot_lab"],
-        "ue_bot_lab": ["ue_raider", "ue_strike_plane", "ue_laser_turret"]
-      }
-    },
-    "production": {
-      "ue_command_core": { "train": ["ue_constructor"], "research": [] },
-      "ue_bot_lab": { "train": ["ue_raider", "ue_strike_plane"], "research": [] }
-    }
+    "techTree": { "rootBuildings": ["ue_command_core"], "unlocks": { "ue_command_core": ["ue_commander", "ue_constructor", "ue_metal_extractor", "ue_solar_array", "ue_bot_lab"], "ue_bot_lab": ["ue_raider", "ue_spider_bot", "ue_hover_tank", "ue_strike_plane", "ue_laser_turret"] } },
+    "production": { "ue_command_core": { "train": ["ue_constructor"], "research": [] }, "ue_bot_lab": { "train": ["ue_raider", "ue_spider_bot", "ue_hover_tank", "ue_strike_plane"], "research": [] } }
+  },
+  "ue_frontier_machine": {
+    "name": "Frontier Machine",
+    "summary": "Experimental machine swarm mixing cheap raiders with hover armor and limited heavy tech.",
+    "ruleset": "ultimate_extinction_rules",
+    "theme": "metal_plateau",
+    "color": "#7d8c94",
+    "startingResources": { "metal": 1100, "energy": 900, "build_power": 10, "radar": 0 },
+    "startingUnits": { "ue_commander": 1 },
+    "startingBuildings": {},
+    "units": ["ue_commander", "ue_constructor", "ue_raider", "ue_hover_tank", "ue_assault_mech"],
+    "buildings": ["ue_command_core", "ue_metal_extractor", "ue_solar_array", "ue_bot_lab", "ue_laser_turret"],
+    "techTree": { "rootBuildings": ["ue_command_core"], "unlocks": { "ue_command_core": ["ue_commander", "ue_constructor", "ue_metal_extractor", "ue_solar_array", "ue_bot_lab"], "ue_bot_lab": ["ue_raider", "ue_hover_tank", "ue_assault_mech", "ue_laser_turret"] } },
+    "production": { "ue_command_core": { "train": ["ue_constructor"], "research": [] }, "ue_bot_lab": { "train": ["ue_raider", "ue_hover_tank", "ue_assault_mech"], "research": [] } }
   }
 }

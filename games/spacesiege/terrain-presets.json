@@ -1,12 +1,14 @@
 {
   "crystal_frontier": {
     "name": "Crystal Frontier",
-    "waterLevel": 2,
-    "rockCount": 28,
+    "description": "Sparse alien flats with many crystal outcrops, almost no organic cover, and open lanes for ranged armies.",
+    "visualStyle": "alien_crystal",
+    "waterLevel": 1,
+    "rockCount": 44,
     "treeCount": 0,
     "sheepCount": 0,
     "duckCount": 0,
-    "goldMineCount": 12,
+    "goldMineCount": 16,
     "houseCount": 0
   }
 }

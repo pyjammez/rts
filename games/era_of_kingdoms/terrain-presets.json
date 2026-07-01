@@ -1,12 +1,26 @@
 {
+  "eok_arabia": {
+    "name": "Arabia Drylands",
+    "description": "Open yellow dryland inspired by classic Arabia-style 1v1 maps: four corner starts, green scrub patches, pine clusters, walkable hills, gold, stone, and wandering animals.",
+    "visualStyle": "arabia_dryland",
+    "waterLevel": 0,
+    "rockCount": 34,
+    "treeCount": 145,
+    "sheepCount": 18,
+    "duckCount": 0,
+    "goldMineCount": 8,
+    "houseCount": 0
+  },
   "temperate_valley": {
     "name": "Temperate Valley",
-    "waterLevel": 10,
-    "rockCount": 22,
-    "treeCount": 80,
-    "sheepCount": 12,
-    "duckCount": 5,
-    "goldMineCount": 6,
-    "houseCount": 4
+    "description": "Lush historical valley with shorelines, huntable animals, villages, wood lines, gold, and stone.",
+    "visualStyle": "temperate_kingdom",
+    "waterLevel": 14,
+    "rockCount": 18,
+    "treeCount": 95,
+    "sheepCount": 20,
+    "duckCount": 8,
+    "goldMineCount": 7,
+    "houseCount": 8
   }
 }

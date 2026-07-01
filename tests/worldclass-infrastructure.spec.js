@@ -135,10 +135,12 @@ test('performance diagnostics records counters timings and measured work', () =>
   loadOpenRTSScript('../../core/diagnostics/PerformanceDiagnostics.js', context);
 
   context.OpenRTS.diagnostics.performance.increment('spatialQueries', 2);
+  context.OpenRTS.diagnostics.performance.setGauge('render.drawCalls', 18);
   context.OpenRTS.diagnostics.performance.measure('ai', () => 42);
   const report = context.OpenRTS.diagnostics.performance.describe();
 
   assert.equal(report.counters.spatialQueries, 2);
+  assert.equal(report.gauges['render.drawCalls'], 18);
   assert.equal(report.timings.ai.count, 1);
   assert.equal(report.timings.ai.total, 5);
 });

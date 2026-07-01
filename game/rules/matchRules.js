@@ -22,6 +22,7 @@
     teams,
     initialHomesByTeam,
     initialKingsByTeam,
+    initialDefeatCriticalLabelsByTeam,
     initialUnitsByTeam,
     aliveUnits,
     buildings
@@ -32,13 +33,18 @@
 
     for (const team of teams) {
       if ((initialKingsByTeam?.[team] || 0) <= 0) continue;
-      const hasLiveKing = liveUnits.some(unit => unit.team === team && unit.unitType === 'king' && !unit.isDead);
-      if (!hasLiveKing) {
+      const hasLiveCriticalUnit = liveUnits.some(unit =>
+        unit.team === team &&
+        (unit.defeatCritical || unit.unitType === 'king') &&
+        !unit.isDead
+      );
+      if (!hasLiveCriticalUnit) {
         const winner = opponentOf(teams, team);
+        const label = String(initialDefeatCriticalLabelsByTeam?.[team] || 'king').toLowerCase();
         return resultFor(
           teams,
           team,
-          `${teamName(team)}'s king has fallen. ${teamName(winner, 'The opposing team')} wins.`
+          `${teamName(team)}'s ${label} has fallen. ${teamName(winner, 'The opposing team')} wins.`
         );
       }
     }

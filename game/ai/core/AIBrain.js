@@ -51,9 +51,7 @@
 
       for (const intent of intents) {
         if (orders >= maxOrders) break;
-        if (intent.type === 'prepare-ramparts') {
-          orders += this.executeRampartIntent(intent, maxOrders - orders);
-        } else if (intent.type === 'upgrade-castle') {
+        if (intent.type === 'upgrade-castle') {
           orders += this.squadController.upgradeCastle(this.blackboard, intent.king, intent.home) ? 1 : 0;
         } else if (intent.type === 'defend') {
           orders += this.executeDefenseIntent(intent, maxOrders - orders);
@@ -66,24 +64,6 @@
       }
 
       if (orders < maxOrders) this.executeRallyOrders(maxOrders - orders);
-    }
-
-    executeRampartIntent(intent, budget) {
-      let orders = 0;
-      intent.defenders.forEach((unit, index) => {
-        if (orders >= budget) return;
-        if (this.squadController.sendToRampart(
-          this.blackboard,
-          unit,
-          intent.home,
-          index,
-          this.blackboard.profile.rampartDefenders,
-          intent.target
-        )) {
-          orders++;
-        }
-      });
-      return orders;
     }
 
     executeDefenseIntent(intent, budget) {

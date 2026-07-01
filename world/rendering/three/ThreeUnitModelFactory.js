@@ -15,10 +15,7 @@
       getWorldElevation,
       getTeamMaterial,
       addSelectionRing,
-      entityElevation,
-      rampartHeight,
-      clamp,
-      smoothStep
+      entityElevation
     } = deps;
 
     function getWorkerGatherAnimation(unit) {
@@ -58,20 +55,86 @@
       }
     }
 
-    function getCastleElevation(unit) {
-      if (!unit.castleTopBuildingId) return 0;
-      if (unit.castleRampClimbed || unit.castleTopReached) return rampartHeight + 0.1;
-      if (!unit.castleRampBase || !unit.castleRampTop) return 0;
-      const rampX = unit.castleRampTop.x - unit.castleRampBase.x;
-      const rampY = unit.castleRampTop.y - unit.castleRampBase.y;
-      const rampLengthSquared = rampX * rampX + rampY * rampY;
-      if (rampLengthSquared <= 0) return 0;
-      const progress = clamp(
-        ((unit.x - unit.castleRampBase.x) * rampX + (unit.y - unit.castleRampBase.y) * rampY) / rampLengthSquared,
-        0,
-        1
+    function addRobotWalker(group, unit, teamMaterial, stride) {
+      const hull = materials.robotMetal || materials.steel;
+      const glow = materials.crystal || materials.projectile || teamMaterial;
+      addBox(group, 0, 0.42, 0, 0.54, 0.32, 0.42, hull);
+      addBox(group, 0, 0.66, -0.05, 0.42, 0.18, 0.32, teamMaterial);
+      addBox(group, 0, 0.78, 0.16, 0.28, 0.07, 0.045, glow);
+      const heavy = unit.size >= 30 || unit.armorType === 'heavy';
+      const legPairs = heavy ? 3 : 2;
+      for (let i = 0; i < legPairs; i++) {
+        const z = legPairs === 3 ? -0.24 + i * 0.24 : -0.18 + i * 0.36;
+        const phase = i % 2 ? -stride : stride;
+        for (const side of [-1, 1]) {
+          addBox(group, side * 0.34, 0.28, z + phase, 0.24, 0.065, 0.075, hull).rotation.z = side * -0.42;
+          addBox(group, side * 0.48, 0.08, z + phase * 1.25, 0.075, 0.28, 0.07, materials.steel);
+        }
+      }
+      addBox(group, 0.36, 0.62, 0, 0.48, 0.07, 0.08, materials.steel);
+      addBox(group, 0.63, 0.62, 0, 0.12, 0.11, 0.11, glow);
+      if (heavy) {
+        addBox(group, -0.34, 0.62, 0, 0.4, 0.08, 0.09, materials.steel);
+        addBox(group, -0.58, 0.62, 0, 0.13, 0.12, 0.12, materials.steel);
+      }
+    }
+
+    function addHoverTank(group, unit, teamMaterial) {
+      const hull = materials.robotMetal || materials.steel;
+      const glow = materials.crystal || materials.projectile || teamMaterial;
+      const heavy = unit.size >= 34 || unit.armorType === 'heavy_vehicle';
+      addBox(group, 0, 0.28, 0, heavy ? 0.96 : 0.8, heavy ? 0.28 : 0.22, heavy ? 0.62 : 0.5, hull);
+      addBox(group, 0, 0.48, -0.03, heavy ? 0.56 : 0.44, 0.22, heavy ? 0.4 : 0.32, teamMaterial);
+      addBox(group, 0, 0.15, -0.34, heavy ? 0.8 : 0.62, 0.055, 0.08, glow);
+      addBox(group, 0, 0.15, 0.34, heavy ? 0.8 : 0.62, 0.055, 0.08, glow);
+      addBox(group, 0.48, 0.5, 0, heavy ? 0.82 : 0.58, heavy ? 0.1 : 0.075, heavy ? 0.12 : 0.09, materials.steel);
+      addBox(group, heavy ? 0.94 : 0.74, 0.5, 0, 0.16, 0.14, 0.14, glow);
+      if (heavy) {
+        addBox(group, -0.24, 0.62, 0, 0.34, 0.1, 0.16, materials.steel);
+        addBox(group, -0.46, 0.62, 0, 0.18, 0.13, 0.18, materials.steel);
+      }
+    }
+
+    function swordSwing(unit) {
+      if (!unit.attackAnimationTime || !unit.attackAnimationDuration) return 0;
+      const progress = 1 - Math.max(0, Math.min(1, unit.attackAnimationTime / unit.attackAnimationDuration));
+      return Math.sin(progress * Math.PI);
+    }
+
+    function addContactShadow(group, unit, terrainElevation, elevation) {
+      if (!materials.unitShadow) return;
+      const size = Math.max(14, Number(unit.size) || 18);
+      const isAir = unit.movementType === 'air';
+      const isVehicle = unit.unitType === 'hover_tank' || unit.model === 'hover_tank' || unit.armorType === 'heavy_vehicle';
+      const radiusX = (isVehicle ? 0.68 : isAir ? 0.58 : 0.42) * (size / 18);
+      const radiusZ = (isVehicle ? 0.42 : isAir ? 0.34 : 0.28) * (size / 18);
+      const shadow = new THREE.Mesh(
+        geometry('unit:soft-contact-shadow', () => new THREE.CircleGeometry(1, 32)),
+        materials.unitShadow
       );
-      return smoothStep(0.04, 0.96, progress) * (rampartHeight + 0.1);
+      shadow.rotation.x = -Math.PI * 0.5;
+      shadow.position.y = terrainElevation - elevation + 0.018;
+      if (shadow.scale?.set) shadow.scale.set(radiusX, radiusZ, 1);
+      shadow.castShadow = false;
+      shadow.receiveShadow = false;
+      shadow.renderOrder = 2;
+      shadow.userData = { ...(shadow.userData || {}), contactShadow: true };
+      group.add(shadow);
+    }
+
+    function disableHardUnitShadows(node) {
+      if (!node || typeof node !== 'object') return;
+      if (!node.userData?.contactShadow && node !== null && ('castShadow' in node || node.isMesh || node.kind)) {
+        node.castShadow = false;
+      }
+      if (Array.isArray(node.children)) {
+        for (const child of node.children) disableHardUnitShadows(child);
+      }
+    }
+
+    function finishUnitModel(group) {
+      disableHardUnitShadows(group);
+      return group;
     }
 
     function create(unit) {
@@ -80,30 +143,56 @@
       const terrainElevation = typeof getWorldElevation === 'function' ? getWorldElevation(unit.x, unit.y) : 0;
       const elevation = entityElevation.unitElevation({
         unit,
-        terrainElevation,
-        castleElevation: getCastleElevation(unit)
+        terrainElevation
       });
       group.position.set(position.x, elevation, position.z);
       group.rotation.y = -(Number.isFinite(unit.heading) ? unit.heading : 0);
+      addContactShadow(group, unit, terrainElevation, elevation);
       if (unit.isDead) {
         addBox(group, 0, 0.04, 0, 0.55, 0.06, 0.12, materials.bone);
         addSphere(group, 0.33, 0.1, 0, 0.13, materials.bone);
-        return group;
+        return finishUnitModel(group);
       }
       if (unit.selected) addSelectionRing(group, 0.46);
 
       const teamMaterial = getTeamMaterial(unit.team);
-      const type = unit.unitType || 'soldier';
+      const type = unit.model || unit.unitType || 'soldier';
+      const era = String(unit.era || '').toLowerCase();
+      const isSciFi = era === 'sci_fi';
+      const isModern = era === 'modern';
+      const isRobotic = era === 'robotic';
+      const isFantasy = era === 'fantasy';
+      const isHistorical = era === 'historical';
       const stride = unit.hasActivePath?.() ? Math.sin((unit.spriteFrame || 0) * Math.PI * 0.5) * 0.07 : 0;
       if (type === 'balloon' || unit.movementType === 'air') {
-        addSphere(group, 0, 0.72, 0, 0.42, teamMaterial, { x: 0.88, y: 1.05, z: 0.88 });
-        addBox(group, 0, 0.18, 0, 0.36, 0.18, 0.32, materials.wood);
-        addBox(group, -0.18, 0.36, -0.14, 0.035, 0.48, 0.035, materials.rope || materials.wood);
-        addBox(group, 0.18, 0.36, -0.14, 0.035, 0.48, 0.035, materials.rope || materials.wood);
-        addBox(group, -0.18, 0.36, 0.14, 0.035, 0.48, 0.035, materials.rope || materials.wood);
-        addBox(group, 0.18, 0.36, 0.14, 0.035, 0.48, 0.035, materials.rope || materials.wood);
+        if (isSciFi || isRobotic || isModern) {
+          const hullMaterial = isRobotic ? materials.robotMetal || materials.steel : isSciFi ? materials.sciFiMetal || teamMaterial : materials.steel;
+          addBox(group, 0, 0.58, 0, 0.9, 0.22, 0.34, hullMaterial);
+          addBox(group, -0.54, 0.56, 0, 0.46, 0.055, 0.24, teamMaterial);
+          addBox(group, 0.54, 0.56, 0, 0.46, 0.055, 0.24, teamMaterial);
+          addBox(group, 0, 0.56, -0.3, 0.18, 0.045, 0.34, hullMaterial);
+          addBox(group, 0.4, 0.52, 0, 0.08, 0.08, 0.08, materials.projectile || teamMaterial);
+        } else {
+          addSphere(group, 0, 0.72, 0, 0.42, teamMaterial, { x: 0.88, y: 1.05, z: 0.88 });
+          addBox(group, 0, 0.18, 0, 0.36, 0.18, 0.32, materials.wood);
+          addBox(group, -0.18, 0.36, -0.14, 0.035, 0.48, 0.035, materials.rope || materials.wood);
+          addBox(group, 0.18, 0.36, -0.14, 0.035, 0.48, 0.035, materials.rope || materials.wood);
+          addBox(group, -0.18, 0.36, 0.14, 0.035, 0.48, 0.035, materials.rope || materials.wood);
+          addBox(group, 0.18, 0.36, 0.14, 0.035, 0.48, 0.035, materials.rope || materials.wood);
+        }
         addBox(group, 0.18, 0.25, 0, 0.05, 0.38, 0.04, materials.steel);
-        return group;
+        return finishUnitModel(group);
+      }
+
+      if (type === 'robot_walker') {
+        addRobotWalker(group, unit, teamMaterial, stride);
+        attachments.addCarriedObject(group, unit, 0);
+        return finishUnitModel(group);
+      }
+
+      if (type === 'hover_tank') {
+        addHoverTank(group, unit, teamMaterial);
+        return finishUnitModel(group);
       }
 
       const mountedSheep = unit.mountType === 'sheep';
@@ -125,8 +214,30 @@
 
       addBox(group, -0.09, 0.04 + riderY, -stride, 0.09, 0.28, 0.09, materials.leather);
       addBox(group, 0.09, 0.04 + riderY, stride, 0.09, 0.28, 0.09, materials.leather);
-      addCylinder(group, 0, 0.28 + riderY, 0, type === 'knight' ? 0.22 : 0.18, type === 'knight' ? 0.24 : 0.2, type === 'knight' ? 0.62 : 0.52, teamMaterial, 12);
+      const bodyMaterial = isRobotic
+        ? materials.robotMetal || materials.steel
+        : isSciFi
+          ? materials.sciFiMetal || teamMaterial
+          : isModern
+            ? materials.desertCloth || teamMaterial
+            : teamMaterial;
+      addCylinder(group, 0, 0.28 + riderY, 0, type === 'knight' ? 0.22 : 0.18, type === 'knight' ? 0.24 : 0.2, type === 'knight' ? 0.62 : 0.52, bodyMaterial, 12);
       addSphere(group, 0, 0.93 + riderY, 0, 0.14, materials.skin);
+      if (isSciFi) {
+        addBox(group, 0, 0.94 + riderY, 0.11, 0.25, 0.08, 0.035, materials.crystal || materials.projectile);
+        addBox(group, 0, 0.56 + riderY, -0.16, 0.28, 0.24, 0.08, materials.sciFiMetal || materials.steel);
+      } else if (isModern) {
+        addCylinder(group, 0, 1.01 + riderY, 0, 0.15, 0.16, 0.08, materials.steel, 12);
+        addBox(group, 0, 0.58 + riderY, -0.16, 0.32, 0.18, 0.08, materials.supply || materials.leather);
+      } else if (isRobotic) {
+        addBox(group, -0.14, 0.62 + riderY, 0, 0.11, 0.22, 0.08, materials.steel);
+        addBox(group, 0.14, 0.62 + riderY, 0, 0.11, 0.22, 0.08, materials.steel);
+        addBox(group, 0, 0.94 + riderY, 0.1, 0.2, 0.055, 0.035, materials.projectile || materials.crystal);
+      } else if (isFantasy) {
+        addBox(group, 0, 0.5 + riderY, -0.18, 0.3, 0.42, 0.045, teamMaterial);
+      } else if (isHistorical) {
+        addBox(group, 0, 0.56 + riderY, -0.16, 0.24, 0.2, 0.05, materials.wood);
+      }
       if (type === 'king') {
         addCylinder(group, 0, 1.02 + riderY, 0, 0.17, 0.17, 0.11, materials.gold, 12);
         for (let i = 0; i < 5; i++) {
@@ -150,18 +261,17 @@
       else if (type === 'crossbowman') attachments.addCrossbow(group, riderY);
       else if (type === 'grenademan') attachments.addGrenadeWeapon(group, riderY);
       else {
-        const swing = (unit.attackAnimationTime || 0) > 0 ? -0.8 : 0.2;
+        const swing = 0.2 - swordSwing(unit) * 1.55;
         const sword = addBox(group, 0.29, 0.48 + riderY, 0, 0.055, 0.68, 0.045, materials.steel);
         sword.rotation.z = swing;
         addBox(group, 0.25, 0.46 + riderY, 0, 0.24, 0.05, 0.08, materials.wood).rotation.z = swing;
       }
       attachments.addCarriedObject(group, unit, riderY);
-      return group;
+      return finishUnitModel(group);
     }
 
     return Object.freeze({
       create,
-      getCastleElevation,
       getWorkerGatherAnimation
     });
   }

@@ -47,6 +47,71 @@ test('prelaunch sample game package folders exist with valid manifests', () => {
   }
 });
 
+test('static game package index lists every prelaunch sample package', () => {
+  const indexPath = path.join(root, 'games', 'index.json');
+  const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+  const ids = new Set(index.packages.map(entry => entry.id));
+  const expectedPackages = [
+    'spacesiege',
+    'battleforge',
+    'modern_warlord',
+    'ultimate_extinction',
+    'era_of_kingdoms',
+    'desert_command'
+  ];
+
+  assert.equal(index.schemaVersion, 1);
+  for (const packageId of expectedPackages) {
+    assert.equal(ids.has(packageId), true, `games/index.json must list ${packageId}`);
+    const entry = index.packages.find(candidate => candidate.id === packageId);
+    assert.equal(fs.existsSync(path.join(root, 'games', entry.manifest)), true, `${packageId} manifest path must exist`);
+  }
+});
+
+test('sample game packages define theme-specific factions', () => {
+  const expectedFactionNames = {
+    spacesiege: ['Humans', 'Cybernetic', 'Aliens'],
+    modern_warlord: ['United Coalition', 'Eastern Federation', 'Insurgent Network'],
+    era_of_kingdoms: ['River Crown', 'Highland Realm', 'Steppe Khans'],
+    battleforge: ['Crown Alliance', 'Iron Horde', 'Moonwood Sentinels', 'Gravebound'],
+    ultimate_extinction: ['Core Directive', 'Arm Vanguard', 'Frontier Machine'],
+    desert_command: ['Global Coalition', 'Desert Brotherhood', 'Iron Syndicate']
+  };
+
+  for (const [packageId, names] of Object.entries(expectedFactionNames)) {
+    const factions = JSON.parse(fs.readFileSync(path.join(root, 'games', packageId, 'factions.json'), 'utf8'));
+    const actualNames = new Set(Object.values(factions).map(faction => faction.name));
+    for (const name of names) {
+      assert.equal(actualNames.has(name), true, `${packageId} must define ${name}`);
+    }
+    assert.equal(Object.values(factions).every(faction => Array.isArray(faction.units) && faction.units.length > 0), true);
+  }
+});
+
+test('era of kingdoms includes an arabia-style 1v1 map preset', () => {
+  const terrainPresets = JSON.parse(fs.readFileSync(path.join(root, 'games', 'era_of_kingdoms', 'terrain-presets.json'), 'utf8'));
+  const modes = JSON.parse(fs.readFileSync(path.join(root, 'games', 'era_of_kingdoms', 'game-modes.json'), 'utf8'));
+  const preset = terrainPresets.eok_arabia;
+  const versus = modes.era_of_kingdoms_versus;
+
+  assert.equal(preset.visualStyle, 'arabia_dryland');
+  assert.equal(preset.waterLevel, 0);
+  assert.equal(preset.treeCount >= 120, true);
+  assert.equal(preset.goldMineCount >= 8, true);
+  assert.equal(versus.defaults.mapStyle, 'eok_arabia');
+  assert.equal(versus.defaults.visualStyle, 'arabia_dryland');
+});
+
+test('terrain preset setup preserves package preset ids without embedded id fields', () => {
+  const configSource = fs.readFileSync(path.join(root, 'ui', 'config.js'), 'utf8');
+  const terrainPresets = JSON.parse(fs.readFileSync(path.join(root, 'games', 'era_of_kingdoms', 'terrain-presets.json'), 'utf8'));
+
+  assert.equal(terrainPresets.eok_arabia.id, undefined);
+  assert.match(configSource, /Object\.entries\(TERRAIN_PRESETS\)/);
+  assert.match(configSource, /value:\s*preset\.id\s*\|\|\s*id/);
+  assert.match(configSource, /mapConfig\.mapStyle\s*=\s*preset\.id\s*\|\|\s*presetId/);
+});
+
 test('content validation catches broken cross-catalog references', () => {
   const content = clone(loadContent({ root }));
   content.units.worker.abilities = ['missing_ability'];

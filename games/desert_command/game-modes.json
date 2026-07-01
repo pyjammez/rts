@@ -2,7 +2,7 @@
   "desert_versus": {
     "shortName": "Desert Versus",
     "name": "Desert Command Versus",
-    "summary": "Modern combined-arms skirmish preset from the Desert Command sample package.",
+    "summary": "Low-income desert raid scenario with ambush houses, infantry squads, buggies, drones, and commander powers.",
     "playable": true,
     "startLabel": "Create Desert Battle",
     "teams": ["blue", "gold"],
@@ -10,15 +10,16 @@
     "defaults": {
       "enabledUnits": ["dc_builder", "dc_rifle_squad", "dc_rocket_team", "dc_battle_tank", "dc_rocket_buggy", "dc_attack_drone"],
       "mapStyle": "desert_oilfield",
+      "visualStyle": "desert_raid",
       "mapSize": "default_large",
       "waterLevel": 0,
-      "rockCount": 36,
-      "treeCount": 2,
+      "rockCount": 58,
+      "treeCount": 1,
       "sheepCount": 0,
       "duckCount": 0,
-      "goldMineCount": 8,
-      "houseCount": 6,
-      "startingGold": 10000,
+      "goldMineCount": 5,
+      "houseCount": 10,
+      "startingGold": 3500,
       "startingWood": 0,
       "startingFood": 0,
       "playersPerTeam": 1,
@@ -31,12 +32,18 @@
       "towersPerTeam": 0,
       "unitRoster": {
         "dc_builder": 1,
-        "dc_rifle_squad": 2,
-        "dc_rocket_team": 0,
+        "dc_rifle_squad": 4,
+        "dc_rocket_team": 1,
         "dc_battle_tank": 0,
-        "dc_rocket_buggy": 0,
+        "dc_rocket_buggy": 1,
         "dc_attack_drone": 0
       }
+    },
+    "rules": {
+      "identity": "desert_raid_scenario",
+      "economyPace": "low_income_tactical",
+      "commanderPowers": true,
+      "signature": "small forces, ambush houses, rocket buggies, drones, scans, and airstrikes"
     },
     "sections": ["map", "forces"]
   }

@@ -2,7 +2,7 @@
   "modern_warlord_versus": {
     "shortName": "ModernWarlord",
     "name": "ModernWarlord Versus",
-    "summary": "Modern combined-arms skirmish with supplies, power, infantry, tanks, and aircraft.",
+    "summary": "Heavy modern base-war skirmish focused on supplies, power, factories, tanks, and aircraft.",
     "playable": true,
     "startLabel": "Create ModernWarlord Room",
     "teams": ["blue", "gold"],
@@ -10,22 +10,29 @@
     "defaults": {
       "enabledUnits": ["mw_dozer", "mw_rifleman", "mw_tank", "mw_gunship"],
       "mapStyle": "dry_oil_basin",
+      "visualStyle": "industrial_desert",
       "mapSize": "default_large",
       "waterLevel": 0,
-      "rockCount": 36,
-      "treeCount": 3,
+      "rockCount": 42,
+      "treeCount": 0,
       "sheepCount": 0,
       "duckCount": 0,
-      "goldMineCount": 10,
-      "houseCount": 6,
-      "startingGold": 10000,
+      "goldMineCount": 12,
+      "houseCount": 3,
+      "startingGold": 12000,
       "startingWood": 0,
       "startingFood": 0,
       "playersPerTeam": 1,
       "playerCount": 2,
       "homesPerTeam": 1,
       "towersPerTeam": 0,
-      "unitRoster": { "mw_dozer": 1, "mw_rifleman": 2, "mw_tank": 0, "mw_gunship": 0 }
+      "unitRoster": { "mw_dozer": 1, "mw_rifleman": 1, "mw_tank": 0, "mw_gunship": 0 }
+    },
+    "rules": {
+      "identity": "heavy_power_base",
+      "economyPace": "boom",
+      "powerDependency": true,
+      "signature": "reactors, supply depots, war factories, tanks, and gunships"
     },
     "sections": ["map", "forces"]
   }

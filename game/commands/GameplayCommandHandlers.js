@@ -15,14 +15,10 @@
       worldRuntime = app.world?.runtime,
       systems = app.systems || {},
       tileSize = 32,
-      clearCastleTopCommand = null,
       removeSheepFromMap = null,
       commandUnitIntoHouse = null,
       commandUnitOutOfHouse = null,
-      startBurningHouse = null,
-      commandUnitIntoCastle = null,
-      commandUnitOutOfCastle = null,
-      commandUnitToCastleTop = null
+      startBurningHouse = null
     } = deps;
 
     const resolveUnit = id => findEntityById(units, id);
@@ -62,15 +58,21 @@
         const unit = resolveUnit(command.payload.unitId);
         if (!unit || unit.isDead) return false;
         systems.workerEconomy?.clearJob(unit);
-        if (!command.payload.append && typeof clearCastleTopCommand === 'function') clearCastleTopCommand(unit);
-        return unit.issueMoveCommand(command.payload.x, command.payload.y, { append: !!command.payload.append });
+        const issued = unit.issueMoveCommand(command.payload.x, command.payload.y, { append: !!command.payload.append });
+        if (issued && typeof global.markComparisonUnitManualControl === 'function') {
+          global.markComparisonUnitManualControl(unit);
+        }
+        return issued;
       });
       register(commandTypes.ATTACK_MOVE, 'Order one unit to move while auto-engaging enemies.', movePayload, command => {
         const unit = resolveUnit(command.payload.unitId);
         if (!unit || unit.isDead) return false;
         systems.workerEconomy?.clearJob(unit);
-        if (!command.payload.append && typeof clearCastleTopCommand === 'function') clearCastleTopCommand(unit);
-        return unit.issueAttackMoveCommand(command.payload.x, command.payload.y, { append: !!command.payload.append });
+        const issued = unit.issueAttackMoveCommand(command.payload.x, command.payload.y, { append: !!command.payload.append });
+        if (issued && typeof global.markComparisonUnitManualControl === 'function') {
+          global.markComparisonUnitManualControl(unit);
+        }
+        return issued;
       });
       register(commandTypes.ATTACK, 'Order one unit to attack a target entity.', unitTarget, command => {
         const unit = resolveUnit(command.payload.unitId);
@@ -177,64 +179,6 @@
         const king = resolveUnit(command.payload.kingId);
         const building = resolveBuilding(command.payload.buildingId);
         return !!systems.castleUpgrades?.upgrade(building, king);
-      });
-      register(commandTypes.CASTLE_ENTER, 'Order one unit to enter a castle through a lane.', {
-        unitId: id,
-        buildingId: id,
-        ...worldPoint,
-        append: optionalBoolean,
-        laneIndex: { type: 'integer', min: 0, required: false }
-      }, command => {
-        const unit = resolveUnit(command.payload.unitId);
-        const building = resolveBuilding(command.payload.buildingId);
-        if (!unit || !building || typeof commandUnitIntoCastle !== 'function') return false;
-        return commandUnitIntoCastle(
-          unit,
-          building,
-          { x: command.payload.x, y: command.payload.y },
-          !!command.payload.append,
-          command.payload.laneIndex || 0
-        );
-      });
-      register(commandTypes.CASTLE_EXIT, 'Order one unit to exit a castle through a lane.', {
-        unitId: id,
-        buildingId: id,
-        ...worldPoint,
-        append: optionalBoolean,
-        laneIndex: { type: 'integer', min: 0, required: false }
-      }, command => {
-        const unit = resolveUnit(command.payload.unitId);
-        const building = resolveBuilding(command.payload.buildingId);
-        if (!unit || !building || typeof commandUnitOutOfCastle !== 'function') return false;
-        return commandUnitOutOfCastle(
-          unit,
-          building,
-          { x: command.payload.x, y: command.payload.y },
-          !!command.payload.append,
-          command.payload.laneIndex || 0
-        );
-      });
-      register(commandTypes.CASTLE_RAMPART, 'Order one unit to climb to a castle rampart position.', {
-        unitId: id,
-        buildingId: id,
-        index: { type: 'integer', min: 0, required: false },
-        total: { type: 'integer', min: 1, required: false },
-        append: optionalBoolean,
-        targetX: { type: 'number', required: false },
-        targetY: { type: 'number', required: false }
-      }, command => {
-        const unit = resolveUnit(command.payload.unitId);
-        const building = resolveBuilding(command.payload.buildingId);
-        if (!unit || !building || typeof commandUnitToCastleTop !== 'function') return false;
-        return commandUnitToCastleTop(
-          unit,
-          building,
-          command.payload.index || 0,
-          command.payload.total || 1,
-          !!command.payload.append,
-          command.payload.targetX,
-          command.payload.targetY
-        );
       });
     }
 

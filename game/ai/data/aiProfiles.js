@@ -10,7 +10,6 @@
     maxOrdersPerThink: 12,
     defenseRadius: 430,
     assaultRadius: 900,
-    rampartDefenders: 3,
     earlyAttackDelay: 4.0,
     waveInterval: 9.5,
     rallyDistance: 180,
@@ -24,8 +23,7 @@
       name: 'Balanced',
       ...COMMON,
       attackReadiness: 3,
-      defendWithKing: true,
-      rangedRampartBias: 1.0
+      defendWithKing: true
     }),
     rush: Object.freeze({
       id: 'rush',

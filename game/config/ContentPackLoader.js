@@ -10,7 +10,8 @@
     loaded: false,
     errors: [],
     selectedGamePackageId: '',
-    activeGamePackage: null
+    activeGamePackage: null,
+    packageIndex: null
   };
   const PACKAGE_FILE_KEYS = Object.freeze([
     'abilities',
@@ -69,6 +70,107 @@
     };
   }
 
+  function mergeModeDefinition(baseMode = {}, override = {}, targetId = '') {
+    const merged = mergeMap(baseMode, override);
+    merged.id = targetId || baseMode.id || override.id || '';
+    merged.defaults = mergeMap(baseMode.defaults, override.defaults);
+    return merged;
+  }
+
+  function modeOverrideTarget(modeId, packageId, baseModes = {}) {
+    const id = String(modeId || '');
+    if (baseModes[id]) return id;
+    const normalizedPackageId = String(packageId || '').replace(/-/g, '_');
+    const aliases = [
+      [`${normalizedPackageId}_versus`, 'versus'],
+      [`${normalizedPackageId}_td`, 'tower_defense'],
+      [`${normalizedPackageId}_tower_defense`, 'tower_defense'],
+      [`${normalizedPackageId}_compare`, 'unit_comparison'],
+      [`${normalizedPackageId}_unit_comparison`, 'unit_comparison'],
+      [`${normalizedPackageId}_builder`, 'map_builder'],
+      [`${normalizedPackageId}_map_builder`, 'map_builder']
+    ];
+    for (const [alias, target] of aliases) {
+      if (id === alias && baseModes[target]) return target;
+    }
+    if (id.endsWith('_versus') && baseModes.versus) return 'versus';
+    if ((id.endsWith('_td') || id.endsWith('_tower_defense')) && baseModes.tower_defense) return 'tower_defense';
+    if ((id.endsWith('_compare') || id.endsWith('_unit_comparison')) && baseModes.unit_comparison) return 'unit_comparison';
+    if ((id.endsWith('_builder') || id.endsWith('_map_builder')) && baseModes.map_builder) return 'map_builder';
+    return '';
+  }
+
+  function mergeModeOverrides(baseModes = {}, packageModes = {}, gamePackage = {}) {
+    const merged = mergeMap({}, baseModes);
+    const applied = [];
+    const ignored = [];
+    for (const [modeId, mode] of Object.entries(packageModes || {})) {
+      const targetId = modeOverrideTarget(modeId, gamePackage.id, baseModes);
+      if (!targetId) {
+        ignored.push(modeId);
+        continue;
+      }
+      merged[targetId] = mergeModeDefinition(baseModes[targetId], mode, targetId);
+      applied.push({ source: modeId, target: targetId });
+    }
+    gamePackage.modeOverrides = applied;
+    gamePackage.ignoredModeIds = ignored;
+    gamePackage.modeDerivatives = [];
+    return merged;
+  }
+
+  function defaultComparisonRoster(versusDefaults = {}, allowedUnits = []) {
+    const roster = versusDefaults.unitRoster && typeof versusDefaults.unitRoster === 'object'
+      ? versusDefaults.unitRoster
+      : {};
+    const result = {};
+    for (const unitId of allowedUnits) {
+      result[unitId] = Math.max(0, Math.floor(Number(roster[unitId]) || 0));
+    }
+    if (Object.values(result).some(count => count > 0)) return result;
+    const first = allowedUnits[0];
+    return first ? { [first]: 5 } : {};
+  }
+
+  function applyPackageModeDerivatives(modes = {}, gamePackage = {}) {
+    const appliedTargets = new Set((gamePackage.modeOverrides || []).map(override => override.target));
+    if (appliedTargets.has('unit_comparison')) return modes;
+    const versus = modes.versus;
+    const comparison = modes.unit_comparison;
+    if (!versus || !comparison) return modes;
+
+    const allowedUnits = Array.isArray(versus.allowedUnits) && versus.allowedUnits.length
+      ? [...versus.allowedUnits]
+      : Array.isArray(versus.defaults?.enabledUnits) && versus.defaults.enabledUnits.length
+        ? [...versus.defaults.enabledUnits]
+        : [];
+    if (!allowedUnits.length) return modes;
+
+    const enabledUnits = Array.isArray(versus.defaults?.enabledUnits) && versus.defaults.enabledUnits.length
+      ? versus.defaults.enabledUnits.filter(unitId => allowedUnits.includes(unitId))
+      : [...allowedUnits];
+    const derivedRoster = defaultComparisonRoster(versus.defaults, allowedUnits);
+    const defaults = {
+      ...(comparison.defaults || {}),
+      mapStyle: versus.defaults?.mapStyle || comparison.defaults?.mapStyle,
+      visualStyle: versus.defaults?.visualStyle || comparison.defaults?.visualStyle,
+      enabledUnits,
+      leftUnitRoster: { ...derivedRoster },
+      rightUnitRoster: { ...derivedRoster }
+    };
+
+    modes.unit_comparison = {
+      ...comparison,
+      allowedUnits,
+      defaults
+    };
+    gamePackage.modeDerivatives = [
+      ...(gamePackage.modeDerivatives || []),
+      { source: 'versus', target: 'unit_comparison', fields: ['allowedUnits', 'enabledUnits', 'leftUnitRoster', 'rightUnitRoster'] }
+    ];
+    return modes;
+  }
+
   function normalizeGamePackage(data, manifestPath) {
     const manifestService = app.config.packageManifests;
     const manifest = manifestService?.normalizeManifest
@@ -78,6 +180,7 @@
       return {
         ...manifest,
         content: {},
+        report: null,
         errors: []
       };
     }
@@ -107,6 +210,7 @@
       manifestPath,
       fingerprint: '',
       content: {},
+      report: null,
       errors: []
     };
   }
@@ -125,9 +229,12 @@
 
   async function loadGamePackage(manifestPathOrId) {
     const packageId = safePackageId(manifestPathOrId);
-    const manifestPath = packageId && !String(manifestPathOrId).includes('/')
-      ? `games/${packageId}/manifest.json`
-      : String(manifestPathOrId || '');
+    const indexedPackage = packageId ? getIndexedGamePackage(packageId) : null;
+    const manifestPath = indexedPackage
+      ? indexedPackage.manifestPath
+      : packageId && !String(manifestPathOrId).includes('/')
+        ? `games/${packageId}/manifest.json`
+        : String(manifestPathOrId || '');
     const manifestData = await fetchJson(manifestPath);
     const gamePackage = normalizeGamePackage(manifestData, manifestPath);
     const manifestValidation = app.config.packageManifests?.validateManifest?.(manifestData, {
@@ -154,6 +261,9 @@
     gamePackages.set(gamePackage.id, gamePackage);
     loadState.activeGamePackage = gamePackage;
     loadState.selectedGamePackageId = gamePackage.id;
+    gamePackage.report = app.config.packageReports?.createPackageReport
+      ? app.config.packageReports.createPackageReport(gamePackage)
+      : null;
     return gamePackage;
   }
 
@@ -165,6 +275,34 @@
     return loadGamePackage(packageId);
   }
 
+  async function loadGamePackageIndex(path = 'games/index.json') {
+    const data = await fetchJson(path);
+    const service = app.config.packageManifests;
+    const index = service?.normalizePackageIndex
+      ? service.normalizePackageIndex(data, path)
+      : {
+        schemaVersion: Number(data.schemaVersion) || 1,
+        name: String(data.name || 'Game Packages'),
+        description: String(data.description || ''),
+        indexPath: path,
+        packages: Array.isArray(data.packages) ? data.packages.map(entry => ({
+          id: String(entry.id || ''),
+          manifest: String(entry.manifest || `${entry.id}/manifest.json`),
+          manifestPath: `games/${String(entry.manifest || `${entry.id}/manifest.json`)}`,
+          category: String(entry.category || 'sample'),
+          style: String(entry.style || ''),
+          featured: entry.featured === true,
+          tags: Array.isArray(entry.tags) ? entry.tags.map(String) : []
+        })) : []
+      };
+    const validation = service?.validatePackageIndex?.(data, { indexPath: path });
+    if (validation && !validation.valid) {
+      loadState.errors.push(...validation.errors);
+    }
+    loadState.packageIndex = index;
+    return index;
+  }
+
   function applyGamePackage(baseDefinitions = {}, gamePackage = loadState.activeGamePackage) {
     if (!gamePackage) return baseDefinitions;
     const content = gamePackage.content || {};
@@ -172,6 +310,13 @@
     const merged = { ...baseDefinitions };
     for (const key of PACKAGE_FILE_KEYS) {
       if (key === 'scenarios' || content[key] === undefined) continue;
+      if (key === 'modes') {
+        merged[key] = applyPackageModeDerivatives(
+          mergeModeOverrides(baseDefinitions[key] || {}, content[key], gamePackage),
+          gamePackage
+        );
+        continue;
+      }
       merged[key] = mode === 'replace'
         ? mergeMap({}, content[key])
         : mergeMap(baseDefinitions[key], content[key]);
@@ -182,6 +327,9 @@
       version: gamePackage.version,
       manifestPath: gamePackage.manifestPath,
       mergeMode: gamePackage.mergeMode,
+      modeOverrides: [...(gamePackage.modeOverrides || [])],
+      modeDerivatives: [...(gamePackage.modeDerivatives || [])],
+      ignoredModeIds: [...(gamePackage.ignoredModeIds || [])],
       errors: [...gamePackage.errors]
     };
     return merged;
@@ -217,6 +365,29 @@
     return [...gamePackages.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  function listAvailableGamePackages(filters = {}) {
+    const index = loadState.packageIndex;
+    if (!index) return [];
+    const packages = app.config.packageManifests?.searchPackageIndex
+      ? app.config.packageManifests.searchPackageIndex(index, filters)
+      : [...(index.packages || [])];
+    return packages.sort((a, b) => {
+      if (a.featured !== b.featured) return a.featured ? -1 : 1;
+      return String(a.name || a.id).localeCompare(String(b.name || b.id));
+    });
+  }
+
+  function getIndexedGamePackage(id) {
+    const packageId = safePackageId(id);
+    if (!packageId || !loadState.packageIndex) return null;
+    return (loadState.packageIndex.packages || []).find(entry => entry.id === packageId) || null;
+  }
+
+  async function loadIndexedGamePackage(id) {
+    const entry = getIndexedGamePackage(id);
+    return loadGamePackage(entry ? entry.manifestPath : id);
+  }
+
   function createGamePackageLock() {
     if (app.config.packageManifests?.createPackageLock) {
       return app.config.packageManifests.createPackageLock(listGamePackages());
@@ -235,18 +406,46 @@
     };
   }
 
+  function createGamePackageReport(id = '') {
+    const gamePackage = id ? getGamePackage(id) : loadState.activeGamePackage;
+    if (!gamePackage || !app.config.packageReports?.createPackageReport) return null;
+    gamePackage.report = app.config.packageReports.createPackageReport(gamePackage);
+    return gamePackage.report;
+  }
+
   function describe() {
     return {
       schemaVersion: 1,
       loaded: loadState.loaded,
       count: packs.size,
       gamePackageCount: gamePackages.size,
+      availableGamePackageCount: loadState.packageIndex?.packages?.length || 0,
       errors: [...loadState.errors],
+      packageIndex: loadState.packageIndex ? {
+        name: loadState.packageIndex.name,
+        description: loadState.packageIndex.description,
+        indexPath: loadState.packageIndex.indexPath,
+        fingerprint: loadState.packageIndex.fingerprint,
+        packageCount: loadState.packageIndex.packages.length,
+        facets: app.config.packageManifests?.getIndexFacets
+          ? app.config.packageManifests.getIndexFacets(loadState.packageIndex)
+          : { categories: [], tags: [], featured: [] },
+        report: app.config.packageReports?.createIndexReport
+          ? app.config.packageReports.createIndexReport(loadState.packageIndex, listGamePackages())
+          : null
+      } : null,
       activeGamePackage: loadState.activeGamePackage ? {
         id: loadState.activeGamePackage.id,
         name: loadState.activeGamePackage.name,
         version: loadState.activeGamePackage.version,
         fingerprint: loadState.activeGamePackage.fingerprint,
+        report: loadState.activeGamePackage.report
+          ? {
+            summary: { ...loadState.activeGamePackage.report.summary },
+            capabilities: { ...loadState.activeGamePackage.report.capabilities },
+            diagnosticSummary: { ...loadState.activeGamePackage.report.diagnosticSummary }
+          }
+          : null,
         errors: [...loadState.activeGamePackage.errors]
       } : null,
       packs: listPacks().map(pack => ({
@@ -267,6 +466,12 @@
         provides: [...(gamePackage.provides || [])],
         tags: [...(gamePackage.tags || [])],
         fileCount: Object.keys(gamePackage.files || {}).length,
+        report: gamePackage.report
+          ? {
+            summary: { ...gamePackage.report.summary },
+            diagnosticSummary: { ...gamePackage.report.diagnosticSummary }
+          }
+          : null,
         errors: [...gamePackage.errors]
       })),
       packageLock: createGamePackageLock()
@@ -284,10 +489,15 @@
   app.config.gamePackages = Object.freeze({
     loadGamePackage,
     loadSelectedGamePackage,
+    loadGamePackageIndex,
+    loadIndexedGamePackage,
     applyGamePackage,
     getGamePackage,
+    getIndexedGamePackage,
     listGamePackages,
+    listAvailableGamePackages,
     createGamePackageLock,
+    createGamePackageReport,
     describe,
     loadState
   });

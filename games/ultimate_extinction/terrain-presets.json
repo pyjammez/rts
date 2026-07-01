@@ -1,12 +1,14 @@
 {
   "metal_plateau": {
     "name": "Metal Plateau",
+    "description": "Broad metal-rich battlefield with sparse organic cover and enough reclaim fields for huge robot armies.",
+    "visualStyle": "metal_wasteland",
     "waterLevel": 4,
-    "rockCount": 52,
+    "rockCount": 80,
     "treeCount": 4,
     "sheepCount": 0,
     "duckCount": 0,
-    "goldMineCount": 14,
+    "goldMineCount": 20,
     "houseCount": 0
   }
 }

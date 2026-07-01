@@ -274,7 +274,7 @@ const DEFAULT_FACTION_DEFINITIONS = {
     theme: 'medieval',
     color: '#c93a32',
     startingResources: { gold: 140, wood: 160, stone: 0, food: 0 },
-    startingUnits: { king: 1, worker: 5 },
+    startingUnits: { king: 0, worker: 5 },
     startingBuildings: { home: 1 },
     units: ['king', 'worker', 'soldier', 'archer', 'knight', 'scout', 'gunman', 'crossbowman', 'grenademan', 'balloon'],
     buildings: ['home', 'tower'],
@@ -640,7 +640,7 @@ const DEFAULT_GAME_MODES = {
       towersPerTeam: 0,
       homesPerTeam: 1,
       unitRoster: {
-        king: 1,
+        king: 0,
         worker: 5,
         soldier: 0,
         archer: 0,

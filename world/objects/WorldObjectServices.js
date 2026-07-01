@@ -66,25 +66,6 @@
     homeForTeam: team => app.world.buildingQueries?.teamHome(buildings.all(), team, app.world.buildingTypes?.HOME || 'home') || call('getTeamHome', team)
   });
 
-  const castleNavigation = Object.freeze({
-    enter: (unit, building, destination, append, laneIndex) => app.world.castleCommands?.commandEnter(unit, building, destination, {
-      homeType: app.world.buildingTypes?.HOME || 'home',
-      tileSize: root.tileSize || 32,
-      laneIndex,
-      append
-    }) || call('commandUnitIntoCastle', unit, building, destination, append, laneIndex),
-    exit: (unit, building, destination, append, laneIndex) => app.world.castleCommands?.commandExit(unit, building, destination, {
-      homeType: app.world.buildingTypes?.HOME || 'home',
-      tileSize: root.tileSize || 32,
-      laneIndex,
-      append
-    }) || call('commandUnitOutOfCastle', unit, building, destination, append, laneIndex),
-    rampart: (unit, building, index, total, append, targetWorldX, targetWorldY) =>
-      call('commandUnitToCastleTop', unit, building, index, total, append, targetWorldX, targetWorldY),
-    isCourtyardPoint: (building, x, y) => !!call('isCastleCourtyardPoint', building, x, y),
-    passageTile: (building, x, y) => !!call('isCastlePassageTile', building, x, y)
-  });
-
   const mapBuilder = Object.freeze({
     paintTile: (x, y, tool) => call('paintMapBuilderTile', x, y, tool),
     exportMap: name => call('exportCurrentMapData', name),
@@ -97,11 +78,10 @@
     obstacles,
     items,
     buildings,
-    castleNavigation,
     mapBuilder,
     describe: () => ({
       schemaVersion: 1,
-      services: ['houses', 'resources', 'obstacles', 'items', 'buildings', 'castleNavigation', 'mapBuilder'],
+      services: ['houses', 'resources', 'obstacles', 'items', 'buildings', 'mapBuilder'],
       counts: {
         houses: houses.all().length,
         goldMines: resources.goldMines().length,

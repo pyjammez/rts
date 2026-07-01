@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>open rts</title>
   <link rel="icon" href="favicon.ico" sizes="16x16" />
-  <link rel="stylesheet" href="ui/style.css?v=nopack1" />
+  <link rel="stylesheet" href="ui/style.css?v=southedge1" />
 </head>
 <body>
   <div id="titleScreen" class="title-screen">
@@ -15,6 +15,7 @@
 
   <div id="modePanel" class="config-panel mode-panel" style="display: none;">
     <h1>open rts</h1>
+    <div id="packageBrowser" class="package-browser" aria-label="Theme selection"></div>
     <div id="modeOptions" class="mode-options"></div>
   </div>
 
@@ -93,10 +94,15 @@
           <button id="mineStoneAction" class="command-action worker-action" type="button" aria-pressed="false">Mine Stone</button>
           <button id="chopWoodAction" class="command-action worker-action" type="button" aria-pressed="false">Chop Wood</button>
           <button id="gatherFoodAction" class="command-action worker-action" type="button" aria-pressed="false">Gather Food</button>
-          <button id="buildTowerAction" class="command-action worker-action" type="button" aria-pressed="false">Build Tower</button>
           <button id="burnHouseAction" class="command-action" type="button" aria-pressed="false">Burn House</button>
         </div>
         <div id="unitActionStatus" class="unit-action-status">Select a unit</div>
+      </section>
+      <section id="constructionPanel" class="construction-panel" aria-label="Building construction">
+        <div class="command-section-title">Build</div>
+        <div id="constructionActions" class="construction-actions">
+          <div class="command-empty-state">Select a builder</div>
+        </div>
       </section>
       <section class="command-map-panel" aria-label="Minimap">
         <canvas id="miniMapCanvas" width="240" height="136"></canvas>
@@ -120,10 +126,10 @@
   <script src="core/runtime/ReplayVerifier.js?v=worldclass1"></script>
   <script src="core/runtime/MatchSnapshot.js?v=matchsnapshot1"></script>
   <script src="core/runtime/HeadlessSimulationHarness.js?v=headless1"></script>
-  <script src="core/camera/CameraController.js?v=camera1"></script>
-  <script src="game/commands/CommandBus.js?v=commandlog1"></script>
-  <script src="game/commands/GameplayCommandHandlers.js?v=commandhandlers1"></script>
-  <script src="game/commands/UnitCommandIntents.js?v=attackmove1"></script>
+  <script src="core/camera/CameraController.js?v=southedge1"></script>
+  <script src="game/commands/CommandBus.js?v=solidbuildings1"></script>
+  <script src="game/commands/GameplayCommandHandlers.js?v=solidbuildings1"></script>
+  <script src="game/commands/UnitCommandIntents.js?v=solidbuildings1"></script>
   <script src="world/runtime/WorldRuntime.js?v=worldcollections1"></script>
   <script src="world/terrain/TerrainGenerator.js?v=runtime2"></script>
   <script src="core/rendering/RendererRegistry.js?v=runtime1"></script>
@@ -132,49 +138,52 @@
   <script src="world/rendering/canvas/CanvasTerrainPainter.js?v=split2"></script>
   <script src="world/rendering/three/GeometryCache.js?v=renderextract1"></script>
   <script src="world/rendering/three/ThreeCoordinateService.js?v=renderextract2"></script>
+  <script src="world/rendering/three/RenderOptimizationServices.js?v=cartoonperf1"></script>
+  <script src="world/rendering/three/StaticInstanceBatcher.js?v=renderperf1"></script>
   <script src="world/rendering/three/MeshPrimitiveFactory.js?v=renderextract2"></script>
   <script src="world/rendering/three/ThreeCameraSyncService.js?v=renderextract2"></script>
-  <script src="world/rendering/three/ThreeSceneBootstrap.js?v=renderextract1"></script>
-  <script src="world/rendering/three/StaticWorldSignatureService.js?v=renderextract3"></script>
+  <script src="world/rendering/three/ThreeSceneBootstrap.js?v=cartoonperf1"></script>
+  <script src="world/rendering/three/StaticWorldSignatureService.js?v=visualstyles1"></script>
   <script src="world/rendering/three/StaticWorldComposer.js?v=renderextract3"></script>
   <script src="world/rendering/three/TreeWindAnimator.js?v=renderextract3"></script>
   <script src="world/rendering/three/EntityElevationService.js?v=renderextract4"></script>
   <script src="world/rendering/three/ProjectileVisualFactory.js?v=renderextract4"></script>
-  <script src="world/rendering/three/DynamicWorldComposer.js?v=renderextract4"></script>
+  <script src="world/rendering/three/DynamicWorldComposer.js?v=solidbuildings1"></script>
   <script src="world/rendering/three/RendererFactoryRegistry.js?v=factories1"></script>
-  <script src="world/rendering/three/MaterialFactory.js?v=runtime3"></script>
+  <script src="world/rendering/three/MaterialFactory.js?v=unitshadows1"></script>
   <script src="world/rendering/three/ThreeRenderDomains.js?v=renderdomains1"></script>
   <script src="world/rendering/three/ModelFactoryResolver.js?v=factories2"></script>
-  <script src="world/rendering/three/ThreeTerrainMeshFactory.js?v=split3"></script>
-  <script src="world/rendering/three/ThreeBuildingModelFactory.js?v=split4"></script>
+  <script src="world/rendering/three/RenderAssetAuditService.js?v=renderaudit1"></script>
+  <script src="world/rendering/three/ThreeTerrainMeshFactory.js?v=arabia1"></script>
+  <script src="world/rendering/three/ThreeBuildingModelFactory.js?v=simplecastle1"></script>
   <script src="world/rendering/three/ThreeUnitAttachmentFactory.js?v=split1"></script>
-  <script src="world/rendering/three/ThreeUnitModelFactory.js?v=split2"></script>
-  <script src="world/rendering/three/OverlayPass.js?v=runtime4"></script>
+  <script src="world/rendering/three/ThreeUnitModelFactory.js?v=unitshadows1"></script>
+  <script src="world/rendering/three/OverlayPass.js?v=solidbuildings1"></script>
   <script src="game/systems/cookingSystem.js?v=infrastructure1"></script>
   <script src="game/systems/castleUpgradeSystem.js?v=infrastructure1"></script>
   <script src="game/systems/wildlifeSystem.js?v=runtime3"></script>
-  <script src="game/systems/buildingCombatSystem.js?v=runtime4"></script>
+  <script src="game/systems/buildingCombatSystem.js?v=solidbuildings1"></script>
   <script src="game/systems/projectileSystem.js?v=runtime5"></script>
   <script src="game/systems/resourceSystem.js?v=economy2"></script>
   <script src="game/systems/TechTreeSystem.js?v=core-rts1"></script>
   <script src="game/systems/ProductionQueueSystem.js?v=core-rts1"></script>
   <script src="game/systems/AbilityEffectSystem.js?v=core-rts1"></script>
-  <script src="game/systems/workerEconomySystem.js?v=workeranim1"></script>
+  <script src="game/systems/workerEconomySystem.js?v=uecommander1"></script>
   <script src="game/systems/visionSystem.js?v=vision1"></script>
   <script src="game/systems/FormationPlanner.js?v=worldclass1"></script>
   <script src="game/systems/towerDefenseSystem.js?v=td1"></script>
-  <script src="game/ai/data/aiProfiles.js?v=ai2"></script>
+  <script src="game/ai/data/aiProfiles.js?v=solidbuildings1"></script>
   <script src="game/ai/core/Blackboard.js?v=ai2"></script>
   <script src="game/ai/tactics/TargetSelector.js?v=ai2"></script>
-  <script src="game/ai/tactics/SquadController.js?v=ai2"></script>
+  <script src="game/ai/tactics/SquadController.js?v=solidbuildings1"></script>
   <script src="game/ai/strategies/BalancedStrategy.js?v=ai2"></script>
   <script src="game/ai/strategies/RushStrategy.js?v=ai2"></script>
-  <script src="game/ai/strategies/TurtleStrategy.js?v=ai2"></script>
+  <script src="game/ai/strategies/TurtleStrategy.js?v=solidbuildings1"></script>
   <script src="game/ai/planners/DefensePlanner.js?v=ai2"></script>
   <script src="game/ai/planners/AttackPlanner.js?v=ai2"></script>
-  <script src="game/ai/planners/ArmyPlanner.js?v=ai2"></script>
+  <script src="game/ai/planners/ArmyPlanner.js?v=solidbuildings1"></script>
   <script src="game/ai/planners/EconomyPlanner.js?v=ai2"></script>
-  <script src="game/ai/core/AIBrain.js?v=ai2"></script>
+  <script src="game/ai/core/AIBrain.js?v=solidbuildings1"></script>
   <script src="game/ai/core/AIPlayer.js?v=ai2"></script>
   <script src="game/ai/td/waveTemplates.js?v=ai2"></script>
   <script src="game/ai/td/DifficultyScaler.js?v=ai2"></script>
@@ -182,7 +191,7 @@
   <script src="game/ai/td/WaveDirector.js?v=ai2"></script>
   <script src="game/systems/skirmishAiSystem.js?v=ai2"></script>
   <script src="game/modes/GameModeRuntime.js?v=moderuntime1"></script>
-  <script src="game/rules/matchRules.js?v=td1"></script>
+  <script src="game/rules/matchRules.js?v=uecommander1"></script>
 
   <script>
     const canvas3d = document.getElementById('gameCanvas3d');
@@ -203,26 +212,28 @@
   <script src="game/config/AssetRegistry.js?v=assets1"></script>
   <script src="game/config/AssetMetadataService.js?v=worldclass1"></script>
   <script src="game/config/PackageManifestService.js?v=modpackages1"></script>
-  <script src="game/config/ContentPackLoader.js?v=contentpacks1"></script>
+  <script src="game/config/ContentSchemaService.js?v=contentschemas1"></script>
+  <script src="game/config/PackageReportService.js?v=packagereports1"></script>
+  <script src="game/config/ContentPackLoader.js?v=packagecompare1"></script>
   <script src="game/config/ScenarioRegistry.js?v=scenarios1"></script>
   <script src="game/config/ScenarioComposer.js?v=worldclass1"></script>
   <script src="game/config/ContentIndex.js?v=contentindex1"></script>
   <script src="game/config/definitionRegistry.js?v=contentindex1"></script>
-  <script src="ui/config.js?v=nopack1"></script>
+  <script src="ui/config.js?v=presetfix1"></script>
   <script src="ui/screens/TitleScreen.js?v=three1"></script>
-  <script src="ui/screens/ModeSelectScreen.js?v=three1"></script>
+  <script src="ui/screens/ModeSelectScreen.js?v=themeheading1"></script>
   <script src="ui/screens/GameSetupScreen.js?v=playersplit1"></script>
-  <script src="ui/screens/ReadyRoomScreen.js?v=volcanic1"></script>
+  <script src="ui/screens/ReadyRoomScreen.js?v=factions1"></script>
   <script src="ui/screens/GameOverScreen.js?v=three1"></script>
   <script src="ui/screens/bootstrap.js?v=three1"></script>
-  <script src="ui/CommandTargetingController.js?v=targeting1"></script>
+  <script src="ui/CommandTargetingController.js?v=uecommander1"></script>
   <script src="ecs/entityManager.js?v=three1"></script>
   <script src="ecs/ComponentSchemaRegistry.js?v=worldclass1"></script>
   <script src="ecs/unitComponents.js?v=three1"></script>
   <script src="ecs/EntityQueries.js?v=entityqueries1"></script>
   <script src="entities/UnitCommandTypes.js?v=split1"></script>
-  <script src="entities/UnitStateFactory.js?v=split1"></script>
-  <script src="entities/UnitCommandStateService.js?v=split2"></script>
+  <script src="entities/UnitStateFactory.js?v=solidbuildings1"></script>
+  <script src="entities/UnitCommandStateService.js?v=solidbuildings1"></script>
   <script src="entities/unit.js?v=autoaggro1"></script>
   <script src="systems/processors/unitMovementProcessor.js?v=itemtarget1"></script>
   <script src="systems/processors/unitCombatProcessor.js?v=autoaggro1"></script>
@@ -240,9 +251,9 @@
   <script src="world/objects/CarryableObjectService.js?v=interactionservices1"></script>
   <script src="world/objects/MapBuilderBrushService.js?v=interactionservices1"></script>
   <script src="world/objects/MapBuilderRuntimeService.js?v=worldruntimeobjects1"></script>
-  <script src="world/objects/CastleGeometryService.js?v=objectservices1"></script>
-  <script src="world/objects/CastleCommandService.js?v=worldruntimeobjects1"></script>
-  <script src="world/objects/BuildingService.js?v=buildingservices1"></script>
+  <script src="world/objects/CastleGeometryService.js?v=solidbuildings1"></script>
+  <script src="world/objects/CastleCommandService.js?v=solidbuildings1"></script>
+  <script src="world/objects/BuildingService.js?v=eokcastle1"></script>
   <script src="world/objects/BuildingPlacementService.js?v=buildingservices1"></script>
   <script src="world/objects/BuildingQueryService.js?v=buildingservices1"></script>
   <script src="world/objects/HouseService.js?v=objectfactories1"></script>
@@ -251,14 +262,14 @@
   <script src="world/objects/ItemService.js?v=objectfactories1"></script>
   <script src="world/objects/ObstacleService.js?v=objectfactories1"></script>
   <script src="world/objects/ObjectFactoryRegistry.js?v=objectservices1"></script>
-  <script src="world/map.js?v=worldcollections1"></script>
-  <script src="world/objects/WorldObjectServices.js?v=objects1"></script>
-  <script src="world/gameState.js?v=abilities1"></script>
-  <script src="ui/hud.js?v=abilities1"></script>
-  <script src="world/renderer3d.js?v=pine1"></script>
+  <script src="world/map.js?v=eokcastle1"></script>
+  <script src="world/objects/WorldObjectServices.js?v=solidbuildings1"></script>
+  <script src="world/gameState.js?v=uespawnfix1"></script>
+  <script src="ui/hud.js?v=uecommander1"></script>
+  <script src="world/renderer3d.js?v=eokcastle1"></script>
   <script src="core/gameLoop.js?v=three1"></script>
-  <script src="systems/input.js?v=attackmove1"></script>
-  <script src="core/main.js?v=commandcontract1"></script>
+  <script src="systems/input.js?v=solidbuildings1"></script>
+  <script src="core/main.js?v=uecamerafix1"></script>
   <script src="game/systems/mapBuilderSystem.js?v=builderterrain1"></script>
 </body>
 </html>

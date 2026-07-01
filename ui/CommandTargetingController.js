@@ -31,10 +31,25 @@
       this.callbacks.updateActions?.();
     }
 
+    isWorkerUnit(unit) {
+      const tags = Array.isArray(unit?.tags) ? unit.tags : [];
+      return !!app.systems.workerEconomy?.isWorker?.(unit) ||
+        unit?.unitType === 'worker' ||
+        tags.includes('builder');
+    }
+
+    isBuildMode(mode) {
+      return mode === 'build-tower' || String(mode || '').startsWith('build:');
+    }
+
+    getBuildType(mode) {
+      return mode === 'build-tower' ? 'tower' : String(mode || '').slice('build:'.length);
+    }
+
     isEligible(mode) {
       const selectedUnits = this.selectedUnits();
-      const workerMode = ['mine-gold', 'mine-stone', 'chop-wood', 'gather-food', 'build-tower'].includes(mode);
-      if (workerMode) return selectedUnits.some(unit => unit.unitType === 'worker');
+      const workerMode = ['mine-gold', 'mine-stone', 'chop-wood', 'gather-food'].includes(mode) || this.isBuildMode(mode);
+      if (workerMode) return selectedUnits.some(unit => this.isWorkerUnit(unit));
       if (mode === 'burn-house') return selectedUnits.length > 0;
       if (mode === 'pickup') return selectedUnits.some(unit => !unit.inventoryItem);
       if (mode === 'drop') return selectedUnits.some(unit => !!unit.inventoryItem);
@@ -156,23 +171,25 @@
         return this.orderWorkerGather(animal, sheep ? 'sheep' : 'duck', 'food', 'Click a living sheep or duck with a worker selected', 'moving to gather food', marker);
       }
 
-      if (mode === 'build-tower') {
-        const worker = selectedUnits.find(unit => unit.unitType === 'worker');
+      if (this.isBuildMode(mode)) {
+        const buildingType = this.getBuildType(mode);
+        const worker = selectedUnits.find(unit => this.isWorkerUnit(unit));
         if (!worker) {
           this.setMessage('Select a worker to build');
           return true;
         }
-        const cost = app.systems.workerEconomy?.BUILD_COSTS?.tower || { gold: 40, wood: 80 };
+        const definition = root.getBuildingDefinition?.(buildingType) || {};
+        const cost = app.systems.workerEconomy?.getBuildCost?.(buildingType) || app.systems.workerEconomy?.BUILD_COSTS?.[buildingType] || {};
         if (app.systems.resources && !app.systems.resources.canAfford(worker.team, cost)) {
-          this.setMessage(`Need ${cost.wood} wood and ${cost.gold} gold`);
+          this.setMessage(`Need ${this.formatCost(cost)}`);
           return true;
         }
         app.commands.enqueue({
           type: app.commands.types.WORKER_BUILD,
-          payload: { unitId: worker.id, buildingType: 'tower', x: worldX, y: worldY }
+          payload: { unitId: worker.id, buildingType, x: worldX, y: worldY }
         });
         if (marker) marker(worldX, worldY, 'gold');
-        this.complete('Watch tower construction ordered');
+        this.complete(`${definition.name || 'Building'} construction ordered`);
         return true;
       }
 
@@ -217,7 +234,7 @@
     }
 
     orderWorkerGather(target, targetKind, resourceType, missingMessage, successAction, marker) {
-      const worker = this.selectedUnits().find(unit => unit.unitType === 'worker');
+      const worker = this.selectedUnits().find(unit => this.isWorkerUnit(unit));
       if (!worker || !target) {
         this.setMessage(missingMessage);
         return true;
@@ -229,6 +246,13 @@
       if (marker) marker(target.x, target.y, resourceType === 'gold' ? 'gold' : 'green');
       this.complete(`${worker.displayName || 'Worker'} ${successAction}`);
       return true;
+    }
+
+    formatCost(cost = {}) {
+      const entries = Object.entries(cost)
+        .filter(([, value]) => Number(value) > 0)
+        .map(([resource, value]) => `${value} ${resource}`);
+      return entries.length ? entries.join(', ') : 'no resources';
     }
 
     dropAt(worldX, worldY, marker) {

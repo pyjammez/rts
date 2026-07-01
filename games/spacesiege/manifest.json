@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "spacesiege",
-  "name": "SpaceSiege",
+  "name": "StarSiege",
   "description": "Original sci-fi RTS sample package showing how a StarCraft-like ruleset can be expressed as static data without copying names or lore.",
   "version": "0.1.0",
   "engineVersion": "0.2.0",

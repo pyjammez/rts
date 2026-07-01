@@ -40,7 +40,7 @@ test('building combat targets the nearest enemy and respects cooldowns', () => {
   assert.equal(tower.fireCooldown, 1.0999999999999999);
 });
 
-test('a castle fires only with a rampart defender and inherits the stronger weapon', () => {
+test('a castle fires as a solid defensive building without requiring a rampart defender', () => {
   const context = loadOpenRTSScript('../../game/systems/buildingCombatSystem.js');
   const castle = {
     id: 10,
@@ -55,27 +55,14 @@ test('a castle fires only with a rampart defender and inherits the stronger weap
     isDead: false
   };
   const enemy = { id: 11, team: 'blue', x: 100, y: 0, isDead: false };
-  const defender = {
-    id: 12,
-    damage: 18,
-    shootRange: 220,
-    projectileSpeed: 310,
-    projectileColor: '#abc'
-  };
   const projectiles = [];
   const system = context.OpenRTS.systems.buildingCombat;
 
   system.update(0.1, { buildings: [castle], units: [enemy] }, {
-    getRampartDefender: () => null,
-    spawnProjectile: projectile => projectiles.push(projectile)
-  });
-  system.update(0.1, { buildings: [castle], units: [enemy] }, {
-    getRampartDefender: () => defender,
     spawnProjectile: projectile => projectiles.push(projectile)
   });
 
   assert.equal(projectiles.length, 1);
-  assert.equal(projectiles[0].damage, 18);
-  assert.equal(projectiles[0].speed, 310);
-  assert.equal(castle.rampartUnitId, defender.id);
+  assert.equal(projectiles[0].damage, 5);
+  assert.equal(projectiles[0].speed, undefined);
 });

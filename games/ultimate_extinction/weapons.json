@@ -1,4 +1,17 @@
 {
+  "ue_commander_cannon": {
+    "name": "Commander Annihilator",
+    "damage": 125,
+    "movingDamage": 72,
+    "range": 340,
+    "stopRange": 375,
+    "fireRate": 0.62,
+    "projectileSpeed": 460,
+    "projectileColor": "#ff8844",
+    "projectileType": "shell",
+    "splashRadius": 42,
+    "damageType": "plasma"
+  },
   "ue_laser": {
     "name": "Pulse Laser",
     "damage": 14,
@@ -35,5 +48,30 @@
     "projectileColor": "#f5f5f5",
     "projectileType": "rocket",
     "damageType": "missile"
+  },
+  "ue_arc_laser": {
+    "name": "Arc Laser",
+    "damage": 18,
+    "movingDamage": 12,
+    "range": 205,
+    "stopRange": 240,
+    "fireRate": 1.05,
+    "projectileSpeed": 560,
+    "projectileColor": "#66ddff",
+    "projectileType": "laser",
+    "damageType": "laser"
+  },
+  "ue_plasma_railgun": {
+    "name": "Plasma Railgun",
+    "damage": 48,
+    "movingDamage": 24,
+    "range": 270,
+    "stopRange": 315,
+    "fireRate": 0.42,
+    "projectileSpeed": 430,
+    "projectileColor": "#9ffcff",
+    "projectileType": "shell",
+    "splashRadius": 28,
+    "damageType": "plasma"
   }
 }

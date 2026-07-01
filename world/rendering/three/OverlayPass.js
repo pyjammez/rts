@@ -59,8 +59,7 @@
     markers,
     projectWorld,
     towerType = 'tower',
-    treeType = 1,
-    rampartHeight = 1.25
+    treeType = 1
   }) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (const building of Array.isArray(buildings) ? buildings : []) {
@@ -70,8 +69,7 @@
     }
     for (const unit of Array.isArray(units) ? units : []) {
       if (unit.isDead || !unit.selected) continue;
-      const elevation = unit.castleTopReached ? rampartHeight : 0;
-      const point = projectWorld(unit.x, unit.y, 1.2 + elevation);
+      const point = projectWorld(unit.x, unit.y, 1.2);
       if (point) drawBar(ctx, point.x, point.y, Math.ceil(unit.hp), unit.maxHp, 44, false);
     }
     if (selectedObject) {

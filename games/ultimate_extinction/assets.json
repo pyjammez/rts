@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "models": {
+    "unit.king": { "kind": "procedural", "renderer": "three", "factory": "king" },
+    "unit.worker": { "kind": "procedural", "renderer": "three", "factory": "worker" },
+    "unit.soldier": { "kind": "procedural", "renderer": "three", "factory": "soldier" },
+    "unit.archer": { "kind": "procedural", "renderer": "three", "factory": "archer" },
+    "unit.knight": { "kind": "procedural", "renderer": "three", "factory": "knight" },
+    "unit.scout": { "kind": "procedural", "renderer": "three", "factory": "scout" },
+    "unit.gunman": { "kind": "procedural", "renderer": "three", "factory": "gunman" },
+    "unit.crossbowman": { "kind": "procedural", "renderer": "three", "factory": "crossbowman" },
+    "unit.grenademan": { "kind": "procedural", "renderer": "three", "factory": "grenademan" },
+    "unit.balloon": { "kind": "procedural", "renderer": "three", "factory": "balloon" },
+    "unit.robot_walker": {
+      "kind": "procedural",
+      "renderer": "three",
+      "factory": "robot_walker"
+    },
+    "unit.hover_tank": {
+      "kind": "procedural",
+      "renderer": "three",
+      "factory": "hover_tank"
+    },
+    "building.castle": { "kind": "procedural", "renderer": "three", "factory": "castle" },
+    "building.arrow_tower": { "kind": "procedural", "renderer": "three", "factory": "arrow_tower" },
+    "wildlife.sheep": { "kind": "procedural", "renderer": "three", "factory": "sheep" },
+    "wildlife.duck": { "kind": "procedural", "renderer": "three", "factory": "duck" },
+    "wildlife.horse": { "kind": "procedural", "renderer": "three", "factory": "horse" }
+  },
+  "textures": {},
+  "sounds": {}
+}

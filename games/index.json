@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "name": "Open RTS Sample Game Packages",
+  "description": "Static package catalog for S3-hosted sample RTS variants.",
+  "packages": [
+    {
+      "id": "spacesiege",
+      "name": "StarSiege",
+      "manifest": "spacesiege/manifest.json",
+      "featured": true,
+      "category": "sci_fi",
+      "style": "crystal-vapor fast sci-fi air skirmish",
+      "tags": ["sci-fi", "asymmetric", "air-units"]
+    },
+    {
+      "id": "battleforge",
+      "name": "WarSiege",
+      "manifest": "battleforge/manifest.json",
+      "featured": true,
+      "category": "fantasy",
+      "style": "gold-lumber hero forest magic",
+      "tags": ["fantasy", "forest", "heroes"]
+    },
+    {
+      "id": "modern_warlord",
+      "manifest": "modern_warlord/manifest.json",
+      "featured": true,
+      "category": "modern",
+      "style": "supplies-power heavy base warfare",
+      "tags": ["modern", "vehicles", "aircraft"]
+    },
+    {
+      "id": "ultimate_extinction",
+      "name": "Ultimate Destruction",
+      "manifest": "ultimate_extinction/manifest.json",
+      "featured": true,
+      "category": "robot_war",
+      "style": "metal-energy huge robot macro war",
+      "tags": ["robots", "metal", "energy"]
+    },
+    {
+      "id": "era_of_kingdoms",
+      "manifest": "era_of_kingdoms/manifest.json",
+      "featured": true,
+      "category": "historical",
+      "style": "food-wood-gold-stone village boom",
+      "tags": ["historical", "economy", "kingdoms"]
+    },
+    {
+      "id": "desert_command",
+      "manifest": "desert_command/manifest.json",
+      "featured": false,
+      "category": "modern",
+      "style": "low-income desert raids and ambushes",
+      "tags": ["modern", "desert", "sample"]
+    }
+  ]
+}

@@ -69,9 +69,7 @@
     const {
       findNearestWalkablePoint = root.findNearestWalkablePoint,
       getMapWidthPx = root.getMapWidthPx,
-      getMapHeightPx = root.getMapHeightPx,
-      getCastleContainingPoint = root.getCastleContainingPoint,
-      isPointInsideCastle = root.isPointInsideCastle
+      getMapHeightPx = root.getMapHeightPx
     } = deps;
 
     if (
@@ -107,25 +105,6 @@
           x: destination.x,
           y: destination.y,
           append: !!append
-        }, options);
-        return;
-      }
-
-      const occupiedCastle = typeof getCastleContainingPoint === 'function'
-        ? getCastleContainingPoint(unit.x, unit.y)
-        : null;
-      if (
-        occupiedCastle &&
-        typeof isPointInsideCastle === 'function' &&
-        !isPointInsideCastle(occupiedCastle, destination.x, destination.y)
-      ) {
-        enqueue(app.commands.types.CASTLE_EXIT, {
-          unitId: unit.id,
-          buildingId: occupiedCastle.id,
-          x: destination.x,
-          y: destination.y,
-          append: !!append,
-          laneIndex: index
         }, options);
         return;
       }

@@ -45,6 +45,27 @@ test('a team loses when its original king dies', () => {
   assert.match(result.reason, /king has fallen/i);
 });
 
+test('a team loses when its defeat-critical commander dies', () => {
+  const context = loadOpenRTSScript('../../game/rules/matchRules.js');
+  const result = context.OpenRTS.rules.match.evaluate({
+    active: true,
+    finished: false,
+    teams: ['red', 'blue'],
+    initialHomesByTeam: { red: 0, blue: 0 },
+    initialKingsByTeam: { red: 1, blue: 1 },
+    initialDefeatCriticalLabelsByTeam: { red: 'Armored Commander', blue: 'Armored Commander' },
+    buildings: [],
+    aliveUnits: [
+      { team: 'red', unitType: 'ue_raider', isDead: false },
+      { team: 'blue', unitType: 'ue_commander', defeatCritical: true, isDead: false }
+    ]
+  });
+
+  assert.equal(result.loser, 'red');
+  assert.equal(result.winner, 'blue');
+  assert.match(result.reason, /armored commander has fallen/i);
+});
+
 test('a king can upgrade only a friendly castle three times', () => {
   const context = loadOpenRTSScript('../../game/systems/castleUpgradeSystem.js');
   const upgrades = context.OpenRTS.systems.castleUpgrades;

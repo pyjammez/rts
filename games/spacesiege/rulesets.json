@@ -1,6 +1,6 @@
 {
   "spacesiege_rules": {
-    "name": "SpaceSiege Rules",
+    "name": "StarSiege Rules",
     "summary": "Fast sci-fi economy with mineral crystals, vapor gas, supply capacity, shields, air units, and energy-based powers.",
     "resources": {
       "minerals": { "name": "Minerals", "storage": "stockpile", "defaultStartingAmount": 50, "gatherable": true },

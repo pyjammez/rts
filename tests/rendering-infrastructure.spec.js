@@ -207,11 +207,14 @@ test('three scene bootstrap creates renderer scene groups and ray helpers', () =
       Vector3: FakeVector3,
       SRGBColorSpace: 'srgb',
       ACESFilmicToneMapping: 'aces',
+      BasicShadowMap: 'basic',
       PCFShadowMap: 'pcf'
     }
   });
 
-  assert.equal(runtime.renderer.pixelRatio, 1.5);
+  assert.equal(runtime.renderer.options.antialias, true);
+  assert.equal(runtime.renderer.pixelRatio, 1);
+  assert.equal(runtime.renderer.shadowMap.type, 'basic');
   assert.deepEqual(runtime.renderer.size, { width: 640, height: 360 });
   assert.equal(runtime.staticGroup.name, 'static-world');
   assert.equal(runtime.dynamicGroup.name, 'dynamic-entities');
@@ -307,6 +310,7 @@ test('three terrain mesh factory owns terrain sampling color and geometry output
     constructor(geometry, material) {
       this.geometry = geometry;
       this.material = material;
+      this.userData = {};
     }
   }
   const factory = context.OpenRTS.rendering.threeTerrainMeshes.createFactory({
@@ -334,6 +338,201 @@ test('three terrain mesh factory owns terrain sampling color and geometry output
   assert.equal(Number.isFinite(sample.waterBlend), true);
   assert.equal(Number.isFinite(factory.terrainHeight(1, 1, sample)), true);
   assert.ok(factory.terrainColor(1, 1, sample) instanceof Color);
+  assert.equal(Number.isFinite(factory.grassDetail(1, 1).lush), true);
+
+  const alienFactory = context.OpenRTS.rendering.threeTerrainMeshes.createFactory({
+    THREE: { Color, BufferGeometry, Float32BufferAttribute, Mesh },
+    materials: { ground: 'ground-material' },
+    tileSize: 32,
+    getRows: () => 2,
+    getColumns: () => 3,
+    getMapConfig: () => ({ visualStyle: 'alien_crystal', terrain: { water: 0.2, sand: 0.3 } }),
+    hashNoise: () => 0.5,
+    smoothValueNoise: () => 0.5,
+    fbmNoise: (x, y) => (x + y) / 8,
+    getWorldElevation: () => 0
+  });
+  assert.notDeepEqual(
+    JSON.parse(JSON.stringify(alienFactory.terrainColor(1, 1, alienFactory.sampleTerrain(1, 1)))),
+    JSON.parse(JSON.stringify(factory.terrainColor(1, 1, sample)))
+  );
+
+  const chunked = factory.createTerrainMeshes({ subdivisions: 1, chunkTiles: 2 });
+  assert.equal(chunked.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(chunked.map(mesh => mesh.userData.staticChunkId))), ['0:0', '1:0']);
+  assert.equal(chunked[0].userData.terrainChunk, true);
+});
+
+test('three material factory gives terrain a generated grass detail texture', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/MaterialFactory.js');
+  const calls = [];
+  const ctx = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    fillRect: (...args) => calls.push(['fillRect', ...args]),
+    strokeRect: (...args) => calls.push(['strokeRect', ...args]),
+    beginPath: () => calls.push(['beginPath']),
+    moveTo: (...args) => calls.push(['moveTo', ...args]),
+    lineTo: (...args) => calls.push(['lineTo', ...args]),
+    stroke: () => calls.push(['stroke']),
+    arc: (...args) => calls.push(['arc', ...args]),
+    fill: () => calls.push(['fill']),
+    clearRect: (...args) => calls.push(['clearRect', ...args]),
+    createRadialGradient: () => ({ addColorStop: () => {} })
+  };
+  const documentRef = {
+    createElement: () => ({
+      width: 0,
+      height: 0,
+      getContext: () => ctx
+    })
+  };
+  class CanvasTexture {
+    constructor(canvas) {
+      this.canvas = canvas;
+      this.wrapS = null;
+      this.wrapT = null;
+      this.repeat = { set: (x, y) => { this.repeatValue = { x, y }; } };
+    }
+  }
+  class Material {
+    constructor(options = {}) {
+      Object.assign(this, options);
+      this.color = { setHex: value => { this.hex = value; } };
+    }
+    clone() {
+      return new Material({ ...this });
+    }
+  }
+  const THREE = {
+    CanvasTexture,
+    MeshStandardMaterial: Material,
+    MeshPhysicalMaterial: Material,
+    MeshBasicMaterial: Material,
+    TextureLoader: class { load() { return { colorSpace: null, anisotropy: 0 }; } },
+    RepeatWrapping: 'repeat',
+    SRGBColorSpace: 'srgb',
+    DoubleSide: 'double'
+  };
+
+  const materials = context.OpenRTS.rendering.threeMaterials.create({
+    THREE,
+    renderer: { capabilities: { getMaxAnisotropy: () => 4 } },
+    documentRef,
+    noise: (x, y) => ((Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1 + 1) % 1
+  });
+
+  assert.ok(materials.groundDetail instanceof CanvasTexture);
+  assert.equal(materials.ground.map, materials.groundDetail);
+  assert.equal(materials.ground.bumpMap, materials.groundDetail);
+  assert.ok(materials.foliage.map instanceof CanvasTexture);
+  assert.ok(materials.foliageDark.map instanceof CanvasTexture);
+  assert.ok(materials.foliageWarm.map instanceof CanvasTexture);
+  assert.equal(materials.foliage.alphaTest, 0.18);
+  assert.deepEqual(materials.groundDetail.repeatValue, { x: 18, y: 18 });
+  assert.ok(calls.some(([name]) => name === 'lineTo'));
+});
+
+test('three material grass detail clamps noisy inputs before creating gradients', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/MaterialFactory.js');
+  const gradients = [];
+  const ctx = {
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    fillRect: () => {},
+    beginPath: () => {},
+    moveTo: () => {},
+    lineTo: () => {},
+    stroke: () => {},
+    arc: () => {},
+    fill: () => {},
+    createRadialGradient: (_x0, _y0, _r0, _x1, _y1, r1) => {
+      if (r1 < 0) throw new Error('negative radius');
+      gradients.push(r1);
+      return { addColorStop: () => {} };
+    }
+  };
+  class CanvasTexture {
+    constructor() {
+      this.repeat = { set: () => {} };
+    }
+  }
+
+  context.OpenRTS.rendering.threeMaterials.createGrassDetailTexture({
+    THREE: { CanvasTexture, RepeatWrapping: 'repeat', SRGBColorSpace: 'srgb' },
+    documentRef: {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: () => ctx
+      })
+    },
+    renderer: { capabilities: { getMaxAnisotropy: () => 1 } },
+    noise: () => -0.75
+  });
+
+  assert.equal(gradients.every(radius => radius >= 4), true);
+});
+
+test('static instance batcher creates instanced meshes with stable matrices', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/StaticInstanceBatcher.js');
+  class InstancedMesh {
+    constructor(geometry, material, count) {
+      this.geometry = geometry;
+      this.material = material;
+      this.count = count;
+      this.matrices = [];
+      this.instanceMatrix = {};
+      this.userData = {};
+    }
+    setMatrixAt(index, matrix) {
+      this.matrices[index] = matrix;
+    }
+  }
+  class Object3D {
+    constructor() {
+      this.position = { set: (x, y, z) => { this.positionValue = { x, y, z }; } };
+      this.rotation = { set: (x, y, z) => { this.rotationValue = { x, y, z }; } };
+      this.scale = { set: (x, y, z) => { this.scaleValue = { x, y, z }; } };
+      this.matrix = {};
+    }
+    updateMatrix() {
+      this.matrix = {
+        position: this.positionValue,
+        rotation: this.rotationValue,
+        scale: this.scaleValue
+      };
+    }
+  }
+
+  const batch = context.OpenRTS.rendering.staticInstanceBatcher.createInstancedMeshBatch({
+    THREE: { InstancedMesh, Object3D },
+    geometry: 'geo',
+    material: 'mat',
+    instances: [
+      { x: 1, y: 2, z: 3, rotationY: 0.5, scaleX: 2, scaleY: 3, scaleZ: 4 },
+      { x: 4, y: 5, z: 6 }
+    ],
+    name: 'rocks',
+    userData: { staticBatch: 'rocks' }
+  });
+
+  assert.equal(batch.count, 2);
+  assert.equal(batch.name, 'rocks');
+  assert.equal(batch.instanceMatrix.needsUpdate, true);
+  assert.deepEqual(batch.matrices[0], {
+    position: { x: 1, y: 2, z: 3 },
+    rotation: { x: 0, y: 0.5, z: 0 },
+    scale: { x: 2, y: 3, z: 4 }
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(context.OpenRTS.rendering.staticInstanceBatcher.describeBatch(batch))), {
+    schemaVersion: 1,
+    name: 'rocks',
+    count: 2,
+    userData: { staticBatch: 'rocks', instanceCount: 2 }
+  });
 });
 
 test('three building model factory owns castle and tower fallback models', () => {
@@ -362,6 +561,10 @@ test('three building model factory owns castle and tower fallback models', () =>
     stone: 'stone',
     stoneDark: 'stone-dark',
     stoneLight: 'stone-light',
+    plaster: 'plaster',
+    roofTerracotta: 'roof-terracotta',
+    roofSlate: 'roof-slate',
+    roofThatch: 'roof-thatch',
     wood: 'wood'
   };
   const addPrimitive = (parent, item) => {
@@ -387,16 +590,28 @@ test('three building model factory owns castle and tower fallback models', () =>
     materials,
     worldToScene: (x, y) => ({ x: x / 32, z: y / 32 }),
     getTeamMaterial: team => `team:${team}`,
-    rampartHeight: 1.25
+    wallHeight: 1.25
   });
 
   const castle = factory.createCastle({ x: 64, y: 96, width: 8, height: 8, team: 'red' });
+  const townCenter = factory.createEraKingdomsTownCenter({
+    x: 96,
+    y: 128,
+    width: 8,
+    height: 8,
+    team: 'gold',
+    factionId: 'eok_highland_realm'
+  });
   const tower = factory.createDefenseTower({ x: 32, y: 64, team: 'blue' });
 
   assert.deepEqual(castle.positionValue, { x: 2, y: 0, z: 3 });
+  assert.deepEqual(townCenter.positionValue, { x: 3, y: 0, z: 4 });
   assert.deepEqual(tower.positionValue, { x: 1, y: 0, z: 2 });
   assert.ok(castle.children.length > tower.children.length);
+  assert.ok(townCenter.children.length > tower.children.length);
   assert.ok(calls.some(call => call.material === 'team:red'));
+  assert.ok(calls.some(call => call.material === 'team:gold'));
+  assert.ok(calls.some(call => call.material === 'roof-slate'));
   assert.ok(calls.some(call => call.material === 'team:blue'));
   assert.ok([...castle.children, ...tower.children].some(child => child.material === 'slit'));
   assert.ok(calls.some(call => call.kind === 'cylinder' && call.segments === 20));
@@ -537,8 +752,10 @@ test('three unit model factory owns procedural unit body construction', () => {
       this.geometry = geometry;
       this.material = material;
       this.position = { set: (x, y, z) => { this.positionValue = { x, y, z }; } };
+      this.scale = { set: (x, y, z) => { this.scaleValue = { x, y, z }; } };
       this.rotation = {};
       this.castShadow = false;
+      this.userData = {};
     }
   }
   const calls = [];
@@ -557,12 +774,14 @@ test('three unit model factory owns procedural unit body construction', () => {
     sheepFace: 'sheep-face',
     skin: 'skin',
     steel: 'steel',
+    unitShadow: 'unit-shadow',
     wood: 'wood'
   };
   const factory = context.OpenRTS.rendering.threeUnitModels.createFactory({
     THREE: {
       Group,
       Mesh,
+      CircleGeometry: class { constructor(radius, segments) { this.radius = radius; this.segments = segments; } },
       ConeGeometry: class { constructor(radius, height, sides) { this.radius = radius; this.height = height; this.sides = sides; } }
     },
     geometry: (key, factoryFn) => ({ key, value: factoryFn() }),
@@ -588,9 +807,8 @@ test('three unit model factory owns procedural unit body construction', () => {
     getTeamMaterial: team => `team:${team}`,
     addSelectionRing(parent, radius) { parentAdd(parent, { kind: 'selection-ring', radius }); },
     entityElevation: {
-      unitElevation: ({ terrainElevation, castleElevation }) => terrainElevation + castleElevation
+      unitElevation: ({ terrainElevation }) => terrainElevation
     },
-    rampartHeight: 1.4,
     clamp: (value, min, max) => Math.max(min, Math.min(max, value)),
     smoothStep: (_min, _max, value) => value
   });
@@ -606,10 +824,10 @@ test('three unit model factory owns procedural unit body construction', () => {
   });
 
   assert.deepEqual(model.positionValue, { x: 2, y: 0.5, z: 3 });
+  assert.ok(model.children.some(child => child.material === 'unit-shadow' && child.userData?.contactShadow));
   assert.ok(calls.some(call => call.kind === 'selection-ring'));
   assert.ok(calls.some(call => call.kind === 'longbow'));
   assert.ok(calls.some(call => call.material === 'team:red'));
-  assert.equal(factory.getCastleElevation({}), 0);
 });
 
 test('three camera sync owns renderer resize and camera placement', () => {
@@ -680,11 +898,25 @@ test('static world signatures centralize renderer rebuild invalidation', () => {
 
   assert.equal(base, same);
   assert.notEqual(base, changed);
+  assert.notEqual(
+    base,
+    signatures.createSignature({
+      seed: 'abc',
+      columns: 40,
+      rows: 32,
+      buildings: [{ id: 'castle-red', isDead: false, upgradeLevel: 1 }],
+      obstacleRevision: 2,
+      goldMineRevision: 3,
+      houseRevision: 4,
+      mapConfig: { terrainPreset: 'green', visualStyle: 'alien_crystal', waterPercent: 20, rockCount: 8, treeCount: 12 }
+    })
+  );
   assert.deepEqual(
     JSON.parse(JSON.stringify(signatures.summarizeMapConfig({ mapStyle: 'mustafar', terrain: { lava: true } }))),
     {
       terrainPreset: '',
       mapStyle: 'mustafar',
+      visualStyle: '',
       terrain: { lava: true }
     }
   );
@@ -705,6 +937,7 @@ test('static world composer owns static scene assembly and lifecycle filters', (
     group,
     onReset: () => { reset = true; },
     createTerrainMeshes: () => [item('terrain-a'), item('terrain-b')],
+    createObstacleBatches: () => ({ items: [item('rock-batch')], handledObstacleTypes: [2] }),
     obstacleData: [[1, 2], [0, 0]],
     decorationData: [[0, 0], [0, 9]],
     obstacle: { TREE: 1, ROCK: 2 },
@@ -733,8 +966,8 @@ test('static world composer owns static scene assembly and lifecycle filters', (
   assert.deepEqual(group.children.map(child => child.id), [
     'terrain-a',
     'terrain-b',
+    'rock-batch',
     'tree:0:0',
-    'rock:1:0',
     'decor:1:1',
     'castle:castle',
     'tower:tower',
@@ -764,20 +997,18 @@ test('tree wind animator keeps ambient tree movement out of renderer state', () 
   assert.notEqual(crown.rotation.z, 2);
 });
 
-test('entity elevation service combines terrain castle and flight height', () => {
+test('entity elevation service combines terrain and flight height', () => {
   const context = loadOpenRTSScript('../../world/rendering/three/EntityElevationService.js');
   const elevation = context.OpenRTS.rendering.entityElevation;
 
   assert.equal(elevation.unitElevation({
     unit: { movementType: 'ground' },
-    terrainElevation: 0.4,
-    castleElevation: 1.2
-  }), 1.6);
+    terrainElevation: 0.4
+  }), 0.4);
   assert.equal(elevation.unitElevation({
     unit: { movementType: 'air', flightHeight: 3.5 },
-    terrainElevation: 0.4,
-    castleElevation: 1.2
-  }), 5.1);
+    terrainElevation: 0.4
+  }), 3.9);
 });
 
 test('projectile visual factory creates projectile and impact renderables', () => {
@@ -893,9 +1124,9 @@ test('dynamic world composer owns dynamic scene filters and assembly counts', ()
     'duck:d1',
     'horse:h1',
     'item:i1',
-    'selected:tree',
     'projectile:p1',
-    'effect:e1'
+    'effect:e1',
+    'selected:tree'
   ]);
   assert.deepEqual(JSON.parse(JSON.stringify(counts)), {
     units: 1,
@@ -908,6 +1139,283 @@ test('dynamic world composer owns dynamic scene filters and assembly counts', ()
     projectiles: 1,
     impactEffects: 1
   });
+});
+
+test('dynamic world composer reuses pooled entity visuals between frames', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/DynamicWorldComposer.js');
+  const group = {
+    children: [],
+    add(item) { this.children.push(item); },
+    remove(item) {
+      const index = this.children.indexOf(item);
+      if (index >= 0) this.children.splice(index, 1);
+    },
+    clear() { this.children = []; }
+  };
+  const pool = context.OpenRTS.rendering.dynamicWorldComposer.createDynamicPool();
+  let created = 0;
+  const make = value => ({
+    id: `unit:${value.id}:${++created}`,
+    position: { set(x, y, z) { this.x = x; this.y = y; this.z = z; }, y: 0 },
+    rotation: {}
+  });
+  const factories = { createUnit: make };
+  const worldToScene = (x, y) => ({ x: x / 10, y: 0, z: y / 10 });
+
+  const first = context.OpenRTS.rendering.dynamicWorldComposer.compose({
+    group,
+    pool,
+    worldToScene,
+    sources: { units: [{ id: 'u1', x: 10, y: 20, heading: 0 }] },
+    factories
+  });
+  const firstVisual = group.children[0];
+  const second = context.OpenRTS.rendering.dynamicWorldComposer.compose({
+    group,
+    pool,
+    worldToScene,
+    sources: { units: [{ id: 'u1', x: 30, y: 40, heading: 1 }] },
+    factories
+  });
+
+  assert.equal(first.created, 1);
+  assert.equal(second.reused, 1);
+  assert.equal(group.children[0], firstVisual);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify({ x: firstVisual.position.x, z: firstVisual.position.z, rotation: firstVisual.rotation.y })),
+    { x: 3, z: 4, rotation: -1 }
+  );
+});
+
+test('dynamic world composer rebuilds pooled units for attack animation state', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/DynamicWorldComposer.js');
+  const group = {
+    children: [],
+    add(item) { this.children.push(item); },
+    remove(item) {
+      const index = this.children.indexOf(item);
+      if (index >= 0) this.children.splice(index, 1);
+    },
+    clear() { this.children = []; }
+  };
+  const pool = context.OpenRTS.rendering.dynamicWorldComposer.createDynamicPool();
+  let created = 0;
+  const factories = {
+    createUnit: unit => ({ id: `unit:${unit.id}:${++created}`, animation: unit.attackAnimationTime || 0, position: { set() {} }, rotation: {} })
+  };
+
+  context.OpenRTS.rendering.dynamicWorldComposer.compose({
+    group,
+    pool,
+    sources: { units: [{ id: 'swordsman', unitType: 'soldier', attackAnimationTime: 0, attackAnimationDuration: 0.24 }] },
+    factories
+  });
+  const idleVisual = group.children[0];
+  const attacking = context.OpenRTS.rendering.dynamicWorldComposer.compose({
+    group,
+    pool,
+    sources: { units: [{ id: 'swordsman', unitType: 'soldier', attackAnimationTime: 0.2, attackAnimationDuration: 0.24 }] },
+    factories
+  });
+
+  assert.equal(attacking.created, 1);
+  assert.notEqual(group.children[0], idleVisual);
+  assert.equal(group.children[0].animation, 0.2);
+});
+
+test('dynamic world composer culls offscreen pooled visuals before factory creation', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/DynamicWorldComposer.js');
+  const group = {
+    children: [],
+    add(item) { this.children.push(item); },
+    remove(item) {
+      const index = this.children.indexOf(item);
+      if (index >= 0) this.children.splice(index, 1);
+    },
+    clear() { this.children = []; }
+  };
+  const pool = context.OpenRTS.rendering.dynamicWorldComposer.createDynamicPool();
+  let created = 0;
+  const factories = {
+    createUnit: unit => ({ id: `unit:${unit.id}:${++created}`, position: { set() {} }, rotation: {} })
+  };
+
+  const first = context.OpenRTS.rendering.dynamicWorldComposer.compose({
+    group,
+    pool,
+    isVisible: source => source.x < 100,
+    sources: {
+      units: [
+        { id: 'near', x: 10, y: 10 },
+        { id: 'far', x: 1000, y: 1000 }
+      ]
+    },
+    factories
+  });
+  const second = context.OpenRTS.rendering.dynamicWorldComposer.compose({
+    group,
+    pool,
+    isVisible: source => source.x < 100,
+    sources: {
+      units: [
+        { id: 'near', x: 1000, y: 1000 },
+        { id: 'far', x: 1000, y: 1000 }
+      ]
+    },
+    factories
+  });
+
+  assert.equal(first.units, 1);
+  assert.equal(first.unitsCulled, 1);
+  assert.equal(first.created, 1);
+  assert.equal(created, 1);
+  assert.equal(second.culled, 2);
+  assert.equal(second.removed, 1);
+  assert.equal(group.children.length, 0);
+  assert.equal(pool.entries.size, 0);
+});
+
+test('render optimization services plan LOD shadows chunks and instancing batches', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/RenderOptimizationServices.js');
+  const optimization = context.OpenRTS.rendering.optimization;
+  const lod = optimization.chooseLod({
+    id: 'unit.hover',
+    url: 'high.glb',
+    lods: [
+      { distance: 20, url: 'mid.glb' },
+      { distance: 60, url: 'low.glb' }
+    ]
+  }, 65);
+  const shadowPolicy = optimization.createShadowPolicy({ maxCasterDistance: 10, minCasterSize: 0.5 });
+  const chunks = optimization.createStaticChunkPlanner({ tileSize: 32, chunkTiles: 2 }).collectChunks({
+    rows: 3,
+    columns: 3,
+    signatureForTile: (x, y) => `${x}:${y}`
+  });
+  const visible = optimization.createStaticChunkPlanner({ tileSize: 32, chunkTiles: 2 }).visibleChunks(chunks, {
+    x: 0,
+    y: 0,
+    viewportWidth: 31,
+    viewportHeight: 31,
+    zoom: 1
+  }, 0);
+  const batches = optimization.planInstancedBatches([
+    { model: 'tree' },
+    { model: 'rock' },
+    { model: 'tree' }
+  ]);
+  const culler = optimization.createWorldViewCuller({
+    camera: { x: 100, y: 200, zoom: 2 },
+    viewportWidth: 400,
+    viewportHeight: 200,
+    overscan: 20
+  });
+
+  assert.equal(lod.source, 'low.glb');
+  assert.equal(shadowPolicy.shouldCast({ category: 'projectile', size: 2, distance: 1 }), false);
+  assert.equal(shadowPolicy.shouldCast({ size: 2, distance: 1 }), false);
+  assert.equal(shadowPolicy.shouldCast({ category: 'unit', size: 1, distance: 100 }), true);
+  assert.equal(chunks.length, 4);
+  assert.equal(visible.length, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(batches.map(batch => [batch.id, batch.count]))), [['tree', 2], ['rock', 1]]);
+  assert.equal(culler.isVisible({ x: 120, y: 220 }), true);
+  assert.equal(culler.isVisible({ x: 1000, y: 1000 }), false);
+  assert.equal(culler.isVisible({ selected: true, x: 1000, y: 1000 }), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(culler.bounds)), {
+    left: 80,
+    top: 180,
+    right: 320,
+    bottom: 320,
+    width: 200,
+    height: 100,
+    overscan: 20
+  });
+});
+
+test('render optimization services evaluate budgets dirty chunks LOD plans and health', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/RenderOptimizationServices.js');
+  const optimization = context.OpenRTS.rendering.optimization;
+  const frameBudget = optimization.createFrameBudget({
+    targetFps: 60,
+    drawCalls: 10,
+    triangles: 100,
+    dynamicPool: 5,
+    culledRatioWarning: 0.5
+  });
+  const budgetResult = frameBudget.evaluate({
+    frameMs: 20,
+    drawCalls: 12,
+    triangles: 80,
+    dynamicPool: 6,
+    culledRatio: 0.75
+  });
+  const planner = optimization.createStaticChunkPlanner({ tileSize: 16, chunkTiles: 2 });
+  const previous = planner.collectChunks({
+    rows: 2,
+    columns: 2,
+    signatureForTile: () => 'same'
+  });
+  const next = planner.collectChunks({
+    rows: 2,
+    columns: 2,
+    signatureForTile: (x, y) => x === 1 && y === 1 ? 'changed' : 'same'
+  });
+  const diff = planner.diffChunks(previous, next);
+  const instancing = optimization.summarizeInstancingPlan([
+    { model: 'tree' },
+    { model: 'tree' },
+    { model: 'tree' },
+    { model: 'rock' }
+  ], { minBatchSize: 3 });
+  const lodPlan = optimization.planLodForItems([
+    { id: 'near', x: 0, y: 0, model: { url: 'high.glb', lods: [{ distance: 10, url: 'low.glb' }] } },
+    { id: 'far', x: 30, y: 40, model: { url: 'high.glb', lods: [{ distance: 10, url: 'low.glb' }] } }
+  ], {
+    camera: { x: 0, y: 0 },
+    modelFor: item => item.model
+  });
+  const culler = optimization.createWorldViewCuller({ camera: { x: 0, y: 0 }, viewportWidth: 100, viewportHeight: 100, overscan: 0 });
+  const viewport = optimization.summarizeViewport({
+    culler,
+    visibleChunks: next,
+    dynamicCounts: { units: 2, sheep: 1, culled: 4, created: 1, reused: 2, removed: 0 },
+    staticCounts: { rockInstances: 12 }
+  });
+  const health = optimization.createRenderHealthReport({
+    performance: {
+      describe: () => ({
+        gauges: {
+          'render.three.drawCalls': 12,
+          'render.three.triangles': 80,
+          'render.dynamic.poolSize': 6,
+          'render.dynamic.lastCulled': 18
+        },
+        timings: {
+          'render.three.frame': { average: 20, max: 22 }
+        }
+      })
+    },
+    frameBudget
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(budgetResult.warnings)), ['frame_time', 'draw_calls', 'dynamic_pool', 'culling_pressure']);
+  assert.equal(budgetResult.ok, false);
+  assert.equal(budgetResult.quality.id, 'high');
+  assert.deepEqual(JSON.parse(JSON.stringify(diff.summary)), { added: 0, removed: 0, changed: 1, unchanged: 0, dirty: 1 });
+  assert.equal(instancing.instancedCount, 3);
+  assert.equal(instancing.fallbackCount, 1);
+  assert.equal(lodPlan[0].lod.source, 'high.glb');
+  assert.equal(lodPlan[1].lod.source, 'low.glb');
+  assert.deepEqual(JSON.parse(JSON.stringify(viewport.dynamic)), {
+    rendered: 3,
+    culled: 4,
+    created: 1,
+    reused: 2,
+    removed: 0
+  });
+  assert.equal(viewport.visibleChunks, 1);
+  assert.equal(health.ok, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(health.warnings)), ['frame_time', 'draw_calls', 'dynamic_pool', 'culling_pressure']);
 });
 
 test('model factory resolver bridges logical model assets to registered render factories', () => {
@@ -947,4 +1455,76 @@ test('model factory resolver bridges logical model assets to registered render f
   assert.deepEqual(created, { id: 'unit.worker', unitType: 'worker', extra: 'payload' });
   assert.deepEqual(fallback, { fallbackId: 'unit.unknown' });
   assert.equal(context.OpenRTS.rendering.modelFactoryResolver.resolve({ displayName: 'Sheep' }, { category: 'wildlife' }).id, 'wildlife.sheep');
+});
+
+test('render asset audit reports 3D model contract readiness for moddable packages', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/RendererFactoryRegistry.js');
+  loadOpenRTSScript('../../world/rendering/three/RenderAssetAuditService.js', context);
+  const registry = context.OpenRTS.rendering.factoryRegistry;
+  registry.register('unit.worker', () => ({ kind: 'worker' }), { renderer: 'three', kind: 'procedural', category: 'unit' });
+  registry.register('building.castle', () => ({ kind: 'castle' }), { renderer: 'three', kind: 'procedural', category: 'building' });
+
+  const audit = context.OpenRTS.rendering.renderAssetAudit.createAudit({
+    definitions: {
+      units: {
+        worker: { name: 'Worker', model: 'worker' },
+        hover_tank: { name: 'Hover Tank', model: 'hover_tank' }
+      },
+      buildings: {
+        home: { name: 'Castle', model: 'castle' }
+      }
+    },
+    assetManifest: {
+      models: {
+        'unit.worker': { kind: 'procedural', renderer: 'three', factory: 'worker' },
+        'unit.hover_tank': {
+          kind: 'gltf',
+          renderer: 'three',
+          url: 'assets/models/hover_tank.glb',
+          fallback: 'unit.worker',
+          scale: 1.1,
+          lods: [{ distance: 20, url: 'assets/models/hover_tank_lod1.glb' }],
+          animations: { idle: 'Idle' }
+        },
+        'building.castle': { kind: 'procedural', renderer: 'three', factory: 'castle' }
+      }
+    },
+    factoryRegistry: registry
+  });
+
+  assert.equal(audit.summary.errors, 0);
+  assert.equal(audit.summary.missingModelContracts, 0);
+  assert.equal(audit.summary.importedModels, 1);
+  assert.equal(audit.summary.lodReadyModels, 1);
+  assert.equal(audit.summary.animationReadyModels, 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(audit.facets.categories)), ['building', 'unit']);
+});
+
+test('render asset audit catches invalid imported models and missing model contracts', () => {
+  const context = loadOpenRTSScript('../../world/rendering/three/RenderAssetAuditService.js');
+  const audit = context.OpenRTS.rendering.renderAssetAudit.createAudit({
+    definitions: {
+      units: {
+        walker: { name: 'Walker', model: 'walker' }
+      },
+      buildings: {}
+    },
+    assetManifest: {
+      models: {
+        'unit.bad_import': {
+          kind: 'gltf',
+          scale: 0,
+          lods: [{ distance: 50 }, { distance: 10 }]
+        }
+      }
+    },
+    factoryRegistry: { list: () => [] }
+  });
+  const codes = audit.diagnostics.map(diagnostic => diagnostic.code);
+
+  assert.equal(codes.includes('missing_model_contract'), true);
+  assert.equal(codes.includes('missing_model_url'), true);
+  assert.equal(codes.includes('missing_import_fallback'), true);
+  assert.equal(codes.includes('invalid_model_scale'), true);
+  assert.equal(codes.includes('unsorted_lods'), true);
 });

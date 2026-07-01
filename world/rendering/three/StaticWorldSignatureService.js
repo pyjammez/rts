@@ -6,6 +6,7 @@
     return {
       terrainPreset: mapConfig.terrainPreset || '',
       mapStyle: mapConfig.mapStyle || '',
+      visualStyle: mapConfig.visualStyle || '',
       terrain: mapConfig.terrain || {},
       waterPercent: mapConfig.waterPercent,
       rockCount: mapConfig.rockCount,

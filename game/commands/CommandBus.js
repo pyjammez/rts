@@ -19,9 +19,6 @@
     HOUSE_EXIT: 'house.exit',
     HOUSE_BURN: 'house.burn',
     CASTLE_UPGRADE: 'castle.upgrade',
-    CASTLE_ENTER: 'castle.enter',
-    CASTLE_EXIT: 'castle.exit',
-    CASTLE_RAMPART: 'castle.rampart',
     PRODUCTION_ENQUEUE: 'production.enqueue',
     ABILITY_CAST: 'ability.cast'
   });
@@ -296,6 +293,10 @@
     });
   }
 
+  const extensions = {
+    gameplayHandlers: app.commands?.gameplayHandlers || null
+  };
+
   const bus = Object.freeze({
     types,
     register,
@@ -308,6 +309,8 @@
     verifyCommandLog,
     clear,
     describe,
+    get gameplayHandlers() { return extensions.gameplayHandlers; },
+    set gameplayHandlers(value) { extensions.gameplayHandlers = value; },
     getPending: () => queue.map(cloneSerializable),
     getHistory: () => history.map(cloneSerializable),
     getRejections: () => rejectionHistory.map(cloneSerializable)

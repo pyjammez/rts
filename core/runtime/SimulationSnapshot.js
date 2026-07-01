@@ -49,8 +49,7 @@
       maxHp: rounded(building.maxHp),
       dead: !!building.isDead,
       level: finite(building.upgradeLevel),
-      cooldown: rounded(building.fireCooldown),
-      defenderId: building.rampartUnitId ?? null
+      cooldown: rounded(building.fireCooldown)
     };
   }
 

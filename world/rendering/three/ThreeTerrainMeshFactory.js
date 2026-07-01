@@ -25,6 +25,11 @@
       return (getMapConfig?.() || {}).mapStyle === 'volcanic_lava';
     }
 
+    function visualStyle() {
+      const config = getMapConfig?.() || {};
+      return String(config.visualStyle || config.mapStyle || '').toLowerCase();
+    }
+
     function sampleTerrain(x, y) {
       const thresholds = getMapConfig?.().terrain || {};
       const waterEdge = thresholds.water ?? 0.28;
@@ -48,6 +53,35 @@
       return -0.06 + (landHeight + 0.06) * shoreBlend + authoredHeight;
     }
 
+    function grassDetail(x, y) {
+      const broadPatch = smoothValueNoise(x + 503, y + 211, 2.8);
+      const meadowPatch = smoothValueNoise(x + 1031, y + 577, 1.25);
+      const dryPatch = smoothValueNoise(x + 719, y + 149, 4.6);
+      const clover = smoothValueNoise(x + 1609, y + 887, 9.5);
+      const blade = hashNoise(Math.floor(x * 24) + 313, Math.floor(y * 24) + 929);
+      const tuft = hashNoise(Math.floor(x * 7) + 41, Math.floor(y * 7) + 103);
+      return {
+        lush: Math.max(0, broadPatch - 0.38) * 0.22 + Math.max(0, clover - 0.65) * 0.14,
+        dry: Math.max(0, dryPatch - 0.58) * 0.28,
+        dark: Math.max(0, 0.42 - meadowPatch) * 0.16,
+        blade: (blade - 0.5) * 0.09,
+        tuft: tuft > 0.83 ? 0.08 : 0
+      };
+    }
+
+    function naturalGrassColor(x, y, shade, options = {}) {
+      const detail = grassDetail(x, y);
+      const base = new THREE.Color(
+        options.r ?? 0.12,
+        options.g ?? 0.36,
+        options.b ?? 0.12
+      );
+      base.r += shade * 0.3 + detail.dry * 0.85 - detail.dark * 0.34 + detail.blade * 0.45;
+      base.g += shade * 0.58 + detail.lush * 0.76 + detail.dry * 0.34 - detail.dark * 0.42 + detail.blade * 0.32 + detail.tuft;
+      base.b += shade * 0.22 + detail.lush * 0.18 - detail.dry * 0.18 - detail.dark * 0.12 + detail.blade * 0.12;
+      return base;
+    }
+
     function terrainColor(x, y, sample) {
       const broad = smoothValueNoise(x + 37, y + 61, 5) - 0.5;
       const fine = hashNoise(Math.floor(x * 11) + 101, Math.floor(y * 11) + 409) - 0.5;
@@ -62,15 +96,59 @@
         return lava.lerp(shore, sample.waterBlend);
       }
 
+      const style = visualStyle();
+      if (style === 'alien_crystal') {
+        const water = new THREE.Color(0.05 + shade * 0.12, 0.22 + shade * 0.18, 0.34 + shade * 0.28);
+        const dust = new THREE.Color(0.28 + shade * 0.24, 0.25 + shade * 0.18, 0.36 + shade * 0.22);
+        const mineral = smoothValueNoise(x + 503, y + 211, 2.8);
+        const field = new THREE.Color(0.12 + shade * 0.18, 0.33 + mineral * 0.13 + shade * 0.24, 0.42 + mineral * 0.16 + shade * 0.22);
+        return water.lerp(dust.clone().lerp(field, sample.grassBlend), sample.waterBlend);
+      }
+
+      if (style === 'industrial_desert' || style === 'desert_raid') {
+        const water = new THREE.Color(0.05 + shade * 0.12, 0.19 + shade * 0.16, 0.22 + shade * 0.18);
+        const sand = new THREE.Color(0.68 + shade * 0.8, 0.56 + shade * 0.62, 0.33 + shade * 0.42);
+        const scrub = new THREE.Color(0.42 + shade * 0.34, 0.39 + shade * 0.28, 0.24 + shade * 0.18);
+        return water.lerp(sand.clone().lerp(scrub, sample.grassBlend * 0.65), sample.waterBlend);
+      }
+
+      if (style === 'metal_wasteland') {
+        const coolant = new THREE.Color(0.04 + shade * 0.1, 0.18 + shade * 0.16, 0.2 + shade * 0.2);
+        const oxidized = new THREE.Color(0.34 + shade * 0.22, 0.3 + shade * 0.18, 0.25 + shade * 0.14);
+        const metal = new THREE.Color(0.22 + shade * 0.18, 0.25 + shade * 0.18, 0.27 + shade * 0.18);
+        return coolant.lerp(oxidized.clone().lerp(metal, sample.grassBlend), sample.waterBlend);
+      }
+
+      if (style === 'fantasy_forest') {
+        const water = new THREE.Color(0.06 + shade * 0.14, 0.28 + shade * 0.28, 0.4 + shade * 0.32);
+        const loam = new THREE.Color(0.42 + shade * 0.36, 0.33 + shade * 0.26, 0.2 + shade * 0.18);
+        const moss = naturalGrassColor(x, y, shade, { r: 0.08, g: 0.34, b: 0.13 });
+        return water.lerp(loam.clone().lerp(moss, sample.grassBlend), sample.waterBlend);
+      }
+
+      if (style === 'temperate_kingdom') {
+        const water = new THREE.Color(0.08 + shade * 0.2, 0.32 + shade * 0.32, 0.5 + shade * 0.4);
+        const sand = new THREE.Color(0.75 + shade * 0.82, 0.66 + shade * 0.62, 0.42 + shade * 0.42);
+        const grass = naturalGrassColor(x, y, shade, { r: 0.13, g: 0.42, b: 0.14 });
+        return water.lerp(sand.clone().lerp(grass, sample.grassBlend), sample.waterBlend);
+      }
+
+      if (style === 'arabia_dryland') {
+        const dryWash = smoothValueNoise(x + 901, y + 277, 3.8);
+        const water = new THREE.Color(0.08 + shade * 0.16, 0.25 + shade * 0.18, 0.34 + shade * 0.2);
+        const sand = new THREE.Color(0.72 + dryWash * 0.12 + shade * 0.55, 0.61 + dryWash * 0.08 + shade * 0.42, 0.34 + shade * 0.24);
+        const grass = new THREE.Color(0.33 + shade * 0.22, 0.45 + dryWash * 0.08 + shade * 0.24, 0.2 + shade * 0.12);
+        return water.lerp(sand.clone().lerp(grass, sample.grassBlend * 0.9), sample.waterBlend);
+      }
+
       const water = new THREE.Color(0.08 + shade * 0.2, 0.34 + shade * 0.35, 0.52 + shade * 0.45);
       const sand = new THREE.Color(0.72 + shade, 0.62 + shade * 0.82, 0.34 + shade * 0.5);
-      const meadow = smoothValueNoise(x + 503, y + 211, 2.8);
-      const grass = new THREE.Color(0.11 + shade * 0.35, 0.34 + shade * 0.65 + meadow * 0.1, 0.12 + shade * 0.3);
+      const grass = naturalGrassColor(x, y, shade, { r: 0.11, g: 0.34, b: 0.12 });
       const beach = sand.clone().lerp(grass, sample.grassBlend);
       return water.lerp(beach, sample.waterBlend);
     }
 
-    function createTerrainMeshes({ subdivisions = 8 } = {}) {
+    function createTerrainMeshForRange({ startX = 0, startY = 0, endX = getColumns(), endY = getRows(), subdivisions = 8, chunkId = null } = {}) {
       const rows = getRows();
       const columns = getColumns();
       const positions = [];
@@ -81,8 +159,13 @@
         colors.push(color.r, color.g, color.b);
       }
 
-      for (let tileY = 0; tileY < rows; tileY++) {
-        for (let tileX = 0; tileX < columns; tileX++) {
+      const tileStartX = Math.max(0, Math.floor(startX));
+      const tileStartY = Math.max(0, Math.floor(startY));
+      const tileEndX = Math.min(columns, Math.ceil(endX));
+      const tileEndY = Math.min(rows, Math.ceil(endY));
+
+      for (let tileY = tileStartY; tileY < tileEndY; tileY++) {
+        for (let tileX = tileStartX; tileX < tileEndX; tileX++) {
           for (let sy = 0; sy < subdivisions; sy++) {
             for (let sx = 0; sx < subdivisions; sx++) {
               const x0 = tileX + sx / subdivisions;
@@ -114,14 +197,49 @@
       terrainGeometry.computeVertexNormals();
       const terrain = new THREE.Mesh(terrainGeometry, materials.ground);
       terrain.receiveShadow = true;
+      terrain.userData = {
+        ...(terrain.userData || {}),
+        staticChunkId: chunkId,
+        tileStartX,
+        tileStartY,
+        tileEndX,
+        tileEndY,
+        terrainChunk: !!chunkId
+      };
       return [terrain];
+    }
+
+    function createTerrainMeshes({ subdivisions = 8, chunkTiles = 0 } = {}) {
+      const rows = getRows();
+      const columns = getColumns();
+      const chunkSize = Math.max(0, Math.floor(Number(chunkTiles) || 0));
+      if (!chunkSize) return createTerrainMeshForRange({ startX: 0, startY: 0, endX: columns, endY: rows, subdivisions });
+
+      const meshes = [];
+      for (let startY = 0; startY < rows; startY += chunkSize) {
+        for (let startX = 0; startX < columns; startX += chunkSize) {
+          const chunkX = Math.floor(startX / chunkSize);
+          const chunkY = Math.floor(startY / chunkSize);
+          meshes.push(...createTerrainMeshForRange({
+            startX,
+            startY,
+            endX: Math.min(columns, startX + chunkSize),
+            endY: Math.min(rows, startY + chunkSize),
+            subdivisions,
+            chunkId: `${chunkX}:${chunkY}`
+          }));
+        }
+      }
+      return meshes;
     }
 
     return Object.freeze({
       createTerrainMeshes,
+      createTerrainMeshForRange,
       sampleTerrain,
       terrainHeight,
-      terrainColor
+      terrainColor,
+      grassDetail
     });
   }
 

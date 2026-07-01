@@ -27,25 +27,20 @@
       homeType = 'home',
       towerType = 'tower',
       tileSize = 32,
-      getRampartDefender = () => null,
       spawnProjectile = () => false
     } = dependencies || {};
 
     for (const building of buildings) {
-      building.rampartUnitId = null;
       if (building.isDead) continue;
 
-      const defender = building.type === homeType
-        ? getRampartDefender(building, units)
-        : null;
-      if (defender) building.rampartUnitId = defender.id;
-      if (building.type !== towerType && !defender) continue;
+      const isDefensiveBuilding = building.type === towerType || building.type === homeType;
+      if (!isDefensiveBuilding) continue;
 
       building.fireCooldown = Math.max(0, (building.fireCooldown || 0) - dt);
       if (building.fireCooldown > 0) continue;
 
       const range = building.type === homeType
-        ? Math.max(building.range || 360, (defender?.shootRange || 120) + 175)
+        ? building.range || 360
         : building.range || 245;
       const target = findNearestEnemy(building, units, range);
       if (!target) continue;
@@ -56,11 +51,11 @@
         target,
         team: building.team,
         damage: building.type === homeType
-          ? Math.max(building.damage || 0, defender?.damage || 8)
+          ? building.damage || 8
           : building.damage || 12,
         shooter: building,
-        speed: defender?.projectileSpeed || building.projectileSpeed,
-        color: defender?.projectileColor || building.projectileColor
+        speed: building.projectileSpeed,
+        color: building.projectileColor
       });
       if (fired !== false) building.fireCooldown = building.attackCooldown || 1.15;
     }

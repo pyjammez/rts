@@ -55,14 +55,10 @@ const gameplayCommandHandlers = OpenRTS.commands.gameplayHandlers.createRegistra
   worldRuntime: OpenRTS.world.runtime,
   systems: OpenRTS.systems,
   tileSize,
-  clearCastleTopCommand: typeof clearCastleTopCommand === 'function' ? clearCastleTopCommand : null,
   removeSheepFromMap: typeof removeSheepFromMap === 'function' ? removeSheepFromMap : null,
   commandUnitIntoHouse: typeof commandUnitIntoHouse === 'function' ? commandUnitIntoHouse : null,
   commandUnitOutOfHouse: typeof commandUnitOutOfHouse === 'function' ? commandUnitOutOfHouse : null,
-  startBurningHouse: typeof startBurningHouse === 'function' ? startBurningHouse : null,
-  commandUnitIntoCastle: typeof commandUnitIntoCastle === 'function' ? commandUnitIntoCastle : null,
-  commandUnitOutOfCastle: typeof commandUnitOutOfCastle === 'function' ? commandUnitOutOfCastle : null,
-  commandUnitToCastleTop: typeof commandUnitToCastleTop === 'function' ? commandUnitToCastleTop : null
+  startBurningHouse: typeof startBurningHouse === 'function' ? startBurningHouse : null
 });
 
 function registerGameplayCommandHandlers() {
@@ -349,7 +345,6 @@ function registerRuntimeSystems() {
       homeType: BUILDING_TYPES.HOME,
       towerType: BUILDING_TYPES.TOWER,
       tileSize,
-      getRampartDefender: getCastleTopDefender,
       spawnProjectile: projectile => {
         return !!OpenRTS.systems.projectiles.spawn(projectile);
       }
@@ -473,10 +468,23 @@ function renderWorldAtmosphere() {
 
 function applyInitialCameraForMode() {
   const config = window.mapConfig || mapConfig || {};
-  if (config.modeId !== 'unit_comparison') return;
+  if (config.modeId === 'unit_comparison') {
+    camera.x = getMapWidthPx() * 0.5 - (camera.viewportWidth / camera.zoom) * 0.5;
+    camera.y = getMapHeightPx() * 0.5 - (camera.viewportHeight / camera.zoom) * 0.5;
+    clampCameraPosition();
+    return;
+  }
 
-  camera.x = getMapWidthPx() * 0.5 - (camera.viewportWidth / camera.zoom) * 0.5;
-  camera.y = getMapHeightPx() * 0.5 - (camera.viewportHeight / camera.zoom) * 0.5;
+  if (config.modeId === 'map_builder') return;
+
+  const slots = typeof getActivePlayerSlots === 'function' ? getActivePlayerSlots(config) : [];
+  const localTeam = slots.find(slot => slot.controller === 'human')?.flag || 'red';
+  const home = typeof getTeamHome === 'function' ? getTeamHome(localTeam) : null;
+  const focus = home || units.find(unit => unit.team === localTeam && !unit.isDead);
+  if (!focus) return;
+
+  camera.x = focus.x - (camera.viewportWidth / camera.zoom) * 0.5;
+  camera.y = focus.y - (camera.viewportHeight / camera.zoom) * 0.5;
   clampCameraPosition();
 }
 

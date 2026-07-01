@@ -72,15 +72,98 @@ test('camera policy lives outside the composition root', () => {
 test('package manifest policy loads before package content loading', () => {
   const index = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const service = fs.readFileSync(new URL('../game/config/PackageManifestService.js', import.meta.url), 'utf8');
+  const schemaService = fs.readFileSync(new URL('../game/config/ContentSchemaService.js', import.meta.url), 'utf8');
+  const reportService = fs.readFileSync(new URL('../game/config/PackageReportService.js', import.meta.url), 'utf8');
   const manifestScript = 'game/config/PackageManifestService.js';
+  const schemaScript = 'game/config/ContentSchemaService.js';
+  const reportScript = 'game/config/PackageReportService.js';
   const loaderScript = 'game/config/ContentPackLoader.js';
 
   assert.match(service, /createPackageLock/);
   assert.match(service, /sortByDependencies/);
   assert.match(service, /satisfiesEngineVersion/);
+  assert.match(schemaService, /validatePackageContent/);
+  assert.match(schemaService, /describeSchema/);
+  assert.match(reportService, /createPackageReport/);
+  assert.match(reportService, /validateCrossReferences/);
   assert.ok(index.indexOf(manifestScript) !== -1, 'package manifest service must be loaded');
+  assert.ok(index.indexOf(schemaScript) !== -1, 'content schema service must be loaded');
+  assert.ok(index.indexOf(reportScript) !== -1, 'package report service must be loaded');
   assert.ok(index.indexOf(loaderScript) !== -1, 'content package loader must be loaded');
   assert.ok(index.indexOf(manifestScript) < index.indexOf(loaderScript), 'package manifest service must load before content package loader');
+  assert.ok(index.indexOf(schemaScript) < index.indexOf(reportScript), 'content schema service must load before package report service');
+  assert.ok(index.indexOf(reportScript) < index.indexOf(loaderScript), 'package report service must load before content package loader');
+});
+
+test('mode selection exposes static game package discovery without hardcoded package folders', () => {
+  const index = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const bootstrap = fs.readFileSync(new URL('../ui/screens/bootstrap.js', import.meta.url), 'utf8');
+  const modeSelect = fs.readFileSync(new URL('../ui/screens/ModeSelectScreen.js', import.meta.url), 'utf8');
+  const styles = fs.readFileSync(new URL('../ui/style.css', import.meta.url), 'utf8');
+
+  assert.match(index, /id="packageBrowser"/);
+  assert.match(bootstrap, /loadGamePackageIndex/);
+  assert.match(modeSelect, /renderPackageBrowser/);
+  assert.match(modeSelect, /listAvailableGamePackages/);
+  assert.match(modeSelect, /navigateToGamePackage/);
+  assert.doesNotMatch(modeSelect, /packages available/);
+  assert.doesNotMatch(modeSelect, /data-package-query|data-package-category|data-package-tag|packageFiltersFromPanel/);
+  assert.doesNotMatch(modeSelect, /createElement\('select'\)/);
+  assert.doesNotMatch(modeSelect, /spacesiege|battleforge|modern_warlord|ultimate_extinction|era_of_kingdoms/);
+  assert.match(styles, /\.package-browser/);
+  assert.match(styles, /\.package-card/);
+  assert.doesNotMatch(styles, /\.package-filters/);
+});
+
+test('ready room exposes factions and spawn setup applies faction rosters', () => {
+  const config = fs.readFileSync(new URL('../ui/config.js', import.meta.url), 'utf8');
+  const readyRoom = fs.readFileSync(new URL('../ui/screens/ReadyRoomScreen.js', import.meta.url), 'utf8');
+  const gameState = fs.readFileSync(new URL('../world/gameState.js', import.meta.url), 'utf8');
+
+  assert.match(config, /getFactionCatalog/);
+  assert.match(config, /setPlayerSlotFaction/);
+  assert.match(config, /getAvailableUnitIds/);
+  assert.match(readyRoom, /createFactionSelect/);
+  assert.match(readyRoom, /setPlayerSlotFaction/);
+  assert.match(gameState, /getConfiguredFactionForTeam/);
+  assert.match(gameState, /getConfiguredUnitRosterForTeam/);
+  assert.match(gameState, /filterRosterToFaction/);
+});
+
+test('bottom command bar exposes data-driven construction commands', () => {
+  const index = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const hud = fs.readFileSync(new URL('../ui/hud.js', import.meta.url), 'utf8');
+  const targeting = fs.readFileSync(new URL('../ui/CommandTargetingController.js', import.meta.url), 'utf8');
+  const workerEconomy = fs.readFileSync(new URL('../game/systems/workerEconomySystem.js', import.meta.url), 'utf8');
+
+  assert.match(index, /id="constructionPanel"/);
+  assert.match(index, /id="constructionActions"/);
+  assert.doesNotMatch(index, /id="buildTowerAction"/);
+  assert.match(hud, /getBuildableBuildingsForUnit/);
+  assert.match(hud, /getConfiguredFactionForTeam/);
+  assert.match(hud, /data-building-type/);
+  assert.match(hud, /toggleItemActionTargeting\(`build:/);
+  assert.match(targeting, /isBuildMode/);
+  assert.match(targeting, /startsWith\('build:'\)/);
+  assert.match(targeting, /payload:\s*\{\s*unitId:\s*worker\.id,\s*buildingType/);
+  assert.match(workerEconomy, /getBuildCost/);
+  assert.match(workerEconomy, /getBuildingDefinition/);
+  assert.doesNotMatch(workerEconomy, /buildingType\s*===\s*'tower'\s*\?\s*'tower'\s*:\s*null/);
+});
+
+test('modded worker units keep tags for builder and gatherer systems', () => {
+  const gameState = fs.readFileSync(new URL('../world/gameState.js', import.meta.url), 'utf8');
+  const workerEconomy = fs.readFileSync(new URL('../game/systems/workerEconomySystem.js', import.meta.url), 'utf8');
+  const eokUnits = JSON.parse(fs.readFileSync(new URL('../games/era_of_kingdoms/units.json', import.meta.url), 'utf8'));
+  const ultimateUnits = JSON.parse(fs.readFileSync(new URL('../games/ultimate_extinction/units.json', import.meta.url), 'utf8'));
+
+  assert.deepEqual(eokUnits.eok_villager.tags, ['worker', 'villager']);
+  assert.ok(ultimateUnits.ue_commander.tags.includes('builder'));
+  assert.match(gameState, /unit\.tags\s*=\s*Array\.isArray\(definition\.tags\)/);
+  assert.match(workerEconomy, /tags\.includes\('worker'\)/);
+  assert.match(workerEconomy, /tags\.includes\('builder'\)/);
+  assert.match(workerEconomy, /tags\.includes\('villager'\)/);
+  assert.match(workerEconomy, /unit\.model\s*===\s*'worker'/);
 });
 
 test('world map delegates navigation policy to a navigation service', () => {
@@ -118,6 +201,20 @@ test('large prototype-era files delegate split responsibilities to focused modul
   assert.match(renderer3d, /OpenRTS\.rendering\.threeUnitModels\.createFactory/);
   assert.match(renderer3d, /OpenRTS\.rendering\.threeTerrainMeshes\.createFactory/);
   assert.match(renderer3d, /OpenRTS\.rendering\.threeBuildingModels\.createFactory/);
+  assert.match(renderer3d, /state\.buildingModels\.createCastle/);
+  assert.match(renderer3d, /state\.buildingModels\.createDefenseTower/);
+  assert.match(
+    fs.readFileSync(new URL('../world/rendering/three/RenderAssetAuditService.js', import.meta.url), 'utf8'),
+    /createAudit/
+  );
+  assert.match(
+    fs.readFileSync(new URL('../world/rendering/three/RenderOptimizationServices.js', import.meta.url), 'utf8'),
+    /createStaticChunkPlanner/
+  );
+  assert.match(
+    fs.readFileSync(new URL('../world/rendering/three/StaticInstanceBatcher.js', import.meta.url), 'utf8'),
+    /createInstancedMeshBatch/
+  );
   assert.doesNotMatch(renderer3d, /function\s+addLongbow/);
   assert.doesNotMatch(renderer3d, /function\s+addCarriedObject/);
   assert.doesNotMatch(renderer3d, /function\s+addWorkerGatherTool/);
@@ -125,8 +222,8 @@ test('large prototype-era files delegate split responsibilities to focused modul
   assert.doesNotMatch(renderer3d, /function\s+terrainSample/);
   assert.doesNotMatch(renderer3d, /function\s+terrainColor/);
   assert.doesNotMatch(renderer3d, /function\s+addBattlements/);
-  assert.doesNotMatch(renderer3d, /function\s+createProceduralCastle/);
-  assert.doesNotMatch(renderer3d, /function\s+createProceduralDefenseTower/);
+  assert.doesNotMatch(renderer3d, /createProceduralCastle/);
+  assert.doesNotMatch(renderer3d, /createProceduralDefenseTower/);
 
   for (const [dependency, consumer] of [
     ['entities/UnitCommandTypes.js', 'entities/unit.js'],
@@ -137,11 +234,36 @@ test('large prototype-era files delegate split responsibilities to focused modul
     ['world/rendering/three/ThreeTerrainMeshFactory.js', 'world/renderer3d.js'],
     ['world/rendering/three/ThreeBuildingModelFactory.js', 'world/renderer3d.js'],
     ['world/rendering/three/ThreeUnitAttachmentFactory.js', 'world/renderer3d.js'],
-    ['world/rendering/three/ThreeUnitModelFactory.js', 'world/renderer3d.js']
+    ['world/rendering/three/ThreeUnitModelFactory.js', 'world/renderer3d.js'],
+    ['world/rendering/three/RenderAssetAuditService.js', 'world/renderer3d.js'],
+    ['world/rendering/three/RenderOptimizationServices.js', 'world/renderer3d.js'],
+    ['world/rendering/three/StaticInstanceBatcher.js', 'world/renderer3d.js'],
+    ['world/rendering/three/RenderOptimizationServices.js', 'world/rendering/three/MeshPrimitiveFactory.js']
   ]) {
     assert.ok(index.indexOf(dependency) !== -1, `${dependency} must be loaded`);
     assert.ok(index.indexOf(dependency) < index.indexOf(consumer), `${dependency} must load before ${consumer}`);
   }
+});
+
+test('browser 3D trees use detailed 2D sprites with flat shadows', () => {
+  const renderer3d = fs.readFileSync(new URL('../world/renderer3d.js', import.meta.url), 'utf8');
+  const index = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  assert.match(renderer3d, /createTreeSpriteTexture/);
+  assert.match(renderer3d, /getTreeSpriteMaterial/);
+  assert.match(renderer3d, /addTreeSprite/);
+  assert.match(renderer3d, /drawTreeBlob/);
+  assert.match(renderer3d, /createRadialGradient/);
+  assert.match(renderer3d, /new THREE\.Sprite/);
+  assert.match(renderer3d, /new THREE\.SpriteMaterial/);
+  assert.match(renderer3d, /CircleGeometry\(1,\s*12\)/);
+  assert.doesNotMatch(renderer3d, /addCartoonTreeBubble/);
+  assert.doesNotMatch(renderer3d, /addCartoonTreeSphere/);
+  assert.doesNotMatch(renderer3d, /tree:cartoon-bubble-sphere/);
+  assert.doesNotMatch(renderer3d, /const\s+cardCount\s*=\s*16/);
+  assert.doesNotMatch(renderer3d, /const\s+frondCount\s*=\s*18/);
+  assert.doesNotMatch(renderer3d, /const\s+layers\s*=\s*9/);
+  assert.match(index, /world\/renderer3d\.js\?v=eokcastle1/);
 });
 
 test('new browser globals must be approved compatibility adapters', () => {

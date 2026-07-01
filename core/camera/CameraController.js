@@ -28,23 +28,8 @@
     const use3DRenderer = optionalFunction(deps.use3DRenderer, () => false);
     const refresh3DCameraMatrices = optionalFunction(deps.refresh3DCameraMatrices, () => {});
     const get3DWorldPoint = optionalFunction(deps.get3DWorldPoint, () => null);
-    const documentRef = deps.document || global.document;
-    const getComputedStyleRef = deps.getComputedStyle || global.getComputedStyle || (() => ({ display: 'none' }));
-
     function is3DActive() {
       return !!use3DRenderer();
-    }
-
-    function getCommandBarEdge() {
-      const commandBar = documentRef?.querySelector?.('.command-bar');
-      const commandBarRect = commandBar?.getBoundingClientRect?.();
-      const commandBarVisible = !!commandBarRect &&
-        commandBarRect.width > 0 &&
-        commandBarRect.height > 0 &&
-        getComputedStyleRef(commandBar).display !== 'none';
-      return commandBarVisible
-        ? Math.max(camera.edgeScrollMargin, Math.min(camera.viewportHeight, commandBarRect.top))
-        : camera.viewportHeight;
     }
 
     function getEdgeScrollDirection() {
@@ -54,14 +39,19 @@
 
       let x = 0;
       let y = 0;
-      const bottomEdge = getCommandBarEdge();
       const bottomScrollMargin = Math.max(camera.edgeScrollMargin, 40);
 
       if (input.mouseInside) {
         if (input.mouseX <= camera.edgeScrollMargin) x -= 1;
         if (input.mouseX >= camera.viewportWidth - camera.edgeScrollMargin) x += 1;
         if (input.mouseY <= camera.edgeScrollMargin) y -= 1;
-        if (input.mouseY >= bottomEdge - bottomScrollMargin && input.mouseY <= bottomEdge) y += 1;
+        if (
+          !input.southEdgeActive &&
+          input.mouseY >= camera.viewportHeight - bottomScrollMargin &&
+          input.mouseY <= camera.viewportHeight
+        ) {
+          y += 1;
+        }
       }
       if (input.southEdgeActive) y = 1;
 

@@ -2,7 +2,7 @@
   "versus": {
     "shortName": "Versus",
     "name": "Versus",
-    "summary": "Player-versus-player battle with configurable teams and room settings.",
+    "summary": "Player-versus-player with custom map and settings.",
     "playable": true,
     "startLabel": "Create Versus Room",
     "teams": ["red", "blue"],
@@ -28,7 +28,7 @@
       "towersPerTeam": 0,
       "homesPerTeam": 1,
       "unitRoster": {
-        "king": 1,
+        "king": 0,
         "worker": 5,
         "soldier": 0,
         "archer": 0,
@@ -45,7 +45,7 @@
   "tower_defense": {
     "shortName": "TD",
     "name": "Tower Defense",
-    "summary": "Defend your castle from simple timed enemy waves.",
+    "summary": "Defend from timed enemy waves.",
     "playable": true,
     "startLabel": "Create Defense Room",
     "teams": ["red", "blue"],
@@ -79,7 +79,7 @@
   "unit_comparison": {
     "shortName": "Compare",
     "name": "Unit Comparison",
-    "summary": "Run an arena test where two configured groups spawn, close distance, and fight automatically.",
+    "summary": "Fight arena where unit compositions compare their abilities.",
     "playable": true,
     "startLabel": "Begin Comparison",
     "teams": ["red", "blue"],

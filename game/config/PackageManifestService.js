@@ -37,6 +37,10 @@
     return index >= 0 ? value.slice(0, index + 1) : '';
   }
 
+  function joinPath(basePath, filePath) {
+    return `${basePath || ''}${filePath || ''}`;
+  }
+
   function isSafeRelativePath(filePath) {
     const value = String(filePath || '');
     return !!value && !value.startsWith('/') && !value.includes('..') && !/^[a-z]+:/i.test(value);
@@ -46,7 +50,7 @@
     if (!isSafeRelativePath(filePath)) {
       throw new Error(`Unsafe package file path "${String(filePath || '')}"`);
     }
-    return `${basePath || ''}${filePath}`;
+    return joinPath(basePath, filePath);
   }
 
   function parseVersion(version) {
@@ -256,6 +260,112 @@
     };
   }
 
+  function normalizeIndexEntry(entry, indexPath = '') {
+    if (!isPlainObject(entry)) {
+      throw new Error(`${indexPath || 'package index'} package entries must be objects`);
+    }
+    const id = String(entry.id || '').trim();
+    if (!PACKAGE_ID_PATTERN.test(id)) {
+      throw new Error(`${indexPath || 'package index'} package id "${id}" is invalid`);
+    }
+    const manifest = String(entry.manifest || `${id}/manifest.json`);
+    if (!isSafeRelativePath(manifest)) {
+      throw new Error(`${indexPath || 'package index'} package "${id}" has unsafe manifest path "${manifest}"`);
+    }
+    return Object.freeze({
+      id,
+      manifest,
+      manifestPath: resolvePackageFile(dirname(indexPath || 'games/index.json'), manifest),
+      name: String(entry.name || id),
+      description: String(entry.description || ''),
+      category: String(entry.category || 'sample'),
+      style: String(entry.style || ''),
+      featured: entry.featured === true,
+      tags: cloneArray(entry.tags),
+      provides: cloneArray(entry.provides)
+    });
+  }
+
+  function normalizePackageIndex(data, indexPath = 'games/index.json') {
+    if (!isPlainObject(data)) {
+      throw new Error(`${indexPath} must contain a package index object`);
+    }
+    const packages = Array.isArray(data.packages)
+      ? data.packages.map(entry => normalizeIndexEntry(entry, indexPath))
+      : [];
+    return Object.freeze({
+      schemaVersion: Number(data.schemaVersion) || 1,
+      name: String(data.name || 'Game Packages'),
+      description: String(data.description || ''),
+      indexPath,
+      basePath: dirname(indexPath),
+      packages,
+      fingerprint: hashString(stableStringify({
+        schemaVersion: Number(data.schemaVersion) || 1,
+        packages: packages.map(entry => ({
+          id: entry.id,
+          manifest: entry.manifest,
+          category: entry.category,
+          tags: [...entry.tags].sort()
+        })).sort((a, b) => a.id.localeCompare(b.id))
+      }))
+    });
+  }
+
+  function validatePackageIndex(data, options = {}) {
+    const errors = [];
+    let index = null;
+    try {
+      index = normalizePackageIndex(data, options.indexPath || 'games/index.json');
+    } catch (error) {
+      errors.push(error.message);
+      return { valid: false, errors, index: null };
+    }
+    if (index.schemaVersion !== 1) errors.push(`${index.indexPath} must set schemaVersion to 1`);
+    if (!Array.isArray(data.packages)) errors.push(`${index.indexPath} needs a packages array`);
+
+    const seen = new Set();
+    for (const entry of index.packages) {
+      if (seen.has(entry.id)) errors.push(`${index.indexPath} contains duplicate package id "${entry.id}"`);
+      seen.add(entry.id);
+      if (options.knownPackages && !options.knownPackages.includes(entry.id)) {
+        errors.push(`${index.indexPath} references unknown package "${entry.id}"`);
+      }
+    }
+
+    return { valid: errors.length === 0, errors, index };
+  }
+
+  function searchPackageIndex(index, filters = {}) {
+    const query = String(filters.query || '').trim().toLowerCase();
+    const category = filters.category && filters.category !== 'all' ? String(filters.category) : '';
+    const tag = filters.tag && filters.tag !== 'all' ? String(filters.tag) : '';
+    return [...(index?.packages || [])].filter(entry => {
+      if (category && entry.category !== category) return false;
+      if (tag && !entry.tags.includes(tag)) return false;
+      if (!query) return true;
+      const haystack = [
+        entry.id,
+        entry.name,
+        entry.description,
+        entry.category,
+        entry.style,
+        ...entry.tags,
+        ...entry.provides
+      ].join(' ').toLowerCase();
+      return haystack.includes(query);
+    });
+  }
+
+  function getIndexFacets(index) {
+    const packages = index?.packages || [];
+    return {
+      categories: [...new Set(packages.map(entry => entry.category).filter(Boolean))].sort(),
+      tags: [...new Set(packages.flatMap(entry => entry.tags || []))].sort(),
+      featured: packages.filter(entry => entry.featured).map(entry => entry.id)
+    };
+  }
+
   app.config.packageManifests = Object.freeze({
     PACKAGE_ID_PATTERN,
     normalizeManifest,
@@ -269,6 +379,10 @@
     satisfiesEngineVersion,
     sortByDependencies,
     createPackageLock,
-    describeManifest
+    describeManifest,
+    normalizePackageIndex,
+    validatePackageIndex,
+    searchPackageIndex,
+    getIndexFacets
   });
 })(globalThis);

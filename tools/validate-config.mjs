@@ -6,6 +6,7 @@ import { loadContent, validateContent, validateContentData } from './configValid
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const result = validateContent({ root });
 const packageResults = [];
+const packageIndexErrors = [];
 const PACKAGE_ID_PATTERN = /^[a-z][a-z0-9_-]*$/;
 const SEMVER_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?$/;
 
@@ -75,6 +76,47 @@ function validatePackageManifest(errors, manifest, manifestPath, knownPackageIds
   }
 }
 
+function validatePackageIndex(errors, index, indexPath, knownPackageIds, manifestPathsById) {
+  if (!isPlainObject(index)) {
+    errors.push(`game package index "${indexPath}" must be an object`);
+    return;
+  }
+  if (Number(index.schemaVersion) !== 1) errors.push(`game package index "${indexPath}" must set schemaVersion to 1`);
+  if (!Array.isArray(index.packages)) {
+    errors.push(`game package index "${indexPath}" needs a packages array`);
+    return;
+  }
+  const seen = new Set();
+  for (const [packageIndex, entry] of index.packages.entries()) {
+    if (!isPlainObject(entry)) {
+      errors.push(`game package index entry ${packageIndex} must be an object`);
+      continue;
+    }
+    const id = String(entry.id || '');
+    if (!PACKAGE_ID_PATTERN.test(id)) errors.push(`game package index entry ${packageIndex} id "${id}" is invalid`);
+    if (seen.has(id)) errors.push(`game package index contains duplicate package id "${id}"`);
+    seen.add(id);
+    if (!knownPackageIds.has(id)) errors.push(`game package index references unknown package "${id}"`);
+    const manifestPath = String(entry.manifest || `${id}/manifest.json`);
+    if (!isSafePackageFile(manifestPath)) {
+      errors.push(`game package index "${id}" has unsafe manifest path "${manifestPath}"`);
+      continue;
+    }
+    const absoluteManifestPath = path.join(path.dirname(indexPath), manifestPath);
+    if (!fs.existsSync(absoluteManifestPath)) {
+      errors.push(`game package index "${id}" manifest does not exist at ${manifestPath}`);
+    } else if (manifestPathsById.get(id) !== absoluteManifestPath) {
+      errors.push(`game package index "${id}" manifest path does not match discovered package manifest`);
+    }
+    if (entry.tags !== undefined && !Array.isArray(entry.tags)) {
+      errors.push(`game package index "${id}" tags must be an array`);
+    }
+  }
+  for (const packageId of knownPackageIds) {
+    if (!seen.has(packageId)) errors.push(`game package "${packageId}" is missing from games/index.json`);
+  }
+}
+
 function mergeMap(base, patch) {
   return {
     ...(base && typeof base === 'object' && !Array.isArray(base) ? base : {}),
@@ -115,7 +157,14 @@ if (fs.existsSync(gamesDir)) {
     if (!fs.existsSync(manifestPath)) continue;
     manifestPaths.push(manifestPath);
   }
-  const knownPackageIds = new Set(manifestPaths.map(manifestPath => String(readJson(manifestPath).id || '')).filter(Boolean));
+  const manifestPathsById = new Map(manifestPaths.map(manifestPath => [String(readJson(manifestPath).id || ''), manifestPath]).filter(([id]) => id));
+  const knownPackageIds = new Set(manifestPathsById.keys());
+  const packageIndexPath = path.join(gamesDir, 'index.json');
+  if (!fs.existsSync(packageIndexPath)) {
+    packageIndexErrors.push('games/index.json must exist for S3-hosted package discovery');
+  } else {
+    validatePackageIndex(packageIndexErrors, readJson(packageIndexPath), packageIndexPath, knownPackageIds, manifestPathsById);
+  }
   for (const manifestPath of manifestPaths) {
     packageResults.push(loadPackageOverlay(manifestPath, knownPackageIds));
   }
@@ -123,9 +172,13 @@ if (fs.existsSync(gamesDir)) {
 
 const invalidPackages = packageResults.filter(packageResult => !packageResult.result.valid);
 
-if (!result.valid || invalidPackages.length > 0) {
+if (!result.valid || invalidPackages.length > 0 || packageIndexErrors.length > 0) {
   console.error(`Configuration validation failed (${result.errors.length}):`);
   result.errors.forEach(error => console.error(`- ${error}`));
+  if (packageIndexErrors.length > 0) {
+    console.error(`Game package index validation failed (${packageIndexErrors.length}):`);
+    packageIndexErrors.forEach(error => console.error(`- ${error}`));
+  }
   for (const packageResult of invalidPackages) {
     console.error(`Game package "${packageResult.manifest.id || packageResult.manifest.name || 'unknown'}" validation failed (${packageResult.result.errors.length}):`);
     packageResult.result.errors.forEach(error => console.error(`- ${error}`));

@@ -15,6 +15,7 @@
     clear = true,
     onReset,
     createTerrainMeshes,
+    createObstacleBatches,
     obstacleData = [],
     decorationData = [],
     obstacle = {},
@@ -38,12 +39,17 @@
     if (typeof onReset === 'function') onReset();
 
     addMany(group, typeof createTerrainMeshes === 'function' ? createTerrainMeshes() : []);
+    const obstacleBatchResult = typeof createObstacleBatches === 'function'
+      ? createObstacleBatches({ obstacleData, obstacle, rows, columns })
+      : null;
+    addMany(group, obstacleBatchResult?.items || obstacleBatchResult);
+    const handledObstacleTypes = new Set(obstacleBatchResult?.handledObstacleTypes || []);
 
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < columns; x++) {
         const obstacleType = obstacleData[y]?.[x];
-        if (obstacleType === obstacle.TREE) addOne(group, createTree?.(x, y));
-        if (obstacleType === obstacle.ROCK) addOne(group, createRock?.(x, y));
+        if (obstacleType === obstacle.TREE && !handledObstacleTypes.has(obstacle.TREE)) addOne(group, createTree?.(x, y));
+        if (obstacleType === obstacle.ROCK && !handledObstacleTypes.has(obstacle.ROCK)) addOne(group, createRock?.(x, y));
         addOne(group, createMapDecoration?.(x, y, decorationData[y]?.[x], decor));
       }
     }

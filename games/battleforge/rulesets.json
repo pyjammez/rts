@@ -1,6 +1,6 @@
 {
   "battleforge_rules": {
-    "name": "BattleForge Rules",
+    "name": "WarSiege Rules",
     "summary": "Fantasy economy with gold, lumber, food capacity, mana, melee lines, ranged support, and defensive towers.",
     "resources": {
       "gold": { "name": "Gold", "storage": "stockpile", "defaultStartingAmount": 500, "gatherable": true },

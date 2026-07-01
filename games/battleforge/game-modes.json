@@ -1,31 +1,38 @@
 {
   "battleforge_versus": {
-    "shortName": "BattleForge",
-    "name": "BattleForge Versus",
-    "summary": "Fantasy forest skirmish with gold, lumber, food capacity, and early melee/ranged units.",
+    "shortName": "WarSiege",
+    "name": "WarSiege Versus",
+    "summary": "Dense fantasy forest skirmish with abundant wildlife, lumber pressure, melee lines, and early magic support.",
     "playable": true,
-    "startLabel": "Create BattleForge Room",
+    "startLabel": "Create WarSiege Room",
     "teams": ["blue", "red"],
     "allowedUnits": ["bf_peasant", "bf_footman", "bf_ranger", "bf_mage"],
     "defaults": {
       "enabledUnits": ["bf_peasant", "bf_footman", "bf_ranger", "bf_mage"],
       "mapStyle": "enchanted_forest",
+      "visualStyle": "fantasy_forest",
       "mapSize": "default_large",
-      "waterLevel": 8,
-      "rockCount": 16,
-      "treeCount": 90,
-      "sheepCount": 8,
-      "duckCount": 3,
+      "waterLevel": 9,
+      "rockCount": 18,
+      "treeCount": 115,
+      "sheepCount": 14,
+      "duckCount": 6,
       "goldMineCount": 6,
-      "houseCount": 4,
-      "startingGold": 500,
-      "startingWood": 150,
+      "houseCount": 6,
+      "startingGold": 425,
+      "startingWood": 220,
       "startingFood": 0,
       "playersPerTeam": 1,
       "playerCount": 2,
       "homesPerTeam": 1,
       "towersPerTeam": 0,
-      "unitRoster": { "bf_peasant": 5, "bf_footman": 0, "bf_ranger": 0, "bf_mage": 0 }
+      "unitRoster": { "bf_peasant": 4, "bf_footman": 1, "bf_ranger": 0, "bf_mage": 0 }
+    },
+    "rules": {
+      "identity": "fantasy_hero_forest",
+      "economyPace": "medium",
+      "wildlife": true,
+      "signature": "creep camps, lumber pressure, melee lines, and magic support"
     },
     "sections": ["map", "forces", "wildlife"]
   }

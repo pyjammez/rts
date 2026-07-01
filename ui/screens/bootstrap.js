@@ -11,6 +11,13 @@ function initGameScreens() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  if (OpenRTS.config.gamePackages?.loadGamePackageIndex) {
+    try {
+      await OpenRTS.config.gamePackages.loadGamePackageIndex();
+    } catch (error) {
+      console.warn('Unable to load game package index.', error);
+    }
+  }
   if (typeof loadGameDefinitions === 'function') {
     await loadGameDefinitions();
   }

@@ -12,6 +12,7 @@
     "unit.grenademan": { "kind": "procedural", "renderer": "three", "factory": "grenademan" },
     "unit.balloon": { "kind": "procedural", "renderer": "three", "factory": "balloon" },
     "building.castle": { "kind": "procedural", "renderer": "three", "factory": "castle" },
+    "building.eok_town_center": { "kind": "procedural", "renderer": "three", "factory": "eok_town_center" },
     "building.arrow_tower": { "kind": "procedural", "renderer": "three", "factory": "arrow_tower" },
     "wildlife.sheep": { "kind": "procedural", "renderer": "three", "factory": "sheep" },
     "wildlife.duck": { "kind": "procedural", "renderer": "three", "factory": "duck" },

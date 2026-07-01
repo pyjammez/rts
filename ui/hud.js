@@ -11,6 +11,7 @@ let redCountEl = null;
 let blueCountEl = null;
 let selectedInfoEl = null;
 let unitActionsEl = null;
+let constructionActionsEl = null;
 let attackAtWillAction = null;
 let holdFireAction = null;
 let attackMoveAction = null;
@@ -22,11 +23,12 @@ let mineGoldAction = null;
 let mineStoneAction = null;
 let chopWoodAction = null;
 let gatherFoodAction = null;
-let buildTowerAction = null;
 let burnHouseAction = null;
 let unitActionStatus = null;
 let actionMessage = '';
 let actionMessageUntil = 0;
+let lastMiniMapRenderAt = 0;
+const MINI_MAP_RENDER_INTERVAL_MS = 250;
 
 function getCommandTargetMode() {
   return OpenRTS.ui?.commandTargeting?.getMode?.() || null;
@@ -45,6 +47,7 @@ function initHUD() {
   blueCountEl = document.getElementById('blueCount');
   selectedInfoEl = document.getElementById('selectedInfo');
   unitActionsEl = document.getElementById('unitActions');
+  constructionActionsEl = document.getElementById('constructionActions');
   attackAtWillAction = document.getElementById('attackAtWillAction');
   holdFireAction = document.getElementById('holdFireAction');
   attackMoveAction = document.getElementById('attackMoveAction');
@@ -56,7 +59,6 @@ function initHUD() {
   mineStoneAction = document.getElementById('mineStoneAction');
   chopWoodAction = document.getElementById('chopWoodAction');
   gatherFoodAction = document.getElementById('gatherFoodAction');
-  buildTowerAction = document.getElementById('buildTowerAction');
   burnHouseAction = document.getElementById('burnHouseAction');
   unitActionStatus = document.getElementById('unitActionStatus');
   OpenRTS.ui.commandTargeting?.configure({
@@ -99,8 +101,12 @@ function initHUD() {
   mineStoneAction?.addEventListener('click', () => toggleItemActionTargeting('mine-stone'));
   chopWoodAction?.addEventListener('click', () => toggleItemActionTargeting('chop-wood'));
   gatherFoodAction?.addEventListener('click', () => toggleItemActionTargeting('gather-food'));
-  buildTowerAction?.addEventListener('click', () => toggleItemActionTargeting('build-tower'));
   burnHouseAction?.addEventListener('click', () => toggleItemActionTargeting('burn-house'));
+  constructionActionsEl?.addEventListener('click', event => {
+    const button = event.target.closest?.('[data-building-type]');
+    if (!button || button.disabled) return;
+    toggleItemActionTargeting(`build:${button.dataset.buildingType}`);
+  });
 
   if (miniMapCanvas) {
     miniMapCtx = miniMapCanvas.getContext('2d');
@@ -160,6 +166,9 @@ function terrainMiniColor(type) {
 
 function renderMiniMap() {
   if (!miniMapCtx || !terrainData || terrainData.length === 0) return;
+  const now = performance.now();
+  if (now - lastMiniMapRenderAt < MINI_MAP_RENDER_INTERVAL_MS) return;
+  lastMiniMapRenderAt = now;
   const sourceUnits = (window.gameRuntime && Array.isArray(window.gameRuntime.aliveUnits))
     ? window.gameRuntime.aliveUnits
     : units;
@@ -251,6 +260,39 @@ function getSelectedLivingUnits() {
   return Array.isArray(units) ? units.filter(unit => unit.selected && !unit.isDead) : [];
 }
 
+function isBuilderUnit(unit) {
+  if (OpenRTS.systems.workerEconomy?.isWorker?.(unit)) return true;
+  const tags = Array.isArray(unit?.tags) ? unit.tags : [];
+  return unit?.unitType === 'worker' || unit?.model === 'worker' || tags.includes('worker') || tags.includes('builder') || tags.includes('villager');
+}
+
+function formatResourceCost(cost = {}) {
+  const entries = Object.entries(cost)
+    .filter(([, value]) => Number(value) > 0)
+    .map(([resource, value]) => `${value} ${resource}`);
+  return entries.length ? entries.join(', ') : 'Free';
+}
+
+function getBuildableBuildingsForUnit(unit) {
+  if (!unit || !isBuilderUnit(unit)) return [];
+  const config = window.mapConfig || mapConfig || {};
+  const faction = typeof getConfiguredFactionForTeam === 'function'
+    ? getConfiguredFactionForTeam(unit.team, config)
+    : null;
+  const ids = Array.isArray(faction?.buildings) && faction.buildings.length
+    ? faction.buildings
+    : ['tower'];
+  const seen = new Set();
+  return ids
+    .filter(id => {
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
+    .map(id => typeof getBuildingDefinition === 'function' ? getBuildingDefinition(id) : null)
+    .filter(Boolean);
+}
+
 function setActionMessage(message) {
   actionMessage = message;
   actionMessageUntil = performance.now() + 1800;
@@ -298,10 +340,11 @@ function updateUnitActions() {
   const allAttack = hasUnits && selectedUnits.every(unit => unit.fireStance !== 'hold_fire');
   const canDrop = selectedUnits.some(unit => !!unit.inventoryItem);
   const canPickUp = selectedUnits.some(unit => !unit.inventoryItem);
-  const hasWorker = selectedUnits.some(unit => unit.unitType === 'worker');
+  const hasWorker = selectedUnits.some(isBuilderUnit);
 
   const itemActionTargetMode = getCommandTargetMode();
   if (!hasUnits && itemActionTargetMode) OpenRTS.ui.commandTargeting?.cancel('');
+  renderConstructionActions(selectedUnits, itemActionTargetMode);
 
   for (const button of [
     attackAtWillAction,
@@ -315,7 +358,6 @@ function updateUnitActions() {
     mineStoneAction,
     chopWoodAction,
     gatherFoodAction,
-    buildTowerAction,
     burnHouseAction
   ]) {
     if (button) button.disabled = !hasUnits;
@@ -323,7 +365,7 @@ function updateUnitActions() {
   if (pickUpItemAction) pickUpItemAction.disabled = !canPickUp;
   if (dropItemAction) dropItemAction.disabled = !canDrop;
   if (upgradeCastleAction) upgradeCastleAction.disabled = !selectedUnits.some(unit => unit.unitType === 'king');
-  for (const button of [mineGoldAction, mineStoneAction, chopWoodAction, gatherFoodAction, buildTowerAction]) {
+  for (const button of [mineGoldAction, mineStoneAction, chopWoodAction, gatherFoodAction]) {
     if (button) button.disabled = !hasWorker;
   }
   attackAtWillAction?.classList.toggle('is-active', allAttack);
@@ -337,7 +379,6 @@ function updateUnitActions() {
   mineStoneAction?.classList.toggle('is-active', itemActionTargetMode === 'mine-stone');
   chopWoodAction?.classList.toggle('is-active', itemActionTargetMode === 'chop-wood');
   gatherFoodAction?.classList.toggle('is-active', itemActionTargetMode === 'gather-food');
-  buildTowerAction?.classList.toggle('is-active', itemActionTargetMode === 'build-tower');
   burnHouseAction?.classList.toggle('is-active', itemActionTargetMode === 'burn-house');
   attackAtWillAction?.setAttribute('aria-pressed', String(allAttack));
   holdFireAction?.setAttribute('aria-pressed', String(allHold));
@@ -350,7 +391,6 @@ function updateUnitActions() {
   mineStoneAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'mine-stone'));
   chopWoodAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'chop-wood'));
   gatherFoodAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'gather-food'));
-  buildTowerAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'build-tower'));
   burnHouseAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'burn-house'));
 
   if (!unitActionStatus) return;
@@ -372,9 +412,11 @@ function updateUnitActions() {
     unitActionStatus.textContent = 'Click a tree';
   } else if (itemActionTargetMode === 'gather-food') {
     unitActionStatus.textContent = 'Click a living sheep or duck';
-  } else if (itemActionTargetMode === 'build-tower') {
-    const cost = OpenRTS.systems.workerEconomy?.BUILD_COSTS?.tower || { gold: 40, wood: 80 };
-    unitActionStatus.textContent = `Click a build location (${cost.wood} wood, ${cost.gold} gold)`;
+  } else if (itemActionTargetMode === 'build-tower' || String(itemActionTargetMode || '').startsWith('build:')) {
+    const buildingType = itemActionTargetMode === 'build-tower' ? 'tower' : itemActionTargetMode.slice('build:'.length);
+    const building = typeof getBuildingDefinition === 'function' ? getBuildingDefinition(buildingType) : null;
+    const cost = OpenRTS.systems.workerEconomy?.getBuildCost?.(buildingType) || {};
+    unitActionStatus.textContent = `Click a build location for ${building?.name || 'building'} (${formatResourceCost(cost)})`;
   } else if (itemActionTargetMode === 'burn-house') {
     unitActionStatus.textContent = 'Click an intact house to burn it';
   } else if (performance.now() < actionMessageUntil) {
@@ -385,6 +427,38 @@ function updateUnitActions() {
     const stance = allHold ? 'Hold fire' : allAttack ? 'Attack at will' : 'Mixed stance';
     unitActionStatus.textContent = `${selectedUnits.length} selected | ${stance}`;
   }
+}
+
+function renderConstructionActions(selectedUnits, itemActionTargetMode) {
+  if (!constructionActionsEl) return;
+  const builder = selectedUnits.find(isBuilderUnit);
+  if (!builder) {
+    constructionActionsEl.innerHTML = '<div class="command-empty-state compact">Select a builder</div>';
+    return;
+  }
+
+  const buildings = getBuildableBuildingsForUnit(builder);
+  if (!buildings.length) {
+    constructionActionsEl.innerHTML = '<div class="command-empty-state compact">No buildings</div>';
+    return;
+  }
+
+  const activeMode = itemActionTargetMode || '';
+  const resources = OpenRTS.systems.resources;
+  constructionActionsEl.innerHTML = buildings.map(building => {
+    const cost = OpenRTS.systems.workerEconomy?.getBuildCost?.(building.id) || building.cost || {};
+    const canAfford = !resources || resources.canAfford(builder.team, cost);
+    const mode = `build:${building.id}`;
+    const active = activeMode === mode || (activeMode === 'build-tower' && building.id === 'tower');
+    return `
+      <button class="command-action construction-action${active ? ' is-active' : ''}" type="button"
+        data-building-type="${building.id}" aria-pressed="${active}" ${canAfford ? '' : 'disabled'}
+        title="${formatResourceCost(cost)}">
+        <span>${building.name || building.id}</span>
+        <small>${formatResourceCost(cost)}</small>
+      </button>
+    `;
+  }).join('');
 }
 
 function updateSelectedInfo() {
@@ -407,10 +481,9 @@ function updateSelectedInfo() {
         <span class="selected-info-tag">Selection</span>
       </div>
       <div class="selected-info-grid">
-        ${createInfoStat('Combined HP', `${Math.ceil(totalHp)} / ${maxHp}`)}
-        ${createInfoStat('Attack Stance', selectedUnits.every(unit => unit.fireStance === 'hold_fire') ? 'Hold fire' : 'Attack at will')}
-        ${createInfoStat('Carrying Items', `${carrying} / ${selectedUnits.length}`)}
-        ${createInfoStat('Team', team)}
+        ${createInfoStat('HP', `${Math.ceil(totalHp)} / ${maxHp}`)}
+        ${createInfoStat('Stance', selectedUnits.every(unit => unit.fireStance === 'hold_fire') ? 'Hold fire' : 'Attack')}
+        ${createInfoStat('Items', `${carrying} / ${selectedUnits.length}`)}
       </div>
     `;
     return;
@@ -427,11 +500,10 @@ function updateSelectedInfo() {
         <span class="selected-info-tag">Building</span>
       </div>
       <div class="selected-info-grid">
-        ${createInfoStat('Hit Points', `${Math.ceil(building.hp)} / ${building.maxHp}`)}
+        ${createInfoStat('HP', `${Math.ceil(building.hp)} / ${building.maxHp}`)}
         ${createInfoStat('Attack', building.damage ? building.damage : 'None')}
         ${createInfoStat('Range', building.range ? Math.round(building.range) : 'None')}
-        ${building.type === 'home' ? createInfoStat('Upgrade Level', `${building.upgradeLevel || 0} / ${building.maxUpgradeLevel || 3}`) : ''}
-        ${createInfoStat('Team', building.team)}
+        ${building.type === 'home' ? createInfoStat('Upg.', `${building.upgradeLevel || 0} / ${building.maxUpgradeLevel || 3}`) : ''}
       </div>
     `;
     return;
@@ -454,24 +526,19 @@ function renderSelectedUnitInfo(unit) {
   const name = unit.displayName || unit.unitType || 'Unit';
   const hp = `${Math.ceil(unit.hp)} / ${unit.maxHp}`;
   const damage = Number.isFinite(Number(unit.damage)) ? unit.damage : 'Unknown';
-  const movingDamage = Number.isFinite(Number(unit.movingDamage)) ? unit.movingDamage : 'Unknown';
   const range = Number.isFinite(Number(unit.shootRange)) ? Math.round(unit.shootRange) : 'Unknown';
   const speed = Number.isFinite(Number(unit.speed)) ? Math.round(unit.speed) : 'Unknown';
   const role = unit.role || 'Field unit';
   const weapon = unit.weaponName || unit.weaponId || 'Unknown';
   const splash = Number(unit.splashRadius) > 0
-    ? createInfoStat('Splash Radius', Math.round(unit.splashRadius))
+    ? createInfoStat('Splash', Math.round(unit.splashRadius))
     : '';
   const mountStatus = unit.mountType === 'sheep' ? 'Riding sheep' : unit.unitType === 'scout' ? 'Mounted scout' : 'On foot';
   const inventory = unit.inventoryItem?.name || 'Empty';
-  const workerStatus = unit.unitType === 'worker'
-    ? createInfoStat('Worker Job', unit.workerJob ? `${unit.workerJob.type} ${unit.workerJob.resourceType || unit.workerJob.buildingType}` : 'Idle')
+  const workerStatus = isBuilderUnit(unit)
+    ? createInfoStat('Job', unit.workerJob ? `${unit.workerJob.type} ${unit.workerJob.resourceType || unit.workerJob.buildingType}` : 'Idle')
     : '';
-  const abilityNames = Array.isArray(unit.abilityDefinitions) && unit.abilityDefinitions.length
-    ? unit.abilityDefinitions.map(ability => ability.name || ability.id).join(', ')
-    : Array.isArray(unit.abilities) && unit.abilities.length
-      ? unit.abilities.join(', ')
-      : 'None';
+  const status = unit.attackOrderTarget ? 'Attacking' : unit.hasActivePath && unit.hasActivePath() ? 'Moving' : 'Idle';
 
   selectedInfoEl.style.display = 'block';
   selectedInfoEl.innerHTML = `
@@ -480,21 +547,17 @@ function renderSelectedUnitInfo(unit) {
       <span class="selected-info-tag">${role}</span>
     </div>
     <div class="selected-info-grid">
-      ${createInfoStat('Hit Points', hp)}
+      ${createInfoStat('HP', hp)}
       ${createInfoStat('Weapon', weapon)}
-      ${createInfoStat('Weapon Power', damage)}
-      ${createInfoStat('Moving Power', movingDamage)}
+      ${createInfoStat('Power', damage)}
       ${createInfoStat('Range', range)}
       ${splash}
       ${createInfoStat('Speed', speed)}
       ${createInfoStat('Mount', mountStatus)}
       ${createInfoStat('Inventory', inventory)}
-      ${createInfoStat('Abilities', abilityNames)}
       ${workerStatus}
-      ${createInfoStat('Fire Stance', unit.fireStance === 'hold_fire' ? 'Hold fire' : 'Attack at will')}
-      ${createInfoStat('Team', unit.team)}
-      ${createInfoStat('Unit Type', unit.unitType || 'soldier')}
-      ${createInfoStat('Status', unit.attackOrderTarget ? 'Attacking' : unit.hasActivePath && unit.hasActivePath() ? 'Moving' : 'Idle')}
+      ${createInfoStat('Stance', unit.fireStance === 'hold_fire' ? 'Hold' : 'Attack')}
+      ${createInfoStat('Status', status)}
     </div>
   `;
 }
@@ -530,8 +593,7 @@ function renderSelectedWorldObjectInfo(object) {
       <span class="selected-info-tag">${isHouse ? 'House' : isResource ? 'Resource' : isItem ? 'Item' : isObstacle ? 'Natural obstacle' : 'Wildlife'}</span>
     </div>
     <div class="selected-info-grid">
-      ${createInfoStat('Hit Points', hp)}
-      ${createInfoStat('Team', object.team || 'neutral')}
+      ${createInfoStat('HP', hp)}
       ${isHouse ? createInfoStat('Occupants', `${object.occupants?.length || 0}`) : isResource ? createInfoStat('Resource', object.resourceType || 'Unknown') : isItem ? createInfoStat('Portable', object.pickupable ? 'Yes' : 'No') : isObstacle ? createInfoStat('Material', object.material || 'Natural') : createInfoStat('Habitat', object.habitat || 'Land')}
       ${isHouse ? createInfoStat('Roof', object.occupants?.length ? 'Open' : 'Covered') : isResource ? createInfoStat('Remaining', Math.ceil(object.amount || 0)) : isItem ? createInfoStat('Item Type', object.itemId || 'item') : isObstacle ? createInfoStat('Hardness', object.hardness || 'Unknown') : createInfoStat('Speed', Math.round(object.speed || 0))}
       ${createInfoStat('Status', status)}

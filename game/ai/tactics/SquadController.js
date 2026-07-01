@@ -59,29 +59,6 @@
       return accepted;
     }
 
-    sendToRampart(blackboard, unit, building, index, total, target = null) {
-      if (!this.metrics.isAlive(unit) || !this.metrics.isAlive(building)) return false;
-      const signature = `rampart:${building.id}:${index}`;
-      if (blackboard.hasRecentOrder(unit, signature)) return false;
-
-      const accepted = safeEnqueue(this.commandBus, {
-        type: this.commandBus.types.CASTLE_RAMPART,
-        playerId: `ai-${blackboard.team}`,
-        payload: {
-          unitId: unit.id,
-          buildingId: building.id,
-          index,
-          total,
-          append: false,
-          targetX: target?.x ?? null,
-          targetY: target?.y ?? null
-        }
-      });
-
-      if (accepted) blackboard.rememberOrder(unit, signature);
-      return accepted;
-    }
-
     upgradeCastle(blackboard, king, home) {
       if (!this.metrics.isAlive(king) || !this.metrics.isAlive(home)) return false;
       const signature = `upgrade:${home.id}:${home.upgradeLevel || 0}`;

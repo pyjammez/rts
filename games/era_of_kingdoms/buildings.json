@@ -7,7 +7,7 @@
     "size": 320,
     "cost": { "wood": 275, "stone": 100 },
     "buildTime": 35,
-    "model": "castle",
+    "model": "eok_town_center",
     "armorType": "structure"
   },
   "eok_house": {

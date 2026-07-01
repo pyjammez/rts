@@ -4,6 +4,7 @@
 
   const counters = new Map();
   const timings = new Map();
+  const gauges = new Map();
 
   function increment(name, amount = 1) {
     counters.set(name, (counters.get(name) || 0) + amount);
@@ -20,6 +21,12 @@
     return { ...current, average: current.total / current.count };
   }
 
+  function setGauge(name, value) {
+    const number = Number(value);
+    gauges.set(name, Number.isFinite(number) ? number : 0);
+    return gauges.get(name);
+  }
+
   function measure(name, fn) {
     const now = root.performance?.now ? () => root.performance.now() : () => Date.now();
     const start = now();
@@ -33,6 +40,7 @@
   function reset() {
     counters.clear();
     timings.clear();
+    gauges.clear();
   }
 
   function describe() {
@@ -48,12 +56,14 @@
     return {
       schemaVersion: 1,
       counters: Object.fromEntries(counters),
+      gauges: Object.fromEntries(gauges),
       timings: timingSummary
     };
   }
 
   app.diagnostics.performance = Object.freeze({
     increment,
+    setGauge,
     recordTiming,
     measure,
     reset,

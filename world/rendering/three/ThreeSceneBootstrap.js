@@ -11,17 +11,18 @@
 
     const renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: options.antialias !== false,
       alpha: false,
       powerPreference: 'high-performance'
     });
-    renderer.setPixelRatio(Math.min(options.devicePixelRatio || 1, 1.5));
+    const maxPixelRatio = Number.isFinite(Number(options.maxPixelRatio)) ? Number(options.maxPixelRatio) : 1;
+    renderer.setPixelRatio(Math.min(options.devicePixelRatio || 1, maxPixelRatio));
     renderer.setSize(canvas.clientWidth || canvas.width, canvas.clientHeight || canvas.height, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.08;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.enabled = options.shadows !== false;
+    renderer.shadowMap.type = options.shadowType || THREE.BasicShadowMap;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x8aa5a0);
@@ -30,17 +31,18 @@
     const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
     camera.up.set(0, 1, 0);
 
-    const hemisphere = new THREE.HemisphereLight(0xdbe8f0, 0x39452d, 1.55);
+    const hemisphere = new THREE.HemisphereLight(0xf0f7ff, 0x4f6339, 1.75);
     scene.add(hemisphere);
 
-    const sun = new THREE.DirectionalLight(0xffe3b2, 3.4);
+    const sun = new THREE.DirectionalLight(0xffe3b2, options.shadows === false ? 2.3 : 2.8);
     sun.position.set(-28, 42, 24);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -45;
-    sun.shadow.camera.right = 45;
-    sun.shadow.camera.top = 45;
-    sun.shadow.camera.bottom = -45;
+    sun.castShadow = options.shadows !== false;
+    const shadowMapSize = Math.max(256, Math.floor(Number(options.shadowMapSize || 768)));
+    sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
+    sun.shadow.camera.left = -34;
+    sun.shadow.camera.right = 34;
+    sun.shadow.camera.top = 34;
+    sun.shadow.camera.bottom = -34;
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 120;
     sun.shadow.bias = -0.00025;

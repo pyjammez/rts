@@ -113,6 +113,35 @@ function isVolcanicTerrain() {
   return (window.mapConfig || mapConfig || {}).mapStyle === 'volcanic_lava';
 }
 
+function isArabiaLikeMap(config = window.mapConfig || mapConfig || {}) {
+  return config.mapStyle === 'eok_arabia';
+}
+
+function arabiaCornerRatios() {
+  return [
+    [0.18, 0.22],
+    [0.82, 0.22],
+    [0.18, 0.78],
+    [0.82, 0.78]
+  ];
+}
+
+function arabiaStartRatios(teamIndex = 0, teamCount = 2) {
+  const corners = arabiaCornerRatios();
+  const pair = (MAP_SEED % 2) === 0 ? [0, 3] : [1, 2];
+  if (teamCount === 2) return corners[pair[teamIndex % 2]];
+  return corners[(MAP_SEED + teamIndex) % corners.length];
+}
+
+function isNearArabiaStart(tileX, tileY, radius = 8) {
+  if (!isArabiaLikeMap()) return false;
+  return arabiaCornerRatios().some(([rx, ry]) => {
+    const sx = rx * MAP_COLS;
+    const sy = ry * MAP_ROWS;
+    return Math.hypot(tileX - sx, tileY - sy) <= radius;
+  });
+}
+
 function generateTerrainTile(x, y) {
   return OpenRTS.world.terrain.typeAt(x + 0.5, y + 0.5, {
     seed: MAP_SEED,
@@ -210,6 +239,106 @@ function computeTerrainThresholds() {
   });
 }
 
+function applyArabiaTerrainLayout() {
+  if (!isArabiaLikeMap()) return;
+
+  for (let y = 0; y < MAP_ROWS; y++) {
+    for (let x = 0; x < MAP_COLS; x++) {
+      const patch = smoothValueNoise(x + 33, y + 91, 9);
+      const scrub = smoothValueNoise(x + 207, y + 411, 18);
+      const startSafe = isNearArabiaStart(x, y, 7);
+      terrainData[y][x] = patch > 0.66 || scrub > 0.82 ? TERRAIN.GRASS : TERRAIN.SAND;
+      if (startSafe && hashNoise(x + 17, y + 29) > 0.74) terrainData[y][x] = TERRAIN.GRASS;
+    }
+  }
+
+  const hills = [
+    [0.5, 0.5, 6],
+    [0.36, 0.28, 4],
+    [0.64, 0.72, 4],
+    [0.32, 0.68, 4],
+    [0.68, 0.32, 4]
+  ];
+
+  for (const [rx, ry, radius] of hills) {
+    const cx = Math.floor(rx * MAP_COLS);
+    const cy = Math.floor(ry * MAP_ROWS);
+    for (let y = Math.max(1, cy - radius); y <= Math.min(MAP_ROWS - 2, cy + radius); y++) {
+      for (let x = Math.max(1, cx - radius); x <= Math.min(MAP_COLS - 2, cx + radius); x++) {
+        const dist = Math.hypot(x - cx, y - cy);
+        if (dist > radius || isNearArabiaStart(x, y, 6)) continue;
+        heightData[y][x] = dist > radius - 1.2 ? HEIGHT.RAMP : HEIGHT.HIGH;
+        if (dist < radius - 1.5 && hashNoise(x + 509, y + 701) > 0.62) decorationData[y][x] = DECOR.HILL;
+        if (terrainData[y][x] !== TERRAIN.GRASS && hashNoise(x + 719, y + 811) > 0.58) terrainData[y][x] = TERRAIN.DIRT;
+      }
+    }
+  }
+}
+
+function clearArabiaStartAreas() {
+  if (!isArabiaLikeMap()) return;
+  for (const [rx, ry] of arabiaCornerRatios()) {
+    const sx = Math.floor(rx * MAP_COLS);
+    const sy = Math.floor(ry * MAP_ROWS);
+    for (let y = Math.max(1, sy - 7); y <= Math.min(MAP_ROWS - 2, sy + 7); y++) {
+      for (let x = Math.max(1, sx - 7); x <= Math.min(MAP_COLS - 2, sx + 7); x++) {
+        if (Math.hypot(x - sx, y - sy) > 7) continue;
+        obstacleData[y][x] = OBSTACLE.NONE;
+        decorationData[y][x] = DECOR.NONE;
+        heightData[y][x] = HEIGHT.GROUND;
+        if (terrainData[y][x] !== TERRAIN.GRASS) terrainData[y][x] = TERRAIN.SAND;
+      }
+    }
+  }
+}
+
+function paintArabiaCluster(centerX, centerY, radius, obstacleType, density = 0.75) {
+  for (let y = Math.max(1, centerY - radius); y <= Math.min(MAP_ROWS - 2, centerY + radius); y++) {
+    for (let x = Math.max(1, centerX - radius); x <= Math.min(MAP_COLS - 2, centerX + radius); x++) {
+      const dist = Math.hypot(x - centerX, y - centerY);
+      if (dist > radius || isNearArabiaStart(x, y, 7)) continue;
+      const falloff = 1 - dist / Math.max(1, radius);
+      if (hashNoise(x + centerX * 13, y + centerY * 17) > density * falloff + 0.25) continue;
+      if (terrainData[y][x] === TERRAIN.WATER) continue;
+      if (obstacleType === OBSTACLE.TREE) terrainData[y][x] = TERRAIN.GRASS;
+      obstacleData[y][x] = obstacleType;
+      decorationData[y][x] = DECOR.NONE;
+    }
+  }
+}
+
+function applyArabiaObjectLayout() {
+  if (!isArabiaLikeMap()) return;
+
+  clearArabiaStartAreas();
+
+  const forestAnchors = [
+    [0.16, 0.5, 5],
+    [0.84, 0.5, 5],
+    [0.5, 0.18, 5],
+    [0.5, 0.82, 5],
+    [0.34, 0.44, 4],
+    [0.66, 0.56, 4]
+  ];
+  for (const [rx, ry, radius] of forestAnchors) {
+    paintArabiaCluster(Math.floor(rx * MAP_COLS), Math.floor(ry * MAP_ROWS), radius, OBSTACLE.TREE, 0.42);
+  }
+
+  const stoneAnchors = [
+    [0.28, 0.26, 3],
+    [0.72, 0.74, 3],
+    [0.3, 0.72, 3],
+    [0.7, 0.28, 3],
+    [0.5, 0.42, 3],
+    [0.5, 0.58, 3]
+  ];
+  for (const [rx, ry, radius] of stoneAnchors) {
+    paintArabiaCluster(Math.floor(rx * MAP_COLS), Math.floor(ry * MAP_ROWS), radius, OBSTACLE.ROCK, 0.5);
+  }
+
+  clearArabiaStartAreas();
+}
+
 function regenerateMapData() {
   configureMapDimensions(mapConfig);
   const seed = mapConfig.seed ?? OpenRTS.random.generateSeed();
@@ -241,6 +370,8 @@ function regenerateMapData() {
   heightData = replaceWorldCollection('heights', Array.from({ length: MAP_ROWS }, () =>
     Array.from({ length: MAP_COLS }, () => HEIGHT.GROUND)
   ));
+
+  applyArabiaTerrainLayout();
 
   // Step 3: Collect candidate tiles
   const treeCandidates = [];  // trees go on grass only
@@ -279,6 +410,8 @@ function regenerateMapData() {
       placed++;
     }
   }
+
+  applyArabiaObjectLayout();
 
   nextWildlifeId = 1;
   seedDecorations();
@@ -439,7 +572,16 @@ function seedGoldMines() {
   goldMineData = replaceWorldCollection('goldMines', []);
   nextGoldMineId = 1;
   const desired = Math.max(0, Math.floor(Number(mapConfig.goldMineCount) || 5));
-  const anchors = [
+  const anchors = isArabiaLikeMap() ? [
+    { x: 0.25, y: 0.24 },
+    { x: 0.75, y: 0.76 },
+    { x: 0.25, y: 0.76 },
+    { x: 0.75, y: 0.24 },
+    { x: 0.5, y: 0.34 },
+    { x: 0.5, y: 0.66 },
+    { x: 0.36, y: 0.5 },
+    { x: 0.64, y: 0.5 }
+  ] : [
     { x: 0.24, y: 0.32 },
     { x: 0.24, y: 0.68 },
     { x: 0.76, y: 0.32 },
@@ -494,6 +636,16 @@ function terrainBaseColor(terrainType, shade) {
   if (terrainType === TERRAIN.WATER) {
     const blue = Math.round(103 + shade * 22);
     return `rgb(${Math.round(47 + shade * 12)}, ${Math.round(112 + shade * 22)}, ${blue + 35})`;
+  }
+
+  if (isArabiaLikeMap()) {
+    if (terrainType === TERRAIN.GRASS) {
+      return `rgb(${Math.round(105 + shade * 24)}, ${Math.round(139 + shade * 28)}, ${Math.round(63 + shade * 18)})`;
+    }
+    if (terrainType === TERRAIN.DIRT) {
+      return `rgb(${Math.round(176 + shade * 20)}, ${Math.round(143 + shade * 17)}, ${Math.round(82 + shade * 12)})`;
+    }
+    return `rgb(${Math.round(205 + shade * 24)}, ${Math.round(181 + shade * 20)}, ${Math.round(103 + shade * 13)})`;
   }
 
   if (terrainType === TERRAIN.SAND) {
@@ -613,7 +765,7 @@ function seedSheep() {
     const x = Math.floor(worldRandom() * MAP_COLS);
     const y = Math.floor(worldRandom() * MAP_ROWS);
     if (!isInsideMap(x, y)) continue;
-    if (terrainData[y][x] !== TERRAIN.GRASS) continue;
+    if (isArabiaLikeMap() ? terrainData[y][x] === TERRAIN.WATER : terrainData[y][x] !== TERRAIN.GRASS) continue;
     if (obstacleData[y][x] !== OBSTACLE.NONE) continue;
 
     const center = tileCenter(x, y);
@@ -629,7 +781,8 @@ function seedSheep() {
 
   for (let attempt = 0; sheepData.length < targetCount && attempt < targetCount * 120; attempt++) {
     const spot = randomSpotOnMap();
-    if (terrainData[Math.floor(spot.y / tileSize)][Math.floor(spot.x / tileSize)] !== TERRAIN.GRASS) continue;
+    const terrain = terrainData[Math.floor(spot.y / tileSize)][Math.floor(spot.x / tileSize)];
+    if (isArabiaLikeMap() ? terrain === TERRAIN.WATER : terrain !== TERRAIN.GRASS) continue;
     sheepData.push(createSheep(
       spot.x + (worldRandom() - 0.5) * tileSize * 0.5,
       spot.y + (worldRandom() - 0.5) * tileSize * 0.5,
@@ -957,6 +1110,7 @@ function drawWorldItem(item) {
 
 function obstacleSpecies(obstacleType, tileX, tileY) {
   if (obstacleType === OBSTACLE.ROCK) return 'Granite Outcrop';
+  if (isArabiaLikeMap()) return 'Pine Tree';
   const treeKind = Math.floor(hashNoise(tileX + 83, tileY + 29) * 3);
   return treeKind === 0 ? 'Pine Tree' : treeKind === 1 ? 'Oak Tree' : 'Palm Tree';
 }
@@ -1200,8 +1354,41 @@ const BUILDING_STATS = {
   tower: typeof getBuildingDefinition === 'function' ? getBuildingDefinition('tower') : { width: 2, height: 2, hp: 260, size: 70 }
 };
 
-function createBuilding(type, team, tileX, tileY) {
-  const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
+function getBuildingStats(type) {
+  return (typeof getBuildingDefinition === 'function' ? getBuildingDefinition(type) : null) ||
+    BUILDING_STATS[type] ||
+    BUILDING_STATS.home;
+}
+
+function getFactionHomeDefinition(team, config = window.mapConfig || {}) {
+  const faction = typeof getConfiguredFactionForTeam === 'function'
+    ? getConfiguredFactionForTeam(team, config)
+    : null;
+  const startingBuildings = faction?.startingBuildings || {};
+  const homeDefinitionType = Object.keys(startingBuildings)[0] || null;
+  const stats = homeDefinitionType && typeof getBuildingDefinition === 'function'
+    ? getBuildingDefinition(homeDefinitionType)
+    : null;
+  return stats
+    ? { factionId: faction?.id || null, definitionType: homeDefinitionType, stats }
+    : { factionId: faction?.id || null, definitionType: BUILDING_TYPES.HOME, stats: null };
+}
+
+function getBuildingSpawnDefinition(type, team, config = window.mapConfig || {}) {
+  if (type === BUILDING_TYPES.HOME) {
+    const factionHome = getFactionHomeDefinition(team, config);
+    if (factionHome.stats) return factionHome;
+  }
+  return {
+    factionId: null,
+    definitionType: type,
+    stats: getBuildingStats(type)
+  };
+}
+
+function createBuilding(type, team, tileX, tileY, options = {}) {
+  const spawnDefinition = options.spawnDefinition || getBuildingSpawnDefinition(type, team);
+  const stats = options.stats || spawnDefinition.stats || getBuildingStats(type);
   const building = OpenRTS.world.objectFactories.buildings.createBuilding({
     id: nextBuildingId++,
     type,
@@ -1209,7 +1396,9 @@ function createBuilding(type, team, tileX, tileY) {
     tileX,
     tileY,
     tileSize,
-    stats
+    stats,
+    definitionType: options.definitionType || spawnDefinition.definitionType,
+    factionId: options.factionId || spawnDefinition.factionId
   });
   buildingData.push(building);
   window.buildingData = buildingData;
@@ -1227,7 +1416,6 @@ function isTileBlockedByBuilding(tileX, tileY, ignoredBuilding = null) {
       tileY >= building.tileY &&
       tileY < building.tileY + building.height
     ) {
-      if (isCastlePassageTile(building, tileX, tileY)) continue;
       return true;
     }
   }
@@ -1235,14 +1423,8 @@ function isTileBlockedByBuilding(tileX, tileY, ignoredBuilding = null) {
   return false;
 }
 
-function isCastlePassageTile(building, tileX, tileY) {
-  return OpenRTS.world.castleGeometry.isPassageTile(building, tileX, tileY, {
-    homeType: BUILDING_TYPES.HOME
-  });
-}
-
-function canPlaceBuildingAt(type, tileX, tileY) {
-  const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
+function canPlaceBuildingAt(type, tileX, tileY, options = {}) {
+  const stats = options.stats || getBuildingStats(type);
   return OpenRTS.world.buildingPlacement.canPlaceAt(type, tileX, tileY, {
     stats,
     homeType: BUILDING_TYPES.HOME,
@@ -1255,13 +1437,13 @@ function canPlaceBuildingAt(type, tileX, tileY) {
   });
 }
 
-function findNearestBuildableSite(type, worldX, worldY, radiusTiles = 8) {
-  const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
+function findNearestBuildableSite(type, worldX, worldY, radiusTiles = 8, options = {}) {
+  const stats = options.stats || getBuildingStats(type);
   return OpenRTS.world.buildingPlacement.findNearestBuildableSite(type, worldX, worldY, {
     stats,
     tileSize,
     radiusTiles,
-    canPlace: canPlaceBuildingAt
+    canPlace: (candidateType, x, y) => canPlaceBuildingAt(candidateType, x, y, { stats })
   });
 }
 
@@ -1272,8 +1454,8 @@ function buildBuildingAtTile(type, team, tileX, tileY) {
   return createBuilding(type, team, tileX, tileY);
 }
 
-function prepareBuildingPad(type, tileX, tileY) {
-  const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
+function prepareBuildingPad(type, tileX, tileY, options = {}) {
+  const stats = options.stats || getBuildingStats(type);
   const tiles = OpenRTS.world.buildingPlacement.padTiles(type, tileX, tileY, {
     stats,
     homeType: BUILDING_TYPES.HOME
@@ -1289,19 +1471,22 @@ function prepareBuildingPad(type, tileX, tileY) {
   return true;
 }
 
-function findBuildingSite(team, type, preferredXRatio, preferredYRatio, teamIndex = team === 'red' ? 0 : 1, teamCount = 2) {
-  const stats = BUILDING_STATS[type] || BUILDING_STATS.home;
+function findBuildingSite(team, type, preferredXRatio, preferredYRatio, teamIndex = team === 'red' ? 0 : 1, teamCount = 2, options = {}) {
+  const stats = options.stats || getBuildingStats(type);
   const site = OpenRTS.world.buildingPlacement.findTeamBuildingSite(team, type, preferredXRatio, preferredYRatio, {
     stats,
     columns: MAP_COLS,
     rows: MAP_ROWS,
     teamIndex,
     teamCount,
-    canPlace: canPlaceBuildingAt
+    canPlace: (candidateType, x, y) => canPlaceBuildingAt(candidateType, x, y, { stats })
   });
 
   if (site?.fallbackX !== undefined && type === BUILDING_TYPES.HOME) {
-    if (prepareBuildingPad(type, site.fallbackX, site.fallbackY) && canPlaceBuildingAt(type, site.fallbackX, site.fallbackY)) {
+    if (
+      prepareBuildingPad(type, site.fallbackX, site.fallbackY, { stats }) &&
+      canPlaceBuildingAt(type, site.fallbackX, site.fallbackY, { stats })
+    ) {
       return { x: site.fallbackX, y: site.fallbackY };
     }
     return null;
@@ -1333,13 +1518,18 @@ function placeTeamBuildings(config = window.mapConfig || {}) {
   for (let teamIndex = 0; teamIndex < teams.length; teamIndex++) {
     const team = teams[teamIndex];
     const sliceCenter = (teamIndex + 0.5) / Math.max(2, teams.length);
-    const defaultHomeRatios = [[sliceCenter, teamIndex % 2 === 0 ? 0.42 : 0.58]];
+    const defaultHomeRatios = isArabiaLikeMap(config)
+      ? [arabiaStartRatios(teamIndex, teams.length)]
+      : [[sliceCenter, teamIndex % 2 === 0 ? 0.42 : 0.58]];
     const defaultTowerRatios = [[sliceCenter, teamIndex % 2 === 0 ? 0.32 : 0.68]];
 
     for (let i = 0; i < homesPerTeam; i++) {
+      const spawnDefinition = getBuildingSpawnDefinition(BUILDING_TYPES.HOME, team, config);
       const ratios = (homeRatios[team] || defaultHomeRatios)[i] || (homeRatios[team] || defaultHomeRatios).at(-1);
-      const site = findBuildingSite(team, BUILDING_TYPES.HOME, ratios[0], ratios[1], teamIndex, teams.length);
-      if (site) createBuilding(BUILDING_TYPES.HOME, team, site.x, site.y);
+      const site = findBuildingSite(team, BUILDING_TYPES.HOME, ratios[0], ratios[1], teamIndex, teams.length, {
+        stats: spawnDefinition.stats
+      });
+      if (site) createBuilding(BUILDING_TYPES.HOME, team, site.x, site.y, { spawnDefinition });
     }
 
     for (let i = 0; i < towersPerTeam; i++) {
@@ -1385,26 +1575,8 @@ function getBuildingAtScreenPoint(screenX, screenY) {
   return OpenRTS.world.buildingQueries.atScreenPoint(buildingData, screenX, screenY, { camera, tileSize });
 }
 
-function isCastleCourtyardPoint(building, worldX, worldY) {
-  return OpenRTS.world.castleGeometry.isCourtyardPoint(building, worldX, worldY, {
-    homeType: BUILDING_TYPES.HOME,
-    tileSize
-  });
-}
-
 function isPointInsideCastle(building, worldX, worldY) {
   return OpenRTS.world.castleGeometry.isPointInside(building, worldX, worldY, {
-    homeType: BUILDING_TYPES.HOME,
-    tileSize
-  });
-}
-
-function getCastleContainingPoint(worldX, worldY) {
-  return getBuildings().find(building => isPointInsideCastle(building, worldX, worldY)) || null;
-}
-
-function getCastleDoorPoints(building, laneIndex = 0) {
-  return OpenRTS.world.castleGeometry.getDoorPoints(building, laneIndex, {
     homeType: BUILDING_TYPES.HOME,
     tileSize
   });
@@ -1414,99 +1586,8 @@ function issueUnitRoute(unit, points, append = false) {
   return OpenRTS.world.castleCommands.issueRoute(unit, points, append);
 }
 
-function getCastleDoorApproach(unit, building, door) {
-  return OpenRTS.world.castleGeometry.getDoorApproach(unit, building, door, { tileSize });
-}
-
-function commandUnitIntoCastle(unit, building, destination, append = false, laneIndex = 0) {
-  return OpenRTS.world.castleCommands.commandEnter(unit, building, destination, {
-    homeType: BUILDING_TYPES.HOME,
-    tileSize,
-    laneIndex,
-    append
-  });
-}
-
-function commandUnitOutOfCastle(unit, building, destination, append = false, laneIndex = 0) {
-  return OpenRTS.world.castleCommands.commandExit(unit, building, destination, {
-    homeType: BUILDING_TYPES.HOME,
-    tileSize,
-    laneIndex,
-    append
-  });
-}
-
 function getLiveBuildingsNearPoint(worldX, worldY, radius) {
   return OpenRTS.world.buildingQueries.nearPoint(buildingData, worldX, worldY, radius, { tileSize });
-}
-
-function getCastleWallSlots(building) {
-  return OpenRTS.world.castleGeometry.getWallSlots(building, {
-    homeType: BUILDING_TYPES.HOME,
-    tileSize
-  });
-}
-
-function getNearestCastleWallSlotIndex(slots, worldX, worldY) {
-  return OpenRTS.world.castleGeometry.getNearestWallSlotIndex(slots, worldX, worldY);
-}
-
-function getCastleRampPoints(building) {
-  return OpenRTS.world.castleGeometry.getRampPoints(building, {
-    homeType: BUILDING_TYPES.HOME,
-    tileSize
-  });
-}
-
-function getCastleWallRoute(slots, startIndex, endIndex) {
-  return OpenRTS.world.castleGeometry.getWallRoute(slots, startIndex, endIndex);
-}
-
-function getCastleStairPoint(building, index = 0, total = 1, targetWorldX = null, targetWorldY = null) {
-  return OpenRTS.world.castleGeometry.getStairPoint(building, index, total, {
-    homeType: BUILDING_TYPES.HOME,
-    tileSize,
-    targetWorldX,
-    targetWorldY,
-    mapWidthPx: getMapWidthPx(),
-    mapHeightPx: getMapHeightPx(),
-    clamp,
-    isWalkablePoint: isCommandWalkablePoint,
-    findNearestWalkablePoint
-  });
-}
-
-function commandUnitToCastleTop(unit, building, index = 0, total = 1, append = false, targetWorldX = null, targetWorldY = null) {
-  return OpenRTS.world.castleCommands.commandRampart(unit, building, {
-    homeType: BUILDING_TYPES.HOME,
-    tileSize,
-    index,
-    total,
-    append,
-    targetWorldX,
-    targetWorldY,
-    mapWidthPx: getMapWidthPx(),
-    mapHeightPx: getMapHeightPx(),
-    clamp,
-    isWalkablePoint: isCommandWalkablePoint,
-    findNearestWalkablePoint
-  });
-}
-
-function clearCastleTopCommand(unit) {
-  OpenRTS.world.castleCommands.clearTopCommand(unit);
-}
-
-function getCastleTopDefender(building, units) {
-  return OpenRTS.world.castleCommands.getTopDefender(building, units, {
-    homeType: BUILDING_TYPES.HOME,
-    tileSize,
-    mapWidthPx: getMapWidthPx(),
-    mapHeightPx: getMapHeightPx(),
-    clamp,
-    isWalkablePoint: isCommandWalkablePoint,
-    findNearestWalkablePoint
-  });
 }
 
 function isInsideMap(tileX, tileY) {
@@ -1989,6 +2070,10 @@ function drawIrregularRock(x, y, drawX, drawY) {
 }
 
 function drawLargeTree(x, y, drawX, drawY) {
+  if (isArabiaLikeMap()) {
+    drawPineTree(x, y, drawX, drawY);
+    return;
+  }
   const treeType = Math.abs((x * 11 + y * 7 + Math.floor(hashNoise(x + 1201, y + 771) * 3))) % 3;
   if (treeType === 0) {
     drawPineTree(x, y, drawX, drawY);
@@ -2721,7 +2806,8 @@ function drawBuilding(building, layer = 'full') {
     drawBuildingSelection(building);
   }
 
-  if (building.type === BUILDING_TYPES.TOWER) {
+  const isTowerModel = building.type === BUILDING_TYPES.TOWER || building.model === 'arrow_tower' || /tower/i.test(String(building.type || ''));
+  if (isTowerModel) {
     drawTowerBuilding(building);
   } else {
     drawHomeBuilding(building, layer);
@@ -2985,21 +3071,6 @@ function drawHomeBuildingFront(building) {
     const sy = bottom - wall * 0.25 - step * h * 0.045;
     ctx.fillRect(sx, sy, w * 0.18, h * 0.025);
     ctx.strokeRect(sx, sy, w * 0.18, h * 0.025);
-  }
-
-  if (building.rampartUnitId) {
-    ctx.fillStyle = accent;
-    ctx.strokeStyle = '#1d1208';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, -h * 0.24, Math.max(5, w * 0.025), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.strokeStyle = '#f0d173';
-    ctx.beginPath();
-    ctx.moveTo(-w * 0.025, -h * 0.22);
-    ctx.lineTo(w * 0.04, -h * 0.3);
-    ctx.stroke();
   }
 
   ctx.restore();

@@ -158,12 +158,6 @@ test('unit command state service centralizes reset and command queue policy', ()
     attackOrderTarget: { id: 'enemy' },
     currentEnemy: { id: 'enemy' },
     autoEngageTarget: { id: 'enemy' },
-    castleTopBuildingId: 'castle',
-    castleTopStairPoint: { x: 1, y: 1 },
-    castleTopReached: true,
-    castleRampBase: { x: 0, y: 0 },
-    castleRampTop: { x: 1, y: 1 },
-    castleRampClimbed: true,
     clearMovementState() { this.target = null; this.movementCleared = true; },
     clearPendingItemAction() { this.itemActionCleared = true; },
     clearMountTarget() { this.mountCleared = true; },
@@ -180,8 +174,6 @@ test('unit command state service centralizes reset and command queue policy', ()
   assert.equal(unit.attackOrderTarget, null);
   assert.equal(unit.currentEnemy, null);
   assert.equal(unit.autoEngageTarget, null);
-  assert.equal(unit.castleTopBuildingId, null);
-  assert.equal(unit.castleRampClimbed, false);
 
   const queueUnit = {
     commandQueue: [],
@@ -211,14 +203,7 @@ test('map sprite catalog owns tile sprite asset construction', () => {
 });
 
 test('camera controller owns edge scroll zoom and world projection policy', () => {
-  const context = loadOpenRTSScript('../../core/camera/CameraController.js', {
-    document: {
-      querySelector: () => ({
-        getBoundingClientRect: () => ({ width: 600, height: 120, top: 420 })
-      })
-    },
-    getComputedStyle: () => ({ display: 'block' })
-  });
+  const context = loadOpenRTSScript('../../core/camera/CameraController.js');
   const camera = {
     x: 10,
     y: 20,
@@ -250,7 +235,10 @@ test('camera controller owns edge scroll zoom and world projection policy', () =
     use3DRenderer: () => false
   });
 
+  assert.deepEqual(JSON.parse(JSON.stringify(controller.getEdgeScrollDirection())), { x: 1, y: 0 });
+  inputState.southEdgeActive = true;
   assert.deepEqual(JSON.parse(JSON.stringify(controller.getEdgeScrollDirection())), { x: 1, y: 1 });
+  inputState.southEdgeActive = false;
   assert.equal(controller.getMinZoomToFitMap(), 0.32);
 
   const before = controller.screenToWorld(320, 240);
