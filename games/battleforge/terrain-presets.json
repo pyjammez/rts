@@ -1,14 +1,14 @@
 {
   "enchanted_forest": {
-    "name": "Enchanted Forest",
-    "description": "Dense fantasy woodland with clustered villages, many animals, and tight paths between trees.",
+    "name": "Jungle Riverlands",
+    "description": "Bright fantasy grassland with jungle-thick forests, river-like water breaks, and rich gold sites.",
     "visualStyle": "fantasy_forest",
-    "waterLevel": 9,
-    "rockCount": 18,
-    "treeCount": 115,
-    "sheepCount": 14,
-    "duckCount": 6,
+    "waterLevel": 16,
+    "rockCount": 14,
+    "treeCount": 150,
+    "sheepCount": 0,
+    "duckCount": 0,
     "goldMineCount": 6,
-    "houseCount": 6
+    "houseCount": 0
   }
 }

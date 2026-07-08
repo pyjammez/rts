@@ -12,15 +12,15 @@
     "houseCount": 0
   },
   "temperate_valley": {
-    "name": "Temperate Valley",
-    "description": "Lush historical valley with shorelines, huntable animals, villages, wood lines, gold, and stone.",
+    "name": "Forest Lake Valley",
+    "description": "Green historical battlefield with forest wood lines, a few small lakes, huntable animals, gold, and stone.",
     "visualStyle": "temperate_kingdom",
-    "waterLevel": 14,
+    "waterLevel": 12,
     "rockCount": 18,
-    "treeCount": 95,
-    "sheepCount": 20,
-    "duckCount": 8,
+    "treeCount": 125,
+    "sheepCount": 18,
+    "duckCount": 6,
     "goldMineCount": 7,
-    "houseCount": 8
+    "houseCount": 0
   }
 }

@@ -16,10 +16,10 @@
       "waterLevel": 10,
       "rockCount": 20,
       "treeCount": 30,
-      "sheepCount": 10,
-      "duckCount": 5,
+      "sheepCount": 0,
+      "duckCount": 0,
       "goldMineCount": 5,
-      "houseCount": 1,
+      "houseCount": 0,
       "startingGold": 140,
       "startingWood": 160,
       "startingFood": 0,
@@ -40,7 +40,7 @@
         "balloon": 0
       }
     },
-    "sections": ["map", "forces", "wildlife"]
+    "sections": ["map", "forces"]
   },
   "tower_defense": {
     "shortName": "TD",
@@ -56,9 +56,9 @@
       "waterLevel": 4,
       "rockCount": 24,
       "treeCount": 65,
-      "sheepCount": 4,
-      "duckCount": 3,
-      "houseCount": 8,
+      "sheepCount": 0,
+      "duckCount": 0,
+      "houseCount": 0,
       "startingGold": 250,
       "startingWood": 220,
       "startingFood": 0,
@@ -120,7 +120,7 @@
       "treeCount": 20,
       "sheepCount": 0,
       "duckCount": 0,
-      "houseCount": 4,
+      "houseCount": 0,
       "homesPerTeam": 0,
       "towersPerTeam": 0
     },

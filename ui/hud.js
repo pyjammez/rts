@@ -29,6 +29,7 @@ let actionMessage = '';
 let actionMessageUntil = 0;
 let lastMiniMapRenderAt = 0;
 const MINI_MAP_RENDER_INTERVAL_MS = 250;
+let syncGameBottomEdgeScrollZone = () => {};
 
 function getCommandTargetMode() {
   return OpenRTS.ui?.commandTargeting?.getMode?.() || null;
@@ -69,6 +70,15 @@ function initHUD() {
     addMarker: typeof addCommandClickMarker === 'function' ? addCommandClickMarker : null
   });
   const bottomEdgeScrollZone = document.getElementById('bottomEdgeScrollZone');
+  const gameBottomEdgeScrollZone = document.getElementById('gameBottomEdgeScrollZone');
+  const commandBar = hudRoot?.querySelector?.('.command-bar') || null;
+
+  syncGameBottomEdgeScrollZone = () => {
+    if (!gameBottomEdgeScrollZone || !commandBar) return;
+    const commandBarRect = commandBar.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    gameBottomEdgeScrollZone.style.bottom = `${Math.max(0, viewportHeight - commandBarRect.top)}px`;
+  };
 
   const updateBottomEdgeScroll = event => {
     inputState.mouseInside = true;
@@ -76,19 +86,28 @@ function initHUD() {
     inputState.mouseX = event.clientX;
     inputState.mouseY = Math.max(0, event.currentTarget.getBoundingClientRect().bottom - 1);
   };
-  bottomEdgeScrollZone?.addEventListener('mouseenter', updateBottomEdgeScroll);
-  bottomEdgeScrollZone?.addEventListener('mousemove', updateBottomEdgeScroll);
-  bottomEdgeScrollZone?.addEventListener('mouseleave', () => {
+
+  const clearBottomEdgeScroll = () => {
     inputState.southEdgeActive = false;
     inputState.mouseInside = false;
-  });
-  bottomEdgeScrollZone?.addEventListener('wheel', event => {
+  };
+
+  const handleBottomEdgeWheel = event => {
     event.preventDefault();
     event.stopPropagation();
     if (typeof handleCameraGesture === 'function') {
       handleCameraGesture(event, event.clientX, event.clientY);
     }
-  }, { passive: false });
+  };
+
+  [bottomEdgeScrollZone, gameBottomEdgeScrollZone].forEach(scrollZone => {
+    scrollZone?.addEventListener('mouseenter', updateBottomEdgeScroll);
+    scrollZone?.addEventListener('mousemove', updateBottomEdgeScroll);
+    scrollZone?.addEventListener('mouseleave', clearBottomEdgeScroll);
+    scrollZone?.addEventListener('wheel', handleBottomEdgeWheel, { passive: false });
+  });
+  syncGameBottomEdgeScrollZone();
+  window.addEventListener('resize', syncGameBottomEdgeScrollZone);
 
   attackAtWillAction?.addEventListener('click', () => setSelectedUnitsFireStance('attack_at_will'));
   holdFireAction?.addEventListener('click', () => setSelectedUnitsFireStance('hold_fire'));
@@ -138,6 +157,7 @@ function showHUD() {
   if (!hudRoot) initHUD();
   if (hudRoot) hudRoot.style.display = 'block';
   if (resourceBar) resourceBar.style.display = 'flex';
+  requestAnimationFrame(syncGameBottomEdgeScrollZone);
   updateTeamCounts();
 }
 
@@ -249,11 +269,24 @@ function updateResourceBar() {
   if (!resourceBar || !OpenRTS.systems.resources) return;
   const team = getLocalResourceTeam();
   const resources = OpenRTS.systems.resources.get(team);
-  if (resourceTeamEl) resourceTeamEl.textContent = team;
-  if (resourceGoldEl) resourceGoldEl.textContent = String(resources.gold);
-  if (resourceWoodEl) resourceWoodEl.textContent = String(resources.wood);
-  if (resourceStoneEl) resourceStoneEl.textContent = String(resources.stone);
-  if (resourceFoodEl) resourceFoodEl.textContent = String(resources.food);
+  const definitions = OpenRTS.systems.resources.describe?.().resources || {};
+  resourceBar.innerHTML = '';
+
+  const teamEl = document.createElement('span');
+  teamEl.className = 'resource-team';
+  teamEl.id = 'resourceTeam';
+  teamEl.textContent = team;
+  resourceBar.appendChild(teamEl);
+  resourceTeamEl = teamEl;
+
+  for (const [type, amount] of Object.entries(resources)) {
+    const item = document.createElement('span');
+    const label = definitions[type]?.name || type.replace(/_/g, ' ');
+    const value = document.createElement('b');
+    value.textContent = String(amount);
+    item.append(`${label} `, value);
+    resourceBar.appendChild(item);
+  }
 }
 
 function getSelectedLivingUnits() {
@@ -289,7 +322,10 @@ function getBuildableBuildingsForUnit(unit) {
       seen.add(id);
       return true;
     })
-    .map(id => typeof getBuildingDefinition === 'function' ? getBuildingDefinition(id) : null)
+    .map(id => {
+      const definition = typeof getBuildingDefinition === 'function' ? getBuildingDefinition(id) : null;
+      return definition ? { ...definition, id } : null;
+    })
     .filter(Boolean);
 }
 

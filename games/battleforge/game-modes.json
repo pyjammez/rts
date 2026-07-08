@@ -12,13 +12,15 @@
       "mapStyle": "enchanted_forest",
       "visualStyle": "fantasy_forest",
       "mapSize": "default_large",
-      "waterLevel": 9,
-      "rockCount": 18,
-      "treeCount": 115,
-      "sheepCount": 14,
-      "duckCount": 6,
+      "generatedLandscape": "forest",
+      "generatedTerrain": "grass",
+      "waterLevel": 16,
+      "rockCount": 14,
+      "treeCount": 150,
+      "sheepCount": 0,
+      "duckCount": 0,
       "goldMineCount": 6,
-      "houseCount": 6,
+      "houseCount": 0,
       "startingGold": 425,
       "startingWood": 220,
       "startingFood": 0,
@@ -31,9 +33,9 @@
     "rules": {
       "identity": "fantasy_hero_forest",
       "economyPace": "medium",
-      "wildlife": true,
+      "wildlife": false,
       "signature": "creep camps, lumber pressure, melee lines, and magic support"
     },
-    "sections": ["map", "forces", "wildlife"]
+    "sections": ["map", "forces"]
   }
 }

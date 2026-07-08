@@ -11,10 +11,60 @@
     "projectileType": "bullet",
     "damageType": "rifle"
   },
+  "mw_heavy_rifle": {
+    "name": "Heavy Rifle",
+    "damage": 10,
+    "movingDamage": 5,
+    "range": 190,
+    "stopRange": 220,
+    "fireRate": 1.65,
+    "projectileSpeed": 560,
+    "projectileColor": "#ffe0a0",
+    "projectileType": "bullet",
+    "damageType": "rifle"
+  },
+  "mw_missile": {
+    "name": "Missile Launcher",
+    "damage": 24,
+    "movingDamage": 12,
+    "range": 230,
+    "stopRange": 260,
+    "fireRate": 0.85,
+    "projectileSpeed": 260,
+    "projectileColor": "#e8e1c7",
+    "projectileType": "rocket",
+    "splashRadius": 12,
+    "damageType": "rocket"
+  },
+  "mw_sniper_rifle": {
+    "name": "Marksman Rifle",
+    "damage": 34,
+    "movingDamage": 8,
+    "range": 285,
+    "stopRange": 320,
+    "fireRate": 0.55,
+    "projectileSpeed": 720,
+    "projectileColor": "#f8f0c8",
+    "projectileType": "bullet",
+    "damageType": "precision"
+  },
+  "mw_flamer": {
+    "name": "Flame Projector",
+    "damage": 13,
+    "movingDamage": 7,
+    "range": 92,
+    "stopRange": 115,
+    "fireRate": 2.4,
+    "projectileSpeed": 160,
+    "projectileColor": "#ff9346",
+    "projectileType": "flame",
+    "splashRadius": 20,
+    "damageType": "flame"
+  },
   "mw_tank_cannon": {
     "name": "Tank Cannon",
-    "damage": 36,
-    "movingDamage": 18,
+    "damage": 38,
+    "movingDamage": 19,
     "range": 225,
     "stopRange": 260,
     "fireRate": 0.55,
@@ -24,8 +74,34 @@
     "splashRadius": 24,
     "damageType": "cannon"
   },
-  "mw_launcher": {
-    "name": "Rocket Launcher",
+  "mw_heavy_cannon": {
+    "name": "Heavy Siege Cannon",
+    "damage": 56,
+    "movingDamage": 22,
+    "range": 255,
+    "stopRange": 295,
+    "fireRate": 0.38,
+    "projectileSpeed": 320,
+    "projectileColor": "#f6d08a",
+    "projectileType": "shell",
+    "splashRadius": 42,
+    "damageType": "cannon"
+  },
+  "mw_autocannon": {
+    "name": "Autocannon",
+    "damage": 16,
+    "movingDamage": 9,
+    "range": 205,
+    "stopRange": 235,
+    "fireRate": 1.75,
+    "projectileSpeed": 520,
+    "projectileColor": "#ffd27a",
+    "projectileType": "bullet",
+    "splashRadius": 8,
+    "damageType": "cannon"
+  },
+  "mw_rocket_pod": {
+    "name": "Rocket Pod",
     "damage": 28,
     "movingDamage": 15,
     "range": 245,
@@ -34,6 +110,33 @@
     "projectileSpeed": 280,
     "projectileColor": "#d9d4bd",
     "projectileType": "rocket",
+    "splashRadius": 28,
     "damageType": "rocket"
+  },
+  "mw_drone_rocket": {
+    "name": "Drone Rocket",
+    "damage": 18,
+    "movingDamage": 10,
+    "range": 210,
+    "stopRange": 245,
+    "fireRate": 1.15,
+    "projectileSpeed": 300,
+    "projectileColor": "#cfd7d8",
+    "projectileType": "rocket",
+    "splashRadius": 16,
+    "damageType": "rocket"
+  },
+  "mw_demolition_charge": {
+    "name": "Demolition Charge",
+    "damage": 70,
+    "movingDamage": 35,
+    "range": 56,
+    "stopRange": 72,
+    "fireRate": 0.45,
+    "projectileSpeed": 120,
+    "projectileColor": "#454b37",
+    "projectileType": "grenade",
+    "splashRadius": 78,
+    "damageType": "explosive"
   }
 }

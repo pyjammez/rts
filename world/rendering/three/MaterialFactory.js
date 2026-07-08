@@ -103,6 +103,77 @@
     return texture;
   }
 
+  function createTerrainDecalTexture({ THREE, documentRef, noise }, kind) {
+    return createCanvasTexture(THREE, documentRef, 128, 128, (ctx, canvas) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const center = canvas.width * 0.5;
+      if (kind === 'dryPatch') {
+        for (let layer = 0; layer < 5; layer++) {
+          const radiusX = 46 - layer * 5;
+          const radiusY = 24 - layer * 2;
+          const gradient = ctx.createRadialGradient(center - 10, center - 7, 4, center, center, Math.max(radiusX, radiusY));
+          gradient.addColorStop(0, `rgba(188, 163, 91, ${0.28 - layer * 0.03})`);
+          gradient.addColorStop(0.66, `rgba(139, 113, 59, ${0.16 - layer * 0.02})`);
+          gradient.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.ellipse(center, center + layer * 2, radiusX, radiusY, (layer - 2) * 0.24, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        return;
+      }
+      if (kind === 'rockPebbles') {
+        for (let pebble = 0; pebble < 28; pebble++) {
+          const x = 18 + unitNoise(noise, pebble * 17 + 5, pebble * 19 + 7) * 92;
+          const y = 18 + unitNoise(noise, pebble * 23 + 11, pebble * 29 + 13) * 92;
+          const radius = 2.3 + unitNoise(noise, pebble * 31 + 17, pebble * 37 + 19) * 5.6;
+          const shade = 84 + Math.floor(unitNoise(noise, pebble * 41 + 23, pebble * 43 + 29) * 72);
+          ctx.fillStyle = `rgba(${shade},${Math.max(72, shade - 4)},${Math.max(58, shade - 18)},0.72)`;
+          ctx.beginPath();
+          ctx.ellipse(x, y, radius * 1.25, radius, unitNoise(noise, pebble, 99) * Math.PI, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(255,244,210,0.16)';
+          ctx.beginPath();
+          ctx.ellipse(x - radius * 0.25, y - radius * 0.25, radius * 0.45, radius * 0.22, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        return;
+      }
+      if (kind === 'shrubPatch') {
+        for (let blob = 0; blob < 18; blob++) {
+          const angle = blob / 18 * Math.PI * 2;
+          const dist = 8 + unitNoise(noise, blob * 47 + 3, blob * 53 + 5) * 28;
+          const x = center + Math.cos(angle) * dist * 0.95;
+          const y = center + Math.sin(angle) * dist * 0.55;
+          const radius = 8 + unitNoise(noise, blob * 59 + 7, blob * 61 + 11) * 12;
+          const green = 83 + Math.floor(unitNoise(noise, blob * 67 + 13, blob * 71 + 17) * 52);
+          const gradient = ctx.createRadialGradient(x - radius * 0.35, y - radius * 0.35, 1, x, y, radius);
+          gradient.addColorStop(0, `rgba(${Math.max(58, green - 26)},${Math.min(145, green + 35)},48,0.62)`);
+          gradient.addColorStop(0.68, `rgba(${Math.max(42, green - 38)},${green},40,0.44)`);
+          gradient.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        return;
+      }
+      for (let blade = 0; blade < 180; blade++) {
+        const x = unitNoise(noise, blade * 79 + 3, blade * 83 + 7) * canvas.width;
+        const y = unitNoise(noise, blade * 89 + 11, blade * 97 + 13) * canvas.height;
+        const length = 8 + unitNoise(noise, blade * 101 + 17, blade * 103 + 19) * 24;
+        const lean = (unitNoise(noise, blade * 107 + 23, blade * 109 + 29) - 0.5) * 14;
+        const shade = 78 + Math.floor(unitNoise(noise, blade * 113 + 31, blade * 127 + 37) * 82);
+        ctx.strokeStyle = `rgba(${Math.max(28, shade - 50)},${Math.min(160, shade + 28)},${Math.max(36, shade - 46)},0.34)`;
+        ctx.lineWidth = 1.1 + unitNoise(noise, blade * 131 + 41, blade * 137 + 43) * 1.6;
+        ctx.beginPath();
+        ctx.moveTo(x, y + length * 0.42);
+        ctx.lineTo(x + lean, y - length * 0.58);
+        ctx.stroke();
+      }
+    }, 1, 1);
+  }
+
   function createFoliageTexture({ THREE, documentRef, noise, renderer }) {
     const texture = createCanvasTexture(THREE, documentRef, 256, 256, (ctx, canvas) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -200,6 +271,10 @@
     const courtyardMap = createCourtyardTexture(dependencies);
     const barkMap = createBarkTexture(dependencies);
     const grassDetailMap = createGrassDetailTexture(dependencies);
+    const terrainGrassClumpMap = createTerrainDecalTexture(dependencies, 'grassClump');
+    const terrainDryPatchMap = createTerrainDecalTexture(dependencies, 'dryPatch');
+    const terrainPebbleMap = createTerrainDecalTexture(dependencies, 'rockPebbles');
+    const terrainShrubMap = createTerrainDecalTexture(dependencies, 'shrubPatch');
     const softShadowMap = createSoftShadowTexture(dependencies);
     const foliageMap = createFoliageTexture(dependencies);
     const oakFoliageMap = new THREE.TextureLoader().load(foliageUrl);
@@ -235,9 +310,26 @@
       return material;
     }
 
+    function terrainDecalMaterial(map, opacity = 0.72) {
+      const material = new THREE.MeshBasicMaterial({
+        map,
+        transparent: true,
+        opacity,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        alphaTest: 0.035
+      });
+      material.userData = { terrainDecal: true };
+      return material;
+    }
+
     return {
       ground: new THREE.MeshStandardMaterial({ vertexColors: true, map: grassDetailMap, bumpMap: grassDetailMap, bumpScale: 0.018, roughness: 0.98, metalness: 0 }),
       groundDetail: grassDetailMap,
+      terrainGrassClump: terrainDecalMaterial(terrainGrassClumpMap, 0.72),
+      terrainDryPatch: terrainDecalMaterial(terrainDryPatchMap, 0.64),
+      terrainPebbles: terrainDecalMaterial(terrainPebbleMap, 0.78),
+      terrainShrubPatch: terrainDecalMaterial(terrainShrubMap, 0.78),
       water: new THREE.MeshPhysicalMaterial({ color: 0x3f86a8, roughness: 0.18, metalness: 0.02, transparent: true, opacity: 0.72, depthWrite: false, clearcoat: 0.55, clearcoatRoughness: 0.2 }),
       stone: new THREE.MeshStandardMaterial({ color: 0xd5cfbd, map: stoneMap, bumpMap: stoneBump, bumpScale: 0.075, roughness: 0.9, metalness: 0 }),
       stoneDark: new THREE.MeshStandardMaterial({ color: 0xaaa597, map: stoneMap, bumpMap: stoneBump, bumpScale: 0.08, roughness: 0.94 }),
@@ -295,7 +387,7 @@
     };
   }
 
-  const factory = Object.freeze({ create, createBarkTexture, createFoliageTexture, createGrassDetailTexture, createStoneTexture, createCourtyardTexture, unitNoise });
+  const factory = Object.freeze({ create, createBarkTexture, createFoliageTexture, createGrassDetailTexture, createTerrainDecalTexture, createStoneTexture, createCourtyardTexture, unitNoise });
   app.rendering.threeMaterials = factory;
   app.runtime?.registerService('three-materials', factory);
 })(globalThis);

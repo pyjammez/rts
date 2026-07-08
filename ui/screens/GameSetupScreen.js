@@ -1,31 +1,15 @@
-let activeSetupStep = 'map';
-
-function getModeStepSections(mode, step) {
+function getModeMapSetupSections(mode) {
   const sections = Array.isArray(mode.sections) ? mode.sections : [];
   const mapSections = sections.filter(sectionId => (SECTION_COLUMNS[sectionId] || 'players') === 'map');
-  const playerSections = sections.filter(sectionId => (SECTION_COLUMNS[sectionId] || 'players') !== 'map');
-
-  if (step === 'map') return mapSections.length ? mapSections : playerSections;
-  return playerSections.length ? playerSections : mapSections;
-}
-
-function modeHasPlayerSetup(mode) {
-  return getModeStepSections(mode, 'players').some(sectionId => (SECTION_COLUMNS[sectionId] || 'players') !== 'map');
+  return mapSections;
 }
 
 function modeHasMapSetup(mode) {
-  return getModeStepSections(mode, 'map').some(sectionId => (SECTION_COLUMNS[sectionId] || 'players') === 'map');
+  return getModeMapSetupSections(mode).length > 0;
 }
 
-function getVisibleSetupStep(mode) {
-  if (activeSetupStep === 'map' && !modeHasMapSetup(mode) && modeHasPlayerSetup(mode)) return 'players';
-  if (activeSetupStep === 'players' && !modeHasPlayerSetup(mode)) return 'map';
-  return activeSetupStep;
-}
-
-function getSetupStepTitle(mode, step) {
-  const suffix = step === 'map' ? 'Map Setup' : 'Player Settings';
-  return `${mode.name} - ${suffix}`;
+function getSetupStepTitle(mode) {
+  return `${mode.name} - Map Setup`;
 }
 
 function appendConfigColumn(columns, sectionsRoot, columnId, title) {
@@ -62,28 +46,7 @@ function appendConfigSection(column, sectionTitleText, fields) {
   column.appendChild(section);
 }
 
-function appendForcesSetup(columns, sectionsRoot) {
-  const availableColumn = appendConfigColumn(columns, sectionsRoot, 'available_units', 'Available Units');
-  const tuningColumn = appendConfigColumn(columns, sectionsRoot, 'unit_tuning', 'Unit Settings');
-  appendConfigSection(availableColumn, SECTION_TITLES.forces_available || 'Available Units', [
-    { key: 'unitCatalog', label: 'Available Units', type: 'unitCatalog' }
-  ]);
-  appendConfigSection(tuningColumn, SECTION_TITLES.forces_loadout || 'Unit Stats And Starting Counts', [
-    { key: 'unitLoadout', label: 'Hitpoints, Damage, Abilities, And Starting Count', type: 'unitLoadout' }
-  ]);
-}
-
 function continueFromSetup() {
-  const mode = getGameModeDefinition(mapConfig.modeId);
-  if (!mode.playable) return;
-
-  const step = getVisibleSetupStep(mode);
-  if (step === 'map' && modeHasPlayerSetup(mode)) {
-    activeSetupStep = 'players';
-    renderConfigPanel(mapConfig.modeId);
-    return;
-  }
-
   if (mapConfig.modeId === 'map_builder') {
     setPanelVisible(document.getElementById('configPanel'), false);
     setPanelVisible(document.getElementById('waitingRoomPanel'), false);
@@ -95,16 +58,6 @@ function continueFromSetup() {
 }
 
 function goBackFromSetup() {
-  const mode = getGameModeDefinition(mapConfig.modeId);
-  const step = getVisibleSetupStep(mode);
-  const hasMapSetup = modeHasMapSetup(mode);
-
-  if (step === 'players' && hasMapSetup) {
-    activeSetupStep = 'map';
-    renderConfigPanel(mapConfig.modeId);
-    return;
-  }
-
   setPanelVisible(document.getElementById('configPanel'), false);
   setPanelVisible(document.getElementById('waitingRoomPanel'), false);
   setPanelVisible(document.getElementById('modePanel'), true);
@@ -112,31 +65,23 @@ function goBackFromSetup() {
 
 function renderConfigPanel(modeId) {
   const mode = getGameModeDefinition(modeId);
-  const step = getVisibleSetupStep(mode);
   const title = document.getElementById('configTitle');
   const summary = document.getElementById('configSummary');
   const sectionsRoot = document.getElementById('configSections');
   const startButton = document.getElementById('startButton');
   const backToModes = document.getElementById('backToModes');
 
-  if (title) title.textContent = getSetupStepTitle(mode, step);
+  if (title) title.textContent = getSetupStepTitle(mode);
   if (summary) {
-    summary.textContent = step === 'map'
-      ? 'Choose the battlefield, terrain, resources, wildlife, and map objects before configuring players.'
-      : 'Choose the units, armies, defenses, and player-facing rules for this match.';
+    summary.textContent = 'Choose a saved map or generate one from size, landscape, and terrain criteria. Resources, wildlife, map objects, units, rosters, buildings, and rules come from the selected theme config files.';
   }
   if (sectionsRoot) {
     sectionsRoot.innerHTML = '';
     sectionsRoot.className = 'config-columns';
     const columns = {};
-    const visibleSections = getModeStepSections(mode, step);
+    const visibleSections = getModeMapSetupSections(mode);
 
     for (const sectionId of visibleSections) {
-      if (step === 'players' && sectionId === 'forces') {
-        appendForcesSetup(columns, sectionsRoot);
-        continue;
-      }
-
       const fields = SETTING_FIELDS[sectionId] || [];
       const columnId = SECTION_COLUMNS[sectionId] || 'players';
       const column = appendConfigColumn(columns, sectionsRoot, columnId);
@@ -145,23 +90,29 @@ function renderConfigPanel(modeId) {
   }
 
   if (startButton) {
-    startButton.textContent = step === 'map' && modeHasPlayerSetup(mode)
-      ? 'Next: Player Settings'
-      : mode.startLabel;
+    startButton.textContent = mode.startLabel;
     startButton.disabled = !mode.playable;
     startButton.title = mode.playable ? '' : 'This mode has setup controls now. Gameplay rules are the next implementation step.';
   }
 
   if (backToModes) {
-    backToModes.textContent = step === 'players' && modeHasMapSetup(mode) ? 'Back to Map Setup' : 'Back to Modes';
+    backToModes.textContent = 'Back to Modes';
   }
 }
 
 function openConfigForMode(modeId) {
   setSelectedModeId(modeId);
   mergeModeDefaults(modeId);
-  activeSetupStep = 'map';
   updateModeButtons();
+
+  const mode = getGameModeDefinition(modeId);
+  if (!modeHasMapSetup(mode)) {
+    setPanelVisible(document.getElementById('modePanel'), false);
+    setPanelVisible(document.getElementById('configPanel'), false);
+    renderWaitingRoom();
+    return;
+  }
+
   renderConfigPanel(modeId);
   setPanelVisible(document.getElementById('modePanel'), false);
   setPanelVisible(document.getElementById('configPanel'), true);

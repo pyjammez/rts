@@ -557,6 +557,22 @@ function randomSpotOnTeamHalf(team, movementOptions = {}) {
   const teams = getConfiguredTeams();
   const teamIndex = Math.max(0, teams.indexOf(team));
   const teamCount = Math.max(2, teams.length);
+  const generatedStart = typeof getGeneratedStartPoint === 'function'
+    ? getGeneratedStartPoint(teamIndex, teamCount, getActiveModeConfig())
+    : null;
+  if (generatedStart) {
+    for (let attempt = 0; attempt < 220; attempt++) {
+      const angle = simulationRandom() * Math.PI * 2;
+      const radius = tileSize * (2 + simulationRandom() * 8);
+      const x = generatedStart.x + Math.cos(angle) * radius;
+      const y = generatedStart.y + Math.sin(angle) * radius;
+      const tileX = Math.floor(x / tileSize);
+      const tileY = Math.floor(y / tileSize);
+      if (isWalkableTile(tileX, tileY, movementOptions)) {
+        return { x, y };
+      }
+    }
+  }
   const sliceWidth = mapWidth / teamCount;
   const minX = teamCount === 2
     ? (teamIndex === 0 ? 0 : mapWidth * 0.5)

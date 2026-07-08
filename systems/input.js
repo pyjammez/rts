@@ -190,7 +190,7 @@ canvas.addEventListener('mouseenter', () => {
 });
 
 canvas.addEventListener('mouseleave', event => {
-  if (event.relatedTarget?.closest?.('#bottomEdgeScrollZone')) return;
+  if (event.relatedTarget?.closest?.('#bottomEdgeScrollZone, #gameBottomEdgeScrollZone')) return;
   inputState.mouseInside = false;
 });
 
@@ -206,6 +206,9 @@ canvas.addEventListener('wheel', (e) => {
 
 canvas.addEventListener('mouseup', (e) => {
   selectionEnd = getMousePos(e);
+  inputState.mouseX = selectionEnd.x;
+  inputState.mouseY = selectionEnd.y;
+  inputState.mouseInside = true;
 
   if (
     e.button === 0 &&

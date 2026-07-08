@@ -65,6 +65,11 @@
     return { ...ensureTeam(team) };
   }
 
+  function set(team = 'neutral', bundle = {}) {
+    resourcesByTeam.set(String(team || 'neutral'), normalizeBundle(bundle));
+    return get(team);
+  }
+
   function add(team, type, amount) {
     const bundle = ensureTeam(team);
     const key = String(type || '');
@@ -111,6 +116,7 @@
     reset,
     ensureTeam,
     get,
+    set,
     add,
     canAfford,
     spend,

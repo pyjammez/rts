@@ -17,6 +17,330 @@
       addSelectionRing,
       entityElevation
     } = deps;
+    const spriteMaterials = new Map();
+
+    function clamp01(value) {
+      return Math.max(0, Math.min(1, Number(value) || 0));
+    }
+
+    function teamColor(team) {
+      if (team === 'red') return '#c74335';
+      if (team === 'blue') return '#2f66c4';
+      if (team === 'green') return '#3b8d4d';
+      if (team === 'yellow') return '#d8ad39';
+      if (team === 'purple') return '#7b55b7';
+      if (team === 'orange') return '#d6782d';
+      if (team === 'white') return '#d8ddd8';
+      if (team === 'black') return '#2b3037';
+      return '#5a7abf';
+    }
+
+    function createSpriteCanvas(width = 192, height = 224) {
+      const documentRef = root.document;
+      if (documentRef?.createElement) {
+        const canvas = documentRef.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        return canvas;
+      }
+      if (typeof root.OffscreenCanvas === 'function') return new root.OffscreenCanvas(width, height);
+      return null;
+    }
+
+    function configureCanvas(ctx) {
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.imageSmoothingEnabled = true;
+    }
+
+    function ellipse(ctx, x, y, rx, ry, fill, stroke = null, lineWidth = 2) {
+      ctx.beginPath();
+      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (stroke) {
+        ctx.lineWidth = lineWidth;
+        ctx.strokeStyle = stroke;
+        ctx.stroke();
+      }
+    }
+
+    function roundedRect(ctx, x, y, width, height, radius, fill, stroke = null) {
+      const r = Math.min(radius, width * 0.5, height * 0.5);
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + width - r, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+      ctx.lineTo(x + width, y + height - r);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+      ctx.lineTo(x + r, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+    }
+
+    function strokeLimb(ctx, x1, y1, x2, y2, color, width = 8) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    function drawSword(ctx, progress, color = '#c9d3d6') {
+      const swing = progress ? -0.8 + Math.sin(progress * Math.PI) * 1.45 : -0.2;
+      ctx.save();
+      ctx.translate(123, 112);
+      ctx.rotate(swing);
+      strokeLimb(ctx, 0, 0, 0, -58, color, 6);
+      strokeLimb(ctx, -13, -8, 13, -8, '#6d4a2d', 5);
+      ctx.restore();
+    }
+
+    function drawLongbow(ctx) {
+      ctx.strokeStyle = '#7b4a29';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(125, 64);
+      ctx.quadraticCurveTo(155, 106, 125, 150);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(235,225,190,0.72)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(125, 64);
+      ctx.lineTo(125, 150);
+      ctx.stroke();
+    }
+
+    function drawCrossbow(ctx) {
+      strokeLimb(ctx, 112, 112, 158, 112, '#8a5b31', 7);
+      strokeLimb(ctx, 135, 98, 135, 126, '#5b3822', 5);
+      strokeLimb(ctx, 122, 101, 148, 123, '#c7c2ad', 2);
+      strokeLimb(ctx, 148, 101, 122, 123, '#c7c2ad', 2);
+    }
+
+    function drawPistol(ctx) {
+      roundedRect(ctx, 118, 103, 44, 12, 4, '#2f3338', '#16191d');
+      roundedRect(ctx, 122, 114, 13, 25, 4, '#4b392c');
+    }
+
+    function drawGrenade(ctx) {
+      ellipse(ctx, 144, 104, 11, 13, '#4c6a3a', '#1f2c1c', 3);
+      roundedRect(ctx, 139, 87, 10, 13, 2, '#2d3329');
+    }
+
+    function drawWorkerTool(ctx, unit) {
+      const job = unit.workerJob;
+      if (!job || job.type !== 'gather') return;
+      const phase = clamp01(unit.workerGatherAnimation?.progress);
+      const swing = -0.9 + Math.sin(phase * Math.PI * 8) * 0.75;
+      ctx.save();
+      ctx.translate(123, 110);
+      ctx.rotate(swing);
+      strokeLimb(ctx, 0, 0, 0, -55, '#7b5130', 6);
+      if (job.resourceType === 'wood') {
+        strokeLimb(ctx, -16, -55, 16, -55, '#bfc6c2', 10);
+      } else {
+        strokeLimb(ctx, -22, -52, 22, -52, '#bec8c9', 6);
+      }
+      ctx.restore();
+    }
+
+    function drawHumanoid(ctx, unit, options = {}) {
+      const color = options.bodyColor || teamColor(unit.team);
+      const type = unit.model || unit.unitType || 'soldier';
+      const progress = unit.attackAnimationTime && unit.attackAnimationDuration
+        ? 1 - clamp01(unit.attackAnimationTime / unit.attackAnimationDuration)
+        : 0;
+      const stride = unit.hasActivePath?.() ? Math.sin((unit.spriteFrame || 0) * Math.PI * 0.5) * 8 : 0;
+      if (unit.mountType === 'sheep') drawAnimalShape(ctx, 'sheep', 98, 148, 1.08);
+      if (type === 'scout' && unit.mountType !== 'sheep') drawAnimalShape(ctx, 'horse', 98, 146, 1.18);
+      const riderOffset = unit.mountType === 'sheep' || type === 'scout' ? -46 : 0;
+      strokeLimb(ctx, 82, 155 + riderOffset, 76, 196 - stride + riderOffset, '#3a2b22', 8);
+      strokeLimb(ctx, 108, 155 + riderOffset, 114, 196 + stride + riderOffset, '#3a2b22', 8);
+      roundedRect(ctx, 74, 82 + riderOffset, 44, 78, 18, color, '#273044');
+      ellipse(ctx, 96, 66 + riderOffset, 18, 21, '#c89568', '#6b4630', 3);
+      strokeLimb(ctx, 76, 101 + riderOffset, 47, 131 + riderOffset, '#c89568', 8);
+      strokeLimb(ctx, 116, 101 + riderOffset, 139, 123 + riderOffset, '#c89568', 8);
+
+      if (type === 'king') {
+        roundedRect(ctx, 77, 37 + riderOffset, 38, 18, 3, '#d6a82f', '#876015');
+        for (let i = 0; i < 4; i++) {
+          ctx.beginPath();
+          ctx.moveTo(80 + i * 10, 39 + riderOffset);
+          ctx.lineTo(85 + i * 10, 25 + riderOffset);
+          ctx.lineTo(90 + i * 10, 39 + riderOffset);
+          ctx.closePath();
+          ctx.fillStyle = '#e6c35a';
+          ctx.fill();
+        }
+      } else if (type === 'knight') {
+        roundedRect(ctx, 69, 49 + riderOffset, 54, 24, 9, '#9da8ac', '#4d5960');
+        ellipse(ctx, 52, 122 + riderOffset, 17, 24, color, '#7b7d68', 4);
+      }
+
+      if (type === 'archer') drawLongbow(ctx);
+      else if (type === 'gunman') drawPistol(ctx);
+      else if (type === 'crossbowman') drawCrossbow(ctx);
+      else if (type === 'grenademan') drawGrenade(ctx);
+      else if (type === 'worker') drawWorkerTool(ctx, unit);
+      else drawSword(ctx, progress);
+
+      if (unit.inventoryItem) roundedRect(ctx, 31, 144, 30, 32, 6, '#8c6840', '#4a3422');
+    }
+
+    function drawRobot(ctx, unit) {
+      const color = teamColor(unit.team);
+      const heavy = unit.size >= 30 || unit.armorType === 'heavy';
+      roundedRect(ctx, heavy ? 50 : 58, 74, heavy ? 92 : 76, 88, 16, '#646d72', '#252b2f');
+      roundedRect(ctx, 70, 88, 52, 42, 10, color, '#283044');
+      ellipse(ctx, 96, 83, 31, 13, '#9aa6a9', '#343a3d', 3);
+      strokeLimb(ctx, 70, 158, 56, 202, '#464d50', 12);
+      strokeLimb(ctx, 122, 158, 137, 202, '#464d50', 12);
+      strokeLimb(ctx, 126, 112, 166, 94, '#333b42', 10);
+      ellipse(ctx, 172, 91, 13, 13, '#65d5ff', '#1a4859', 3);
+    }
+
+    function drawHoverTank(ctx, unit) {
+      const color = teamColor(unit.team);
+      roundedRect(ctx, 36, 98, 122, 54, 18, '#68757a', '#242a2d');
+      roundedRect(ctx, 69, 73, 56, 42, 14, color, '#262d36');
+      strokeLimb(ctx, 118, 91, 169, 77, '#3b4247', 11);
+      ellipse(ctx, 174, 76, 10, 10, '#e6f8ff', '#537b86', 3);
+      ellipse(ctx, 64, 157, 37, 10, 'rgba(101,213,255,0.55)');
+      ellipse(ctx, 128, 157, 37, 10, 'rgba(101,213,255,0.55)');
+    }
+
+    function drawAnimalShape(ctx, kind, x = 96, y = 145, scale = 1) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(scale, scale);
+      if (kind === 'duck') {
+        ellipse(ctx, -7, 13, 28, 18, '#d8b64b', '#6b5a1f', 3);
+        ellipse(ctx, 20, -2, 14, 13, '#d1a536', '#6b5a1f', 3);
+        roundedRect(ctx, 31, -3, 19, 8, 4, '#d9822d');
+      } else if (kind === 'horse') {
+        ellipse(ctx, -5, 17, 44, 22, '#7a5336', '#422b1d', 3);
+        ellipse(ctx, 35, -4, 18, 24, '#7a5336', '#422b1d', 3);
+        for (const lx of [-32, -12, 12, 31]) strokeLimb(ctx, lx, 30, lx + 2, 63, '#4b3123', 7);
+      } else {
+        ellipse(ctx, -6, 18, 42, 25, '#e7e0ce', '#6f6656', 3);
+        ellipse(ctx, 37, 7, 16, 17, '#4f4038', '#261e1a', 3);
+        for (const lx of [-30, -9, 10, 30]) strokeLimb(ctx, lx, 35, lx, 62, '#4f4038', 6);
+      }
+      ctx.restore();
+    }
+
+    function drawSkeleton(ctx, kind) {
+      strokeLimb(ctx, 52, 154, 137, 154, '#d9d0b5', 8);
+      for (let i = 0; i < 6; i++) strokeLimb(ctx, 63 + i * 12, 146, 58 + i * 12, 170, '#d9d0b5', 4);
+      ellipse(ctx, kind === 'duck' ? 118 : 139, 145, kind === 'duck' ? 10 : 15, kind === 'duck' ? 8 : 12, '#d9d0b5', '#8f856d', 2);
+    }
+
+    function drawUnitSprite(ctx, unit) {
+      configureCanvas(ctx);
+      const type = unit.model || unit.unitType || 'soldier';
+      const era = String(unit.era || '').toLowerCase();
+      if (unit.isDead) {
+        drawSkeleton(ctx, 'unit');
+        return;
+      }
+      if (type === 'robot_walker' || era === 'robotic') drawRobot(ctx, unit);
+      else if (type === 'hover_tank' || unit.armorType === 'heavy_vehicle') drawHoverTank(ctx, unit);
+      else if (type === 'balloon' || unit.movementType === 'air') {
+        ellipse(ctx, 96, 72, 46, 54, teamColor(unit.team), '#283044', 4);
+        roundedRect(ctx, 73, 137, 46, 30, 7, '#7a5436', '#3f2b1b');
+        strokeLimb(ctx, 69, 111, 76, 137, '#806044', 3);
+        strokeLimb(ctx, 123, 111, 116, 137, '#806044', 3);
+      } else {
+        const bodyColor = era === 'modern' ? '#c0aa7c' : era === 'sci_fi' ? '#8796a8' : teamColor(unit.team);
+        drawHumanoid(ctx, unit, { bodyColor });
+      }
+    }
+
+    function spriteKeyFor(unit) {
+      const type = unit.model || unit.unitType || 'soldier';
+      const attack = unit.attackAnimationTime && unit.attackAnimationDuration
+        ? Math.ceil((1 - clamp01(unit.attackAnimationTime / unit.attackAnimationDuration)) * 5)
+        : 0;
+      const gather = unit.workerGatherAnimation ? Math.ceil(clamp01(unit.workerGatherAnimation.progress) * 7) : 0;
+      return [
+        'unit',
+        type,
+        unit.team || 'neutral',
+        unit.era || '',
+        unit.movementType || '',
+        unit.armorType || '',
+        unit.mountType || '',
+        unit.isDead ? 'dead' : '',
+        unit.inventoryItem ? 'carrying' : '',
+        unit.workerJob?.resourceType || '',
+        attack,
+        gather
+      ].join('|');
+    }
+
+    function getSpriteMaterial(unit) {
+      const key = spriteKeyFor(unit);
+      if (spriteMaterials.has(key)) return spriteMaterials.get(key);
+      const canvas = createSpriteCanvas();
+      let material;
+      if (canvas?.getContext && THREE.CanvasTexture && THREE.SpriteMaterial) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawUnitSprite(ctx, unit || {});
+        const texture = new THREE.CanvasTexture(canvas);
+        if ('colorSpace' in texture && THREE.SRGBColorSpace) texture.colorSpace = THREE.SRGBColorSpace;
+        material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          alphaTest: 0.08,
+          depthWrite: false
+        });
+      } else {
+        material = { kind: 'unit-sprite-material', key, color: teamColor(unit?.team), userData: { billboardSprite: true } };
+      }
+      material.userData = { ...(material.userData || {}), billboardSprite: true, key };
+      spriteMaterials.set(key, material);
+      return material;
+    }
+
+    function createUnitBillboard(unit) {
+      const group = new THREE.Group();
+      const position = worldToScene(unit.x, unit.y);
+      const terrainElevation = typeof getWorldElevation === 'function' ? getWorldElevation(unit.x, unit.y) : 0;
+      const elevation = entityElevation.unitElevation({ unit, terrainElevation });
+      group.position.set(position.x, elevation, position.z);
+      addContactShadow(group, unit, terrainElevation, elevation);
+      if (unit.selected) addSelectionRing(group, 0.46);
+
+      const size = Math.max(14, Number(unit.size) || 18);
+      const isVehicle = unit.unitType === 'hover_tank' || unit.model === 'hover_tank' || unit.armorType === 'heavy_vehicle';
+      const isAir = unit.movementType === 'air';
+      const width = (isVehicle ? 1.18 : isAir ? 1.02 : 0.78) * (size / 18);
+      const height = (isVehicle ? 1.05 : isAir ? 1.42 : 1.36) * (size / 18);
+      const material = getSpriteMaterial(unit);
+      const sprite = THREE.Sprite ? new THREE.Sprite(material) : { kind: 'unit-sprite', material, position: {}, scale: {}, userData: {} };
+      if (sprite.center?.set) sprite.center.set(0.5, 0);
+      if (sprite.position?.set) sprite.position.set(0, 0.02, 0);
+      const heading = Number.isFinite(unit.heading) ? unit.heading : 0;
+      const facingLeft = Math.cos(heading) < 0;
+      if (sprite.scale?.set) sprite.scale.set(facingLeft ? -width : width, height, 1);
+      else sprite.scaleValue = { x: facingLeft ? -width : width, y: height, z: 1 };
+      sprite.renderOrder = 6;
+      sprite.userData = { ...(sprite.userData || {}), billboardSprite: true, entityType: 'unit' };
+      group.add(sprite);
+      return finishUnitModel(group);
+    }
 
     function getWorkerGatherAnimation(unit) {
       const job = unit.workerJob;
@@ -138,6 +462,7 @@
     }
 
     function create(unit) {
+      if (THREE.Sprite && THREE.SpriteMaterial && THREE.CanvasTexture) return createUnitBillboard(unit);
       const group = new THREE.Group();
       const position = worldToScene(unit.x, unit.y);
       const terrainElevation = typeof getWorldElevation === 'function' ? getWorldElevation(unit.x, unit.y) : 0;

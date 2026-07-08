@@ -113,6 +113,10 @@ function isVolcanicTerrain() {
   return (window.mapConfig || mapConfig || {}).mapStyle === 'volcanic_lava';
 }
 
+function currentTerrainVisualStyle(config = window.mapConfig || mapConfig || {}) {
+  return String(config.visualStyle || config.mapStyle || '').toLowerCase();
+}
+
 function isArabiaLikeMap(config = window.mapConfig || mapConfig || {}) {
   return config.mapStyle === 'eok_arabia';
 }
@@ -214,10 +218,59 @@ function getNavigationService() {
 }
 
 function mapSizeDimensions(sizeId) {
+  if (sizeId === '1v1') return { rows: 68, columns: 120 };
+  if (sizeId === '2v2') return { rows: 78, columns: 120 };
+  if (sizeId === '3v3') return { rows: 80, columns: 120 };
+  if (sizeId === '4v4') return { rows: 80, columns: 120 };
   if (sizeId === 'default_large') return { rows: 68, columns: 120 };
   if (sizeId === 'small') return { rows: 26, columns: 44 };
   if (sizeId === 'large') return { rows: 46, columns: 82 };
   return { rows: 34, columns: 60 };
+}
+
+function generatedStartRatios(sizeId = '1v1') {
+  const starts = {
+    '1v1': [[0.18, 0.5], [0.82, 0.5]],
+    '2v2': [[0.18, 0.28], [0.82, 0.72], [0.18, 0.72], [0.82, 0.28]],
+    '3v3': [[0.16, 0.25], [0.84, 0.75], [0.16, 0.75], [0.84, 0.25], [0.5, 0.18], [0.5, 0.82]],
+    '4v4': [[0.14, 0.22], [0.86, 0.78], [0.14, 0.78], [0.86, 0.22], [0.5, 0.14], [0.5, 0.86], [0.24, 0.5], [0.76, 0.5]]
+  };
+  return starts[sizeId] || starts['1v1'];
+}
+
+function generatedStartRatio(teamIndex = 0, teamCount = 2, config = window.mapConfig || mapConfig || {}) {
+  const slots = generatedStartRatios(config.generatedMapSize || config.mapSize || '1v1');
+  const count = Math.max(1, Math.floor(Number(teamCount) || 1));
+  if (count >= slots.length) return slots[(teamIndex + MAP_SEED) % slots.length];
+  if (count === 2 && slots.length >= 4) {
+    const offset = MAP_SEED % slots.length;
+    const pair = [offset, (offset + Math.floor(slots.length / 2)) % slots.length];
+    return slots[pair[teamIndex % 2]];
+  }
+  const step = slots.length / count;
+  const offset = MAP_SEED % slots.length;
+  return slots[Math.floor(offset + teamIndex * step) % slots.length];
+}
+
+function shouldUseGeneratedStartRatios(config = window.mapConfig || mapConfig || {}) {
+  if (config.loadedMap) return false;
+  if (config.modeId === 'unit_comparison' || config.modeId === 'map_builder') return false;
+  if (config.generatedMapSize) return true;
+  if (['1v1', '2v2', '3v3', '4v4', 'default_large'].includes(config.mapSize)) return true;
+  return config.modeId === 'versus';
+}
+
+function getTeamStartRatio(teamIndex = 0, teamCount = 2, config = window.mapConfig || mapConfig || {}) {
+  if (isArabiaLikeMap(config)) return arabiaStartRatios(teamIndex, teamCount);
+  if (shouldUseGeneratedStartRatios(config)) return generatedStartRatio(teamIndex, teamCount, config);
+  return null;
+}
+
+function getGeneratedStartPoint(teamIndex = 0, teamCount = 2, config = window.mapConfig || mapConfig || {}) {
+  const ratio = getTeamStartRatio(teamIndex, teamCount, config);
+  if (!ratio) return null;
+  const [rx, ry] = ratio;
+  return { x: rx * getMapWidthPx(), y: ry * getMapHeightPx(), ratio: [rx, ry] };
 }
 
 function configureMapDimensions(config = window.mapConfig || mapConfig || {}) {
@@ -237,6 +290,128 @@ function computeTerrainThresholds() {
     waterLevel: mapConfig.waterLevel,
     seed: MAP_SEED
   });
+}
+
+function applyGeneratedLandscapeLayout() {
+  const landscape = String(mapConfig.generatedLandscape || '').toLowerCase();
+  if (!landscape || mapConfig.loadedMap || isArabiaLikeMap()) return;
+
+  const paintDisc = (centerX, centerY, radius, terrainType, decorationType = null, heightType = null) => {
+    for (let y = Math.max(1, centerY - radius); y <= Math.min(MAP_ROWS - 2, centerY + radius); y++) {
+      for (let x = Math.max(1, centerX - radius); x <= Math.min(MAP_COLS - 2, centerX + radius); x++) {
+        const dist = Math.hypot(x - centerX, y - centerY);
+        if (dist > radius * (0.78 + hashNoise(x + centerX, y + centerY) * 0.28)) continue;
+        if (terrainType !== null) terrainData[y][x] = terrainType;
+        if (decorationType !== null) decorationData[y][x] = decorationType;
+        if (heightType !== null) heightData[y][x] = heightType;
+      }
+    }
+  };
+
+  const paintOvalLake = (centerX, centerY, radiusX, radiusY, rotation = 0) => {
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    const reach = Math.ceil(Math.max(radiusX, radiusY) * 1.22);
+    for (let y = Math.max(1, centerY - reach); y <= Math.min(MAP_ROWS - 2, centerY + reach); y++) {
+      for (let x = Math.max(1, centerX - reach); x <= Math.min(MAP_COLS - 2, centerX + reach); x++) {
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const rx = (dx * cos + dy * sin) / Math.max(1, radiusX);
+        const ry = (-dx * sin + dy * cos) / Math.max(1, radiusY);
+        const normalized = rx * rx + ry * ry;
+        const edgeNoise = (smoothValueNoise(x + centerX * 3, y + centerY * 5, 5) - 0.5) * 0.16;
+        if (normalized <= 1 + edgeNoise) {
+          terrainData[y][x] = TERRAIN.WATER;
+        } else if (normalized <= 1.22 + edgeNoise && terrainData[y][x] !== TERRAIN.WATER) {
+          terrainData[y][x] = TERRAIN.SAND;
+        }
+      }
+    }
+  };
+
+  if (landscape === 'ocean') {
+    const shore = Math.max(4, Math.floor(Math.min(MAP_ROWS, MAP_COLS) * 0.1));
+    for (let y = 0; y < MAP_ROWS; y++) {
+      for (let x = 0; x < MAP_COLS; x++) {
+        const edgeDist = Math.min(x, y, MAP_COLS - 1 - x, MAP_ROWS - 1 - y);
+        if (edgeDist < shore * (0.65 + hashNoise(x + 101, y + 303) * 0.7)) terrainData[y][x] = TERRAIN.WATER;
+      }
+    }
+  }
+
+  if (landscape === 'lakes' || landscape === 'swamp') {
+    const lakes = landscape === 'swamp' ? 8 : 5;
+    for (let i = 0; i < lakes; i++) {
+      const radius = Math.max(4, Math.floor(Math.min(MAP_ROWS, MAP_COLS) * (0.06 + hashNoise(i + 91, MAP_SEED + 7) * 0.05)));
+      paintOvalLake(
+        Math.floor((0.18 + hashNoise(i + 17, MAP_SEED + 41) * 0.64) * MAP_COLS),
+        Math.floor((0.18 + hashNoise(i + 53, MAP_SEED + 79) * 0.64) * MAP_ROWS),
+        radius * (1.15 + hashNoise(i + 137, MAP_SEED + 19) * 0.65),
+        radius * (0.72 + hashNoise(i + 173, MAP_SEED + 23) * 0.46),
+        hashNoise(i + 211, MAP_SEED + 31) * Math.PI
+      );
+    }
+  }
+
+  if (landscape === 'hilly' || landscape === 'cliffs') {
+    const ridges = landscape === 'cliffs' ? 7 : 5;
+    for (let i = 0; i < ridges; i++) {
+      const cx = Math.floor((0.12 + hashNoise(i + 211, MAP_SEED + 17) * 0.76) * MAP_COLS);
+      const cy = Math.floor((0.12 + hashNoise(i + 419, MAP_SEED + 23) * 0.76) * MAP_ROWS);
+      const radius = Math.max(5, Math.floor(Math.min(MAP_ROWS, MAP_COLS) * (landscape === 'cliffs' ? 0.075 : 0.095)));
+      paintDisc(cx, cy, radius, null, landscape === 'cliffs' ? DECOR.CLIFF : DECOR.HILL, HEIGHT.HIGH);
+    }
+  }
+}
+
+function getMostCommonNeighborTerrain(x, y, fallback = TERRAIN.GRASS) {
+  const counts = new Map();
+  for (let yy = y - 1; yy <= y + 1; yy++) {
+    for (let xx = x - 1; xx <= x + 1; xx++) {
+      if (xx === x && yy === y) continue;
+      if (!isInsideMap(xx, yy)) continue;
+      const terrainType = terrainData[yy][xx];
+      if (terrainType === TERRAIN.WATER) continue;
+      counts.set(terrainType, (counts.get(terrainType) || 0) + 1);
+    }
+  }
+  let best = fallback;
+  let bestCount = -1;
+  for (const [terrainType, count] of counts.entries()) {
+    if (count > bestCount) {
+      best = terrainType;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function smoothWaterBodies(iterations = 2) {
+  if (!terrainData.length || mapConfig.loadedMap) return;
+  for (let pass = 0; pass < iterations; pass++) {
+    const next = terrainData.map(row => [...row]);
+    for (let y = 1; y < MAP_ROWS - 1; y++) {
+      for (let x = 1; x < MAP_COLS - 1; x++) {
+        let waterNeighbors = 0;
+        let cardinalWater = 0;
+        for (let yy = y - 1; yy <= y + 1; yy++) {
+          for (let xx = x - 1; xx <= x + 1; xx++) {
+            if (xx === x && yy === y) continue;
+            if (terrainData[yy][xx] !== TERRAIN.WATER) continue;
+            waterNeighbors++;
+            if (Math.abs(xx - x) + Math.abs(yy - y) === 1) cardinalWater++;
+          }
+        }
+        const isWater = terrainData[y][x] === TERRAIN.WATER;
+        if (isWater && (waterNeighbors <= 2 || cardinalWater <= 1)) {
+          next[y][x] = getMostCommonNeighborTerrain(x, y, TERRAIN.SAND);
+        } else if (!isWater && (waterNeighbors >= 6 || (waterNeighbors >= 5 && cardinalWater >= 3))) {
+          next[y][x] = TERRAIN.WATER;
+        }
+      }
+    }
+    terrainData = replaceWorldCollection('terrain', next);
+  }
 }
 
 function applyArabiaTerrainLayout() {
@@ -371,7 +546,9 @@ function regenerateMapData() {
     Array.from({ length: MAP_COLS }, () => HEIGHT.GROUND)
   ));
 
+  applyGeneratedLandscapeLayout();
   applyArabiaTerrainLayout();
+  smoothWaterBodies();
 
   // Step 3: Collect candidate tiles
   const treeCandidates = [];  // trees go on grass only
@@ -617,6 +794,8 @@ function seedGoldMines() {
 }
 
 function terrainBaseColor(terrainType, shade) {
+  const style = currentTerrainVisualStyle();
+
   if (isVolcanicTerrain()) {
     if (terrainType === TERRAIN.WATER) {
       return `rgb(${Math.round(224 + shade * 20)}, ${Math.round(68 + shade * 18)}, ${Math.round(18 + shade * 8)})`;
@@ -631,6 +810,71 @@ function terrainBaseColor(terrainType, shade) {
     }
 
     return `rgb(${Math.round(58 + shade * 22)}, ${Math.round(60 + shade * 20)}, ${Math.round(58 + shade * 18)})`;
+  }
+
+  if (style === 'muddy_badlands') {
+    if (terrainType === TERRAIN.WATER) {
+      return `rgb(${Math.round(61 + shade * 12)}, ${Math.round(70 + shade * 10)}, ${Math.round(58 + shade * 8)})`;
+    }
+    if (terrainType === TERRAIN.SAND) {
+      return `rgb(${Math.round(126 + shade * 18)}, ${Math.round(103 + shade * 13)}, ${Math.round(74 + shade * 10)})`;
+    }
+    if (terrainType === TERRAIN.DIRT) {
+      return `rgb(${Math.round(77 + shade * 15)}, ${Math.round(61 + shade * 11)}, ${Math.round(47 + shade * 9)})`;
+    }
+    return `rgb(${Math.round(96 + shade * 18)}, ${Math.round(84 + shade * 14)}, ${Math.round(65 + shade * 10)})`;
+  }
+
+  if (style === 'industrial_desert' || style === 'desert_raid') {
+    if (terrainType === TERRAIN.WATER) {
+      return `rgb(${Math.round(87 + shade * 10)}, ${Math.round(110 + shade * 12)}, ${Math.round(106 + shade * 10)})`;
+    }
+    if (terrainType === TERRAIN.SAND) {
+      return `rgb(${Math.round(199 + shade * 20)}, ${Math.round(164 + shade * 17)}, ${Math.round(96 + shade * 11)})`;
+    }
+    if (terrainType === TERRAIN.DIRT) {
+      return `rgb(${Math.round(137 + shade * 18)}, ${Math.round(102 + shade * 13)}, ${Math.round(61 + shade * 9)})`;
+    }
+    return `rgb(${Math.round(167 + shade * 20)}, ${Math.round(145 + shade * 16)}, ${Math.round(84 + shade * 11)})`;
+  }
+
+  if (style === 'metal_wasteland') {
+    if (terrainType === TERRAIN.WATER) {
+      return `rgb(${Math.round(57 + shade * 12)}, ${Math.round(93 + shade * 16)}, ${Math.round(104 + shade * 18)})`;
+    }
+    if (terrainType === TERRAIN.SAND) {
+      return `rgb(${Math.round(99 + shade * 16)}, ${Math.round(104 + shade * 16)}, ${Math.round(105 + shade * 15)})`;
+    }
+    if (terrainType === TERRAIN.DIRT) {
+      return `rgb(${Math.round(61 + shade * 12)}, ${Math.round(66 + shade * 12)}, ${Math.round(70 + shade * 12)})`;
+    }
+    return `rgb(${Math.round(79 + shade * 16)}, ${Math.round(88 + shade * 16)}, ${Math.round(91 + shade * 16)})`;
+  }
+
+  if (style === 'fantasy_forest') {
+    if (terrainType === TERRAIN.WATER) {
+      return `rgb(${Math.round(48 + shade * 12)}, ${Math.round(116 + shade * 22)}, ${Math.round(126 + shade * 20)})`;
+    }
+    if (terrainType === TERRAIN.SAND) {
+      return `rgb(${Math.round(166 + shade * 18)}, ${Math.round(154 + shade * 15)}, ${Math.round(91 + shade * 9)})`;
+    }
+    if (terrainType === TERRAIN.DIRT) {
+      return `rgb(${Math.round(92 + shade * 16)}, ${Math.round(76 + shade * 12)}, ${Math.round(43 + shade * 8)})`;
+    }
+    return `rgb(${Math.round(49 + shade * 21)}, ${Math.round(127 + shade * 35)}, ${Math.round(50 + shade * 20)})`;
+  }
+
+  if (style === 'temperate_kingdom') {
+    if (terrainType === TERRAIN.WATER) {
+      return `rgb(${Math.round(60 + shade * 12)}, ${Math.round(128 + shade * 22)}, ${Math.round(151 + shade * 22)})`;
+    }
+    if (terrainType === TERRAIN.SAND) {
+      return `rgb(${Math.round(190 + shade * 19)}, ${Math.round(174 + shade * 16)}, ${Math.round(111 + shade * 11)})`;
+    }
+    if (terrainType === TERRAIN.DIRT) {
+      return `rgb(${Math.round(112 + shade * 18)}, ${Math.round(88 + shade * 13)}, ${Math.round(52 + shade * 9)})`;
+    }
+    return `rgb(${Math.round(65 + shade * 24)}, ${Math.round(139 + shade * 34)}, ${Math.round(61 + shade * 22)})`;
   }
 
   if (terrainType === TERRAIN.WATER) {
@@ -709,6 +953,19 @@ function buildTerrainRenderCache() {
       const cellY = Math.floor(y / cellSize);
       terrainVisualTypes[cellY * terrainVisualCols + cellX] = terrainType;
       drawCachedTerrainCell(cacheCtx, terrainType, x, y, cellSize);
+    }
+  }
+
+  for (let y = 0; y < terrainData.length; y++) {
+    for (let x = 0; x < terrainData[y].length; x++) {
+      OpenRTS.rendering.canvas.terrainPainter.drawTransitions(cacheCtx, x, y, terrainData[y][x], x * tileSize, y * tileSize, {
+        terrain: TERRAIN,
+        terrainData,
+        tileSize,
+        isInsideMap,
+        noise: hashNoise,
+        volcanic: isVolcanicTerrain()
+      });
     }
   }
 
@@ -1447,11 +1704,12 @@ function findNearestBuildableSite(type, worldX, worldY, radiusTiles = 8, options
   });
 }
 
-function buildBuildingAtTile(type, team, tileX, tileY) {
-  if (!canPlaceBuildingAt(type, tileX, tileY)) return null;
-  prepareBuildingPad(type, tileX, tileY);
-  if (!canPlaceBuildingAt(type, tileX, tileY)) return null;
-  return createBuilding(type, team, tileX, tileY);
+function buildBuildingAtTile(type, team, tileX, tileY, options = {}) {
+  const stats = options.stats || getBuildingStats(type);
+  if (!canPlaceBuildingAt(type, tileX, tileY, { stats })) return null;
+  prepareBuildingPad(type, tileX, tileY, { stats });
+  if (!canPlaceBuildingAt(type, tileX, tileY, { stats })) return null;
+  return createBuilding(type, team, tileX, tileY, { stats, definitionType: type });
 }
 
 function prepareBuildingPad(type, tileX, tileY, options = {}) {
@@ -1518,14 +1776,21 @@ function placeTeamBuildings(config = window.mapConfig || {}) {
   for (let teamIndex = 0; teamIndex < teams.length; teamIndex++) {
     const team = teams[teamIndex];
     const sliceCenter = (teamIndex + 0.5) / Math.max(2, teams.length);
-    const defaultHomeRatios = isArabiaLikeMap(config)
-      ? [arabiaStartRatios(teamIndex, teams.length)]
+    const generatedRatio = getTeamStartRatio(teamIndex, teams.length, config);
+    const defaultHomeRatios = generatedRatio
+      ? [generatedRatio]
       : [[sliceCenter, teamIndex % 2 === 0 ? 0.42 : 0.58]];
-    const defaultTowerRatios = [[sliceCenter, teamIndex % 2 === 0 ? 0.32 : 0.68]];
+    const defaultTowerRatios = generatedRatio
+      ? [
+        [Math.max(0.08, Math.min(0.92, generatedRatio[0] + (generatedRatio[0] < 0.5 ? 0.09 : -0.09))), generatedRatio[1]],
+        [generatedRatio[0], Math.max(0.08, Math.min(0.92, generatedRatio[1] + (generatedRatio[1] < 0.5 ? 0.09 : -0.09)))]
+      ]
+      : [[sliceCenter, teamIndex % 2 === 0 ? 0.32 : 0.68]];
 
     for (let i = 0; i < homesPerTeam; i++) {
       const spawnDefinition = getBuildingSpawnDefinition(BUILDING_TYPES.HOME, team, config);
-      const ratios = (homeRatios[team] || defaultHomeRatios)[i] || (homeRatios[team] || defaultHomeRatios).at(-1);
+      const homeRatioSet = generatedRatio ? defaultHomeRatios : (homeRatios[team] || defaultHomeRatios);
+      const ratios = homeRatioSet[i] || homeRatioSet.at(-1);
       const site = findBuildingSite(team, BUILDING_TYPES.HOME, ratios[0], ratios[1], teamIndex, teams.length, {
         stats: spawnDefinition.stats
       });
@@ -1533,7 +1798,8 @@ function placeTeamBuildings(config = window.mapConfig || {}) {
     }
 
     for (let i = 0; i < towersPerTeam; i++) {
-      const ratios = (towerRatios[team] || defaultTowerRatios)[i] || (towerRatios[team] || defaultTowerRatios).at(-1);
+      const towerRatioSet = generatedRatio ? defaultTowerRatios : (towerRatios[team] || defaultTowerRatios);
+      const ratios = towerRatioSet[i] || towerRatioSet.at(-1);
       const site = findBuildingSite(team, BUILDING_TYPES.TOWER, ratios[0], ratios[1], teamIndex, teams.length);
       if (site) createBuilding(BUILDING_TYPES.TOWER, team, site.x, site.y);
     }
@@ -1558,6 +1824,7 @@ function clearBuildingSelection() {
 
 function selectBuilding(building) {
   clearBuildingSelection();
+  if (building) building.selected = true;
   OpenRTS.world.selection.channel('buildings').select(building);
 }
 
@@ -2001,7 +2268,9 @@ function drawTransitions(x, y, terrainType, drawX, drawY) {
     terrain: TERRAIN,
     terrainData,
     tileSize,
-    isInsideMap
+    isInsideMap,
+    noise: hashNoise,
+    volcanic: isVolcanicTerrain()
   });
 }
 
@@ -2635,6 +2904,128 @@ function drawGoldMine(mine) {
   ctx.restore();
 }
 
+function createBuildingGradient(x0, y0, x1, y1, stops) {
+  const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+  for (const [offset, color] of stops) gradient.addColorStop(offset, color);
+  return gradient;
+}
+
+function drawRoundedRectPath(x, y, w, h, radius) {
+  const r = Math.max(0, Math.min(radius, Math.abs(w) * 0.5, Math.abs(h) * 0.5));
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawBuildingShadow(w, h, alpha = 0.22) {
+  ctx.fillStyle = `rgba(22, 12, 5, ${alpha})`;
+  ctx.beginPath();
+  ctx.ellipse(0, h * 0.36, w * 0.56, h * 0.18, -0.03, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawStoneSurface(x, y, w, h, seedX, seedY, palette = {}) {
+  const light = palette.light || '#b6b3a3';
+  const mid = palette.mid || '#87897f';
+  const dark = palette.dark || '#5f625b';
+  const stroke = palette.stroke || 'rgba(38, 40, 36, 0.46)';
+
+  ctx.fillStyle = createBuildingGradient(x, y, x + w * 0.25, y + h, [
+    [0, light],
+    [0.42, mid],
+    [1, dark]
+  ]);
+  drawRoundedRectPath(x, y, w, h, Math.min(tileSize * 0.16, w * 0.12, h * 0.12));
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = Math.max(1, tileSize * 0.045);
+  ctx.stroke();
+
+  const course = Math.max(8, tileSize * 0.2);
+  ctx.lineWidth = 1;
+  for (let row = 0; row < Math.max(1, Math.floor(h / course)); row++) {
+    const yy = y + row * course + course * 0.78;
+    ctx.strokeStyle = row % 2 ? 'rgba(50, 48, 42, 0.24)' : 'rgba(240, 235, 215, 0.14)';
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.06, yy);
+    ctx.lineTo(x + w * 0.94, yy + (row % 2 ? 1 : -1));
+    ctx.stroke();
+
+    const stones = Math.max(2, Math.floor(w / (tileSize * 0.52)));
+    for (let col = 0; col < stones; col++) {
+      const n = hashNoise(seedX + row * 17 + col * 5, seedY + row * 7);
+      const sx = x + (col + 0.18 + n * 0.16) * (w / stones);
+      const sy = y + row * course + course * 0.15;
+      const sw = Math.max(tileSize * 0.18, (w / stones) * (0.42 + n * 0.16));
+      const sh = course * (0.38 + hashNoise(seedX + col, seedY + row * 13) * 0.16);
+      ctx.fillStyle = n > 0.66 ? 'rgba(255,255,240,0.08)' : 'rgba(30,28,24,0.08)';
+      drawRoundedRectPath(sx, sy, sw, sh, 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawWoodPlanks(x, y, w, h, seedX, seedY) {
+  ctx.fillStyle = createBuildingGradient(x, y, x + w * 0.35, y + h, [
+    [0, '#a07449'],
+    [0.58, '#7f5632'],
+    [1, '#54321d']
+  ]);
+  drawRoundedRectPath(x, y, w, h, tileSize * 0.08);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(52, 30, 16, 0.65)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  const planks = Math.max(4, Math.floor(w / (tileSize * 0.34)));
+  for (let i = 1; i < planks; i++) {
+    const px = x + (w * i) / planks + (hashNoise(seedX + i, seedY) - 0.5) * 3;
+    ctx.strokeStyle = i % 2 ? 'rgba(64, 37, 20, 0.38)' : 'rgba(228, 176, 110, 0.16)';
+    ctx.beginPath();
+    ctx.moveTo(px, y + h * 0.08);
+    ctx.lineTo(px + Math.sin(i) * 2, y + h * 0.92);
+    ctx.stroke();
+  }
+}
+
+function drawThatchRoof(w, h, raised = false) {
+  const roofTop = raised ? -h * 0.64 : -h * 0.56;
+  const roofBase = -h * 0.14;
+  ctx.fillStyle = createBuildingGradient(0, roofTop, 0, roofBase, [
+    [0, '#d5b66c'],
+    [0.5, '#9b7137'],
+    [1, '#624326']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.54, roofBase);
+  ctx.quadraticCurveTo(-w * 0.24, roofTop + h * 0.03, 0, roofTop);
+  ctx.quadraticCurveTo(w * 0.25, roofTop + h * 0.03, w * 0.54, roofBase);
+  ctx.quadraticCurveTo(0, roofBase + h * 0.08, -w * 0.54, roofBase);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(55, 34, 18, 0.62)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255, 232, 160, 0.22)';
+  ctx.lineWidth = 1;
+  for (let i = -5; i <= 5; i++) {
+    const sx = i * w * 0.085;
+    ctx.beginPath();
+    ctx.moveTo(sx * 0.32, roofTop + h * 0.03);
+    ctx.quadraticCurveTo(sx * 0.75, roofTop + h * 0.2, sx, roofBase + h * 0.02);
+    ctx.stroke();
+  }
+}
+
 function drawNeutralHouse(house) {
   const w = house.width * tileSize;
   const h = house.height * tileSize;
@@ -2642,47 +3033,59 @@ function drawNeutralHouse(house) {
   ctx.save();
   ctx.translate(house.x, house.y);
 
-  ctx.fillStyle = 'rgba(20, 10, 4, 0.28)';
-  ctx.beginPath();
-  ctx.ellipse(0, h * 0.36, w * 0.54, h * 0.18, 0, 0, Math.PI * 2);
-  ctx.fill();
+  drawBuildingShadow(w, h, house.burning ? 0.34 : 0.24);
 
   if (house.isWreck) {
-    ctx.fillStyle = '#2c2520';
-    ctx.fillRect(-w * 0.42, -h * 0.2, w * 0.84, h * 0.48);
-    ctx.strokeStyle = '#16110d';
+    drawWoodPlanks(-w * 0.42, -h * 0.14, w * 0.84, h * 0.4, house.tileX, house.tileY);
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#26201b';
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.48, -h * 0.22);
+    ctx.lineTo(-w * 0.08, -h * 0.42);
+    ctx.lineTo(w * 0.12, -h * 0.2);
+    ctx.lineTo(w * 0.44, -h * 0.34);
+    ctx.lineTo(w * 0.32, -h * 0.08);
+    ctx.lineTo(-w * 0.36, h * 0.02);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#18110c';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.moveTo(-w * 0.38, -h * 0.18);
-    ctx.lineTo(w * 0.34, h * 0.22);
-    ctx.moveTo(w * 0.36, -h * 0.2);
-    ctx.lineTo(-w * 0.3, h * 0.24);
+    ctx.moveTo(-w * 0.4, -h * 0.2);
+    ctx.lineTo(w * 0.34, h * 0.2);
+    ctx.moveTo(w * 0.36, -h * 0.28);
+    ctx.lineTo(-w * 0.34, h * 0.2);
     ctx.stroke();
     ctx.restore();
     return;
   }
 
-  ctx.fillStyle = occupied ? '#8b6540' : '#9d7145';
-  ctx.strokeStyle = '#3b2414';
-  ctx.lineWidth = 2;
-  ctx.fillRect(-w * 0.4, -h * 0.18, w * 0.8, h * 0.5);
-  ctx.strokeRect(-w * 0.4, -h * 0.18, w * 0.8, h * 0.5);
+  drawWoodPlanks(-w * 0.38, -h * 0.16, w * 0.76, h * 0.48, house.tileX, house.tileY);
 
-  ctx.fillStyle = '#3f2717';
-  ctx.fillRect(-w * 0.08, h * 0.06, w * 0.16, h * 0.26);
+  ctx.fillStyle = '#2d1a10';
+  drawRoundedRectPath(-w * 0.085, h * 0.04, w * 0.17, h * 0.28, tileSize * 0.04);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(217, 159, 83, 0.35)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
   if (!occupied) {
-    ctx.fillStyle = '#624128';
-    ctx.beginPath();
-    ctx.moveTo(-w * 0.52, -h * 0.16);
-    ctx.lineTo(0, -h * 0.56);
-    ctx.lineTo(w * 0.52, -h * 0.16);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+    drawThatchRoof(w, h);
   } else {
-    ctx.fillStyle = 'rgba(40, 22, 10, 0.35)';
-    ctx.fillRect(-w * 0.28, -h * 0.1, w * 0.56, h * 0.3);
+    ctx.fillStyle = 'rgba(28, 17, 10, 0.58)';
+    drawRoundedRectPath(-w * 0.31, -h * 0.1, w * 0.62, h * 0.26, tileSize * 0.05);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(184, 143, 88, 0.32)';
+    ctx.fillRect(-w * 0.22, -h * 0.02, w * 0.44, h * 0.035);
+  }
+
+  ctx.fillStyle = '#1b120b';
+  for (const wx of [-w * 0.24, w * 0.24]) {
+    drawRoundedRectPath(wx - w * 0.045, -h * 0.03, w * 0.09, h * 0.1, 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(245, 198, 109, 0.42)';
+    ctx.stroke();
   }
 
   if (house.burning) {
@@ -2807,7 +3210,9 @@ function drawBuilding(building, layer = 'full') {
   }
 
   const isTowerModel = building.type === BUILDING_TYPES.TOWER || building.model === 'arrow_tower' || /tower/i.test(String(building.type || ''));
-  if (isTowerModel) {
+  if (isStarSiegeBuilding(building)) {
+    drawStarSiegeBuilding(building, layer);
+  } else if (isTowerModel) {
     drawTowerBuilding(building);
   } else {
     drawHomeBuilding(building, layer);
@@ -2820,6 +3225,515 @@ function drawBuilding(building, layer = 'full') {
 
 function getTeamAccent(team) {
   return typeof getTeamColor === 'function' ? getTeamColor(team) : (team === 'red' ? '#b63b32' : '#2f66b7');
+}
+
+function isStarSiegeBuilding(building) {
+  return /^ss_/.test(String(building?.definitionType || building?.model || ''));
+}
+
+function getStarSiegeStyle(building) {
+  const id = String(building?.definitionType || building?.model || '');
+  if (id.includes('alien')) {
+    return {
+      family: 'alien',
+      base: '#315a2d',
+      mid: '#5f9f48',
+      dark: '#1f321d',
+      glow: '#a9ff72'
+    };
+  }
+  if (id.includes('cyber')) {
+    return {
+      family: 'cyber',
+      base: '#4e3a8b',
+      mid: '#8b65de',
+      dark: '#271f47',
+      glow: '#c8a5ff'
+    };
+  }
+  return {
+    family: 'human',
+    base: '#536b7f',
+    mid: '#8da9ba',
+    dark: '#263540',
+    glow: '#83dcff'
+  };
+}
+
+function getStarSiegeHqStyle(building) {
+  const id = String(building?.definitionType || building?.model || building?.hqStyle || '');
+  const tags = Array.isArray(building?.tags) ? building.tags.join(' ') : '';
+  const marker = `${id} ${tags} ${building?.hqStyle || ''}`;
+  if (/command_center|command_hub|human_command/i.test(marker)) return 'command_center';
+  if (/nexus|cyber_nexus/i.test(marker)) return 'nexus';
+  if (/hatchery|alien_hive|alien_hatchery/i.test(marker)) return 'hatchery';
+  return '';
+}
+
+function drawStarSiegeCommandCenterBase(building, style) {
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+
+  drawBuildingShadow(w, h, 0.2);
+
+  ctx.fillStyle = 'rgba(12, 20, 25, 0.78)';
+  ctx.beginPath();
+  ctx.ellipse(0, top + h * 0.69, w * 0.48, h * 0.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = createBuildingGradient(left + w * 0.14, top + h * 0.54, left + w * 0.86, top + h * 0.84, [
+    [0, '#6f8792'],
+    [0.48, '#3f5561'],
+    [1, '#17252d']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.12, top + h * 0.67);
+  ctx.lineTo(left + w * 0.26, top + h * 0.54);
+  ctx.lineTo(left + w * 0.74, top + h * 0.54);
+  ctx.lineTo(left + w * 0.88, top + h * 0.67);
+  ctx.lineTo(left + w * 0.78, top + h * 0.82);
+  ctx.lineTo(left + w * 0.22, top + h * 0.82);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(7, 13, 17, 0.78)';
+  ctx.lineWidth = Math.max(2, tileSize * 0.04);
+  ctx.stroke();
+
+  ctx.fillStyle = createBuildingGradient(left + w * 0.17, top + h * 0.14, left + w * 0.82, top + h * 0.72, [
+    [0, '#edf9fb'],
+    [0.22, '#bad2da'],
+    [0.62, style.mid],
+    [1, '#2a3e49']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.16, top + h * 0.62);
+  ctx.bezierCurveTo(left + w * 0.18, top + h * 0.26, left + w * 0.35, top + h * 0.1, left + w * 0.5, top + h * 0.1);
+  ctx.bezierCurveTo(left + w * 0.65, top + h * 0.1, left + w * 0.82, top + h * 0.26, left + w * 0.84, top + h * 0.62);
+  ctx.bezierCurveTo(left + w * 0.74, top + h * 0.72, left + w * 0.26, top + h * 0.72, left + w * 0.16, top + h * 0.62);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(17, 29, 38, 0.75)';
+  ctx.lineWidth = Math.max(2, tileSize * 0.04);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(196, 225, 232, 0.42)';
+  ctx.beginPath();
+  ctx.ellipse(0, top + h * 0.38, w * 0.24, h * 0.13, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(238, 252, 255, 0.42)';
+  ctx.lineWidth = Math.max(1, tileSize * 0.025);
+  for (const panelX of [0.3, 0.4, 0.6, 0.7]) {
+    ctx.beginPath();
+    ctx.moveTo(left + w * 0.5, top + h * 0.12);
+    ctx.quadraticCurveTo(left + w * panelX, top + h * 0.33, left + w * panelX, top + h * 0.66);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(12, 23, 30, 0.42)';
+  ctx.lineWidth = Math.max(2, tileSize * 0.032);
+  for (const bandY of [0.44, 0.58]) {
+    ctx.beginPath();
+    ctx.ellipse(0, top + h * bandY, w * (0.18 + bandY * 0.34), h * 0.045, 0, 0.08, Math.PI - 0.08);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#21333d';
+  for (const pod of [[0.15, 0.62], [0.85, 0.62]]) {
+    drawRoundedRectPath(left + w * pod[0] - w * 0.075, top + h * pod[1] - h * 0.045, w * 0.15, h * 0.09, Math.max(4, tileSize * 0.04));
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(8, 15, 19, 0.75)';
+    ctx.lineWidth = Math.max(1.5, tileSize * 0.025);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = style.glow;
+  ctx.globalAlpha = 0.55;
+  for (const light of [[0.25, 0.68], [0.75, 0.68], [0.38, 0.76], [0.62, 0.76]]) {
+    ctx.beginPath();
+    ctx.arc(left + w * light[0], top + h * light[1], Math.max(2.5, tileSize * 0.045), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawStarSiegeNexusBase(building, style) {
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+
+  drawBuildingShadow(w, h, 0.15);
+  ctx.fillStyle = createBuildingGradient(left + w * 0.22, top + h * 0.1, left + w * 0.78, top + h * 0.9, [
+    [0, '#d9bd6f'],
+    [0.46, '#7662bb'],
+    [1, '#261b45']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(0, top + h * 0.1);
+  ctx.lineTo(left + w * 0.82, top + h * 0.42);
+  ctx.lineTo(left + w * 0.64, top + h * 0.84);
+  ctx.lineTo(0, top + h * 0.95);
+  ctx.lineTo(left + w * 0.36, top + h * 0.84);
+  ctx.lineTo(left + w * 0.18, top + h * 0.42);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(34, 24, 68, 0.75)';
+  ctx.lineWidth = Math.max(2, tileSize * 0.04);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(242, 214, 124, 0.8)';
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI * 2 * i) / 6 + 0.3;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(angle) * w * 0.18, top + h * 0.54 + Math.sin(angle) * h * 0.08);
+    ctx.lineTo(Math.cos(angle) * w * 0.34, top + h * 0.54 + Math.sin(angle) * h * 0.18);
+    ctx.lineTo(Math.cos(angle + 0.18) * w * 0.25, top + h * 0.54 + Math.sin(angle + 0.18) * h * 0.12);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawStarSiegeHatcheryBase(building, style) {
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+
+  drawBuildingShadow(w, h, 0.22);
+  ctx.fillStyle = createBuildingGradient(left + w * 0.18, top + h * 0.12, left + w * 0.78, top + h * 0.9, [
+    [0, '#8dc665'],
+    [0.52, '#456d36'],
+    [1, '#1e2b19']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.12, top + h * 0.58);
+  ctx.bezierCurveTo(left + w * 0.18, top + h * 0.22, left + w * 0.52, top + h * 0.12, left + w * 0.75, top + h * 0.31);
+  ctx.bezierCurveTo(left + w * 0.98, top + h * 0.5, left + w * 0.86, top + h * 0.86, left + w * 0.52, top + h * 0.9);
+  ctx.bezierCurveTo(left + w * 0.25, top + h * 0.94, left + w * 0.03, top + h * 0.78, left + w * 0.12, top + h * 0.58);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(20, 48, 22, 0.7)';
+  ctx.lineWidth = Math.max(2, tileSize * 0.04);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(28, 70, 28, 0.52)';
+  ctx.lineWidth = Math.max(3, tileSize * 0.06);
+  for (let i = 0; i < 9; i++) {
+    const angle = (Math.PI * 2 * i) / 9;
+    const sx = Math.cos(angle) * w * 0.2;
+    const sy = top + h * 0.58 + Math.sin(angle) * h * 0.15;
+    ctx.beginPath();
+    ctx.moveTo(sx * 0.35, top + h * 0.54);
+    ctx.quadraticCurveTo(sx * 0.95, sy, sx * 1.35, sy + Math.sin(angle) * h * 0.08);
+    ctx.stroke();
+  }
+}
+
+function drawStarSiegeBuildingBase(building) {
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+  const style = getStarSiegeStyle(building);
+  const hqStyle = getStarSiegeHqStyle(building);
+
+  ctx.save();
+  ctx.translate(building.x, building.y);
+
+  if (hqStyle === 'command_center') {
+    drawStarSiegeCommandCenterBase(building, style);
+    ctx.restore();
+    return;
+  }
+  if (hqStyle === 'nexus') {
+    drawStarSiegeNexusBase(building, style);
+    ctx.restore();
+    return;
+  }
+  if (hqStyle === 'hatchery') {
+    drawStarSiegeHatcheryBase(building, style);
+    ctx.restore();
+    return;
+  }
+
+  drawBuildingShadow(w, h, style.family === 'alien' ? 0.2 : 0.16);
+
+  if (style.family === 'alien') {
+    ctx.fillStyle = createBuildingGradient(left + w * 0.2, top, left + w * 0.78, top + h, [
+      [0, '#76bd58'],
+      [0.55, style.base],
+      [1, style.dark]
+    ]);
+    ctx.beginPath();
+    ctx.ellipse(0, top + h * 0.54, w * 0.38, h * 0.32, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(16, 38, 18, 0.65)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    for (let i = 0; i < 7; i++) {
+      const angle = (i / 7) * Math.PI * 2;
+      const sx = Math.cos(angle) * w * 0.26;
+      const sy = top + h * 0.55 + Math.sin(angle) * h * 0.2;
+      ctx.strokeStyle = 'rgba(28, 68, 26, 0.46)';
+      ctx.lineWidth = Math.max(2, tileSize * 0.04);
+      ctx.beginPath();
+      ctx.moveTo(sx * 0.35, top + h * 0.54);
+      ctx.quadraticCurveTo(sx * 0.75, sy, sx, sy);
+      ctx.stroke();
+    }
+  } else if (style.family === 'cyber') {
+    ctx.fillStyle = createBuildingGradient(left + w * 0.18, top + h * 0.1, left + w * 0.82, top + h * 0.86, [
+      [0, style.mid],
+      [0.52, style.base],
+      [1, style.dark]
+    ]);
+    ctx.beginPath();
+    ctx.moveTo(0, top + h * 0.1);
+    ctx.lineTo(left + w * 0.78, top + h * 0.48);
+    ctx.lineTo(left + w * 0.62, top + h * 0.84);
+    ctx.lineTo(0, top + h * 0.92);
+    ctx.lineTo(left + w * 0.38, top + h * 0.84);
+    ctx.lineTo(left + w * 0.22, top + h * 0.48);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(25, 16, 54, 0.68)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = createBuildingGradient(left + w * 0.14, top + h * 0.28, left + w * 0.86, top + h * 0.82, [
+      [0, style.mid],
+      [0.54, style.base],
+      [1, style.dark]
+    ]);
+    ctx.beginPath();
+    ctx.moveTo(left + w * 0.18, top + h * 0.42);
+    ctx.lineTo(left + w * 0.82, top + h * 0.32);
+    ctx.lineTo(left + w * 0.9, top + h * 0.7);
+    ctx.lineTo(left + w * 0.72, top + h * 0.88);
+    ctx.lineTo(left + w * 0.24, top + h * 0.84);
+    ctx.lineTo(left + w * 0.1, top + h * 0.68);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(19, 30, 38, 0.68)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawStarSiegeBuildingFront(building) {
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+  const style = getStarSiegeStyle(building);
+  const hqStyle = getStarSiegeHqStyle(building);
+  const accent = getTeamAccent(building.team);
+  const isDefense = /turret|spire|colony/i.test(String(building.definitionType || building.model || ''));
+  const isSupply = /depot|pylon|node/i.test(String(building.definitionType || building.model || ''));
+
+  ctx.save();
+  ctx.translate(building.x, building.y);
+
+  if (hqStyle === 'command_center') {
+    ctx.fillStyle = '#111f27';
+    drawRoundedRectPath(left + w * 0.38, top + h * 0.59, w * 0.24, h * 0.19, Math.max(6, tileSize * 0.09));
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(12, 20, 25, 0.88)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.strokeStyle = style.glow;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(left + w * 0.43, top + h * 0.65);
+    ctx.lineTo(left + w * 0.57, top + h * 0.65);
+    ctx.moveTo(left + w * 0.5, top + h * 0.6);
+    ctx.lineTo(left + w * 0.5, top + h * 0.77);
+    ctx.stroke();
+
+    ctx.fillStyle = '#10232c';
+    ctx.beginPath();
+    ctx.ellipse(left + w * 0.5, top + h * 0.31, w * 0.09, h * 0.052, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = style.glow;
+    ctx.lineWidth = Math.max(1.5, tileSize * 0.03);
+    ctx.stroke();
+
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.arc(left + w * 0.5, top + h * 0.31, Math.max(4, tileSize * 0.075), 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#dff8ff';
+    for (const wx of [0.28, 0.36, 0.64, 0.72]) {
+      ctx.beginPath();
+      ctx.ellipse(left + w * wx, top + h * 0.5, w * 0.035, h * 0.018, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(left + w * 0.68, top + h * 0.28);
+    ctx.lineTo(left + w * 0.83, top + h * 0.1);
+    ctx.moveTo(left + w * 0.83, top + h * 0.1);
+    ctx.lineTo(left + w * 0.91, top + h * 0.1);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(223, 248, 255, 0.32)';
+    ctx.lineWidth = Math.max(1, tileSize * 0.02);
+    for (const arc of [0.27, 0.35, 0.43]) {
+      ctx.beginPath();
+      ctx.ellipse(0, top + h * arc, w * (0.12 + arc * 0.5), h * 0.03, 0, 0.12, Math.PI - 0.12);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = 'rgba(131, 220, 255, 0.16)';
+    ctx.beginPath();
+    ctx.ellipse(0, top + h * 0.42, w * 0.25, h * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  if (hqStyle === 'nexus') {
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = style.glow;
+    ctx.beginPath();
+    ctx.ellipse(0, top + h * 0.55, w * 0.3, h * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#d9f3ff';
+    ctx.beginPath();
+    ctx.moveTo(0, top + h * 0.26);
+    ctx.lineTo(w * 0.08, top + h * 0.49);
+    ctx.lineTo(0, top + h * 0.64);
+    ctx.lineTo(-w * 0.08, top + h * 0.49);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#8fdfff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.strokeStyle = style.glow;
+    ctx.lineWidth = Math.max(1.5, tileSize * 0.035);
+    for (let i = 0; i < 6; i++) {
+      const angle = (Math.PI * 2 * i) / 6;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle) * w * 0.08, top + h * 0.53 + Math.sin(angle) * h * 0.04);
+      ctx.lineTo(Math.cos(angle) * w * 0.33, top + h * 0.53 + Math.sin(angle) * h * 0.18);
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (hqStyle === 'hatchery') {
+    ctx.fillStyle = '#23341f';
+    for (const sac of [[0.33, 0.39, 0.1], [0.53, 0.31, 0.12], [0.69, 0.45, 0.08]]) {
+      ctx.beginPath();
+      ctx.ellipse(left + w * sac[0], top + h * sac[1], w * sac[2], h * sac[2] * 1.15, 0.25, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = style.glow;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(173, 255, 122, 0.75)';
+    ctx.lineWidth = Math.max(1.5, tileSize * 0.035);
+    ctx.beginPath();
+    ctx.arc(0, top + h * 0.56, Math.min(w, h) * 0.14, 0.15, Math.PI * 1.85);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = style.glow;
+  ctx.beginPath();
+  ctx.ellipse(0, top + h * 0.55, w * (isSupply ? 0.16 : 0.22), h * (isSupply ? 0.12 : 0.08), 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+
+  if (style.family === 'alien') {
+    ctx.fillStyle = '#1c2a19';
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.ellipse(i * w * 0.14, top + h * 0.38, w * 0.08, h * 0.14, i * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = style.glow;
+    ctx.lineWidth = Math.max(1.4, tileSize * 0.035);
+    ctx.beginPath();
+    ctx.arc(0, top + h * 0.5, Math.min(w, h) * 0.12, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (style.family === 'cyber') {
+    ctx.strokeStyle = style.glow;
+    ctx.lineWidth = Math.max(1.4, tileSize * 0.035);
+    for (let i = 0; i < 4; i++) {
+      const angle = Math.PI * 0.5 * i + 0.2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(angle) * w * 0.08, top + h * 0.54 + Math.sin(angle) * h * 0.04);
+      ctx.lineTo(Math.cos(angle) * w * 0.28, top + h * 0.54 + Math.sin(angle) * h * 0.16);
+      ctx.stroke();
+    }
+    ctx.fillStyle = style.glow;
+    ctx.beginPath();
+    ctx.arc(0, top + h * 0.48, Math.max(4, tileSize * 0.1), 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = '#1d2a32';
+    for (const wx of [left + w * 0.32, left + w * 0.48, left + w * 0.64]) {
+      drawRoundedRectPath(wx, top + h * 0.48, w * 0.07, h * 0.055, 2);
+      ctx.fill();
+      ctx.strokeStyle = style.glow;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(left + w * 0.22, top + h * 0.38);
+    ctx.lineTo(left + w * 0.44, top + h * 0.34);
+    ctx.stroke();
+  }
+
+  if (isDefense) {
+    ctx.fillStyle = style.dark;
+    ctx.beginPath();
+    ctx.arc(0, top + h * 0.28, Math.max(5, tileSize * 0.13), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = style.glow;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.strokeStyle = accent;
+    ctx.beginPath();
+    ctx.moveTo(0, top + h * 0.28);
+    ctx.lineTo(w * 0.26, top + h * 0.2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawStarSiegeBuilding(building, layer = 'full') {
+  if (layer === 'base') {
+    drawStarSiegeBuildingBase(building);
+    return;
+  }
+  if (layer === 'front') {
+    drawStarSiegeBuildingFront(building);
+    return;
+  }
+  drawStarSiegeBuildingBase(building);
+  drawStarSiegeBuildingFront(building);
 }
 
 function drawBuildingSelection(building) {
@@ -2862,21 +3776,88 @@ function drawBuildingHealth(building) {
   ctx.restore();
 }
 
-function drawCastleStoneBlock(x, y, w, h, shade = 0) {
-  ctx.fillStyle = shade > 0 ? '#aaa99b' : shade < 0 ? '#666961' : '#85877d';
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = 'rgba(38, 40, 36, 0.48)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x, y, w, h);
+function getBuildPlacementPreview() {
+  const buildingType = OpenRTS.ui?.commandTargeting?.getBuildPlacementType?.();
+  if (!buildingType || !inputState?.mouseInside || typeof screenToWorld !== 'function') return null;
 
-  const courseHeight = Math.max(7, tileSize * 0.18);
-  ctx.strokeStyle = 'rgba(238, 232, 211, 0.14)';
-  for (let yy = y + courseHeight; yy < y + h; yy += courseHeight) {
-    ctx.beginPath();
-    ctx.moveTo(x + 1, yy);
-    ctx.lineTo(x + w - 1, yy);
-    ctx.stroke();
-  }
+  const stats = getBuildingStats(buildingType);
+  const width = Math.max(1, Math.floor(Number(stats.width) || 1));
+  const height = Math.max(1, Math.floor(Number(stats.height) || 1));
+  const world = screenToWorld(inputState.mouseX, inputState.mouseY);
+  const site = findNearestBuildableSite(buildingType, world.x, world.y, 8, { stats });
+  const tileX = site?.x ?? Math.floor(world.x / tileSize - width * 0.5);
+  const tileY = site?.y ?? Math.floor(world.y / tileSize - height * 0.5);
+  const team = OpenRTS.ui.commandTargeting?.selectedUnits?.()[0]?.team || 'neutral';
+
+  return {
+    valid: !!site,
+    building: {
+      id: 'build-preview',
+      type: buildingType,
+      team,
+      tileX,
+      tileY,
+      width,
+      height,
+      x: (tileX + width * 0.5) * tileSize,
+      y: (tileY + height * 0.5) * tileSize,
+      hp: stats.hp || 100,
+      maxHp: stats.hp || 100,
+      size: stats.size || Math.max(width, height) * tileSize,
+      displayName: stats.name || buildingType,
+      model: stats.model || buildingType,
+      definitionType: buildingType,
+      selected: false,
+      isDead: false
+    }
+  };
+}
+
+function renderBuildPlacementPreview(ctx) {
+  const preview = getBuildPlacementPreview();
+  if (!preview) return;
+
+  const building = preview.building;
+  const x = building.tileX * tileSize;
+  const y = building.tileY * tileSize;
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const zoom = Math.max(0.25, camera.zoom || 1);
+  const accent = preview.valid ? 'rgba(74, 255, 130, 0.88)' : 'rgba(255, 84, 84, 0.92)';
+  const fill = preview.valid ? 'rgba(66, 220, 112, 0.16)' : 'rgba(255, 84, 84, 0.18)';
+
+  ctx.save();
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 2 / zoom;
+  ctx.setLineDash([8, 5]);
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeRect(x, y, w, h);
+  ctx.setLineDash([]);
+
+  ctx.globalAlpha = preview.valid ? 0.46 : 0.28;
+  drawBuilding(building, 'full');
+  ctx.globalAlpha = 1;
+
+  ctx.font = `${Math.max(11, 12 / Math.max(0.5, camera.zoom || 1))}px Georgia, serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillStyle = preview.valid ? 'rgba(233, 255, 223, 0.94)' : 'rgba(255, 224, 224, 0.94)';
+  ctx.strokeStyle = 'rgba(20, 18, 12, 0.78)';
+  ctx.lineWidth = 3 / zoom;
+  const label = preview.valid ? building.displayName : 'Blocked';
+  ctx.strokeText(label, building.x, y - 6);
+  ctx.fillText(label, building.x, y - 6);
+  ctx.restore();
+}
+
+function drawCastleStoneBlock(x, y, w, h, shade = 0) {
+  drawStoneSurface(x, y, w, h, Math.round(x + shade * 31), Math.round(y - shade * 17), {
+    light: shade > 0 ? '#c0bca9' : '#a8a696',
+    mid: shade < 0 ? '#676a62' : '#898b80',
+    dark: shade < 0 ? '#4f524c' : '#64675f',
+    stroke: 'rgba(35, 37, 33, 0.5)'
+  });
 }
 
 function drawHomeBuildingBase(building) {
@@ -2936,21 +3917,9 @@ function drawHomeBuildingBase(building) {
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = '#5d6059';
-  ctx.fillRect(left + wall * 0.08, top + wall * 0.08, w - wall * 0.16, wall * 0.94);
-  ctx.fillRect(left + wall * 0.08, top + wall * 0.08, wall * 0.94, h - wall * 0.28);
-  ctx.fillRect(right - wall * 1.02, top + wall * 0.08, wall * 0.94, h - wall * 0.28);
-
-  ctx.fillStyle = '#a3a294';
-  ctx.fillRect(left + wall * 0.18, top + wall * 0.18, w - wall * 0.36, wall * 0.7);
-  ctx.fillRect(left + wall * 0.18, top + wall * 0.18, wall * 0.7, h - wall * 0.5);
-  ctx.fillRect(right - wall * 0.88, top + wall * 0.18, wall * 0.7, h - wall * 0.5);
-
-  ctx.strokeStyle = 'rgba(42, 44, 40, 0.4)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(left + wall * 0.18, top + wall * 0.18, w - wall * 0.36, wall * 0.7);
-  ctx.strokeRect(left + wall * 0.18, top + wall * 0.18, wall * 0.7, h - wall * 0.5);
-  ctx.strokeRect(right - wall * 0.88, top + wall * 0.18, wall * 0.7, h - wall * 0.5);
+  drawStoneSurface(left + wall * 0.08, top + wall * 0.08, w - wall * 0.16, wall * 0.94, building.tileX, building.tileY - 2);
+  drawStoneSurface(left + wall * 0.08, top + wall * 0.08, wall * 0.94, h - wall * 0.28, building.tileX - 3, building.tileY);
+  drawStoneSurface(right - wall * 1.02, top + wall * 0.08, wall * 0.94, h - wall * 0.28, building.tileX + 5, building.tileY);
 
   const towerSize = wall * 1.12;
   const towers = [
@@ -2966,15 +3935,18 @@ function drawHomeBuildingBase(building) {
     ctx.fillRect(tx + towerSize * 0.62, ty - towerSize * 0.13, towerSize * 0.18, towerSize * 0.2);
   }
 
-  ctx.fillStyle = '#777a70';
+  ctx.fillStyle = '#787b70';
   for (let i = 0; i < 9; i++) {
     const bx = left + wall * 1.05 + i * ((w - wall * 2.1) / 8);
-    ctx.fillRect(bx - tileSize * 0.12, top + wall * 0.08, tileSize * 0.24, tileSize * 0.24);
+    drawRoundedRectPath(bx - tileSize * 0.12, top - wall * 0.01, tileSize * 0.24, tileSize * 0.33, 2);
+    ctx.fill();
   }
   for (let i = 1; i < 6; i++) {
     const by = top + wall * 1.1 + i * ((h - wall * 2.2) / 6);
-    ctx.fillRect(left + wall * 0.08, by - tileSize * 0.1, tileSize * 0.24, tileSize * 0.2);
-    ctx.fillRect(right - wall * 0.32, by - tileSize * 0.1, tileSize * 0.24, tileSize * 0.2);
+    drawRoundedRectPath(left - wall * 0.01, by - tileSize * 0.1, tileSize * 0.33, tileSize * 0.2, 2);
+    ctx.fill();
+    drawRoundedRectPath(right - wall * 0.32, by - tileSize * 0.1, tileSize * 0.33, tileSize * 0.2, 2);
+    ctx.fill();
   }
 
   const keepW = w * 0.28;
@@ -3021,13 +3993,11 @@ function drawHomeBuildingFront(building) {
   ctx.save();
   ctx.translate(x, y);
 
-  ctx.fillStyle = '#5d6059';
-  ctx.fillRect(left + wall * 0.08, bottom - wall * 1.04, w - wall * 0.16, wall * 0.96);
-  ctx.fillStyle = '#a3a294';
-  ctx.fillRect(left + wall * 0.18, bottom - wall * 0.94, w - wall * 0.36, wall * 0.7);
-  ctx.strokeStyle = 'rgba(42, 44, 40, 0.45)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(left + wall * 0.18, bottom - wall * 0.94, w - wall * 0.36, wall * 0.7);
+  drawStoneSurface(left + wall * 0.08, bottom - wall * 1.04, w - wall * 0.16, wall * 0.96, building.tileX, building.tileY + 8, {
+    light: '#bbb7a4',
+    mid: '#85877d',
+    dark: '#575b53'
+  });
 
   const gateW = tileSize * 3.2;
   const gateX = -gateW * 0.5;
@@ -3044,11 +4014,12 @@ function drawHomeBuildingFront(building) {
   ctx.lineWidth = 3;
   ctx.stroke();
 
-  ctx.fillStyle = '#777a70';
+  ctx.fillStyle = '#76796e';
   for (let i = 0; i < 10; i++) {
     const bx = left + wall * 0.75 + i * ((w - wall * 1.5) / 9);
     if (Math.abs(bx) < gateW * 0.48) continue;
-    ctx.fillRect(bx - tileSize * 0.12, bottom - wall * 1.12, tileSize * 0.24, tileSize * 0.24);
+    drawRoundedRectPath(bx - tileSize * 0.12, bottom - wall * 1.18, tileSize * 0.24, tileSize * 0.34, 2);
+    ctx.fill();
   }
 
   const towerSize = wall * 1.12;
@@ -3077,6 +4048,21 @@ function drawHomeBuildingFront(building) {
 }
 
 function drawHomeBuilding(building, layer = 'full') {
+  if (isEraKingdomsTownCenter(building)) {
+    drawEraKingdomsTownCenter(building, layer);
+    return;
+  }
+
+  if (isBattleForgeTownHall(building)) {
+    drawBattleForgeTownHall(building, layer);
+    return;
+  }
+
+  if (isModernWarlordCommandCenter(building)) {
+    drawModernWarlordCommandCenter(building, layer);
+    return;
+  }
+
   if (layer === 'base') {
     drawHomeBuildingBase(building);
     return;
@@ -3091,46 +4077,714 @@ function drawHomeBuilding(building, layer = 'full') {
   drawHomeBuildingFront(building);
 }
 
+function isEraKingdomsTownCenter(building) {
+  return !!building && (
+    building.definitionType === 'eok_town_center' ||
+    building.model === 'eok_town_center' ||
+    (building.type === BUILDING_TYPES.HOME && (window.mapConfig?.mapStyle === 'eok_arabia' || window.mapConfig?.visualStyle === 'arabia_dryland'))
+  );
+}
+
+function drawEraTileRoof(x, y, w, h, ridge = 0) {
+  ctx.fillStyle = createBuildingGradient(x, y - h * 0.3, x + w, y + h * 0.75, [
+    [0, '#d28a46'],
+    [0.5, '#9c4f2b'],
+    [1, '#5f2b21']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + w * 0.5, y - h * 0.62 - ridge);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w * 0.87, y + h * 0.28);
+  ctx.lineTo(x + w * 0.13, y + h * 0.28);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(62, 30, 20, 0.65)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(248, 190, 104, 0.24)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 8; i++) {
+    const px = x + (w * i) / 8;
+    ctx.beginPath();
+    ctx.moveTo(px, y - h * 0.03);
+    ctx.lineTo(x + w * 0.5, y - h * 0.55 - ridge);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 3; i++) {
+    const yy = y + h * (0.02 + i * 0.08);
+    ctx.strokeStyle = i % 2 ? 'rgba(67, 31, 19, 0.3)' : 'rgba(255, 212, 137, 0.22)';
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.13, yy);
+    ctx.quadraticCurveTo(x + w * 0.5, yy + h * 0.05, x + w * 0.87, yy);
+    ctx.stroke();
+  }
+}
+
+function drawEraBanners(accent, x, y, scale = 1) {
+  ctx.strokeStyle = '#3e2717';
+  ctx.lineWidth = Math.max(1.2, tileSize * 0.045 * scale);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y - tileSize * 0.78 * scale);
+  ctx.stroke();
+  ctx.fillStyle = accent;
+  ctx.beginPath();
+  ctx.moveTo(x, y - tileSize * 0.78 * scale);
+  ctx.lineTo(x + tileSize * 0.34 * scale, y - tileSize * 0.66 * scale);
+  ctx.lineTo(x, y - tileSize * 0.52 * scale);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(38, 20, 11, 0.55)';
+  ctx.stroke();
+}
+
+function drawEraKingdomsTownCenterBase(building) {
+  const x = building.x;
+  const y = building.y;
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+  const accent = getTeamAccent(building.team);
+
+  ctx.save();
+  ctx.translate(x, y);
+  drawBuildingShadow(w, h, 0.24);
+
+  ctx.fillStyle = createBuildingGradient(left + w * 0.12, top + h * 0.35, left + w * 0.88, top + h * 0.82, [
+    [0, '#d2c59c'],
+    [0.55, '#aa9265'],
+    [1, '#6f5d43']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.18, top + h * 0.55);
+  ctx.lineTo(0, top + h * 0.38);
+  ctx.lineTo(left + w * 0.82, top + h * 0.55);
+  ctx.lineTo(left + w * 0.78, top + h * 0.82);
+  ctx.lineTo(left + w * 0.22, top + h * 0.82);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(70, 55, 35, 0.46)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  drawStoneSurface(left + w * 0.2, top + h * 0.48, w * 0.6, h * 0.24, building.tileX + 20, building.tileY + 7, {
+    light: '#c9c2a6',
+    mid: '#9f967a',
+    dark: '#6e6754',
+    stroke: 'rgba(58, 49, 36, 0.5)'
+  });
+
+  ctx.fillStyle = 'rgba(80, 61, 36, 0.18)';
+  for (let i = 0; i < 8; i++) {
+    const px = left + w * (0.25 + i * 0.07);
+    ctx.beginPath();
+    ctx.ellipse(px, top + h * 0.77 + (i % 2) * 2, tileSize * 0.16, tileSize * 0.07, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawEraTileRoof(left + w * 0.17, top + h * 0.47, w * 0.66, h * 0.25, tileSize * 0.16);
+
+  const towerW = w * 0.17;
+  const towerH = h * 0.32;
+  const towerY = top + h * 0.25;
+  for (const tx of [left + w * 0.13, left + w * 0.7]) {
+    drawStoneSurface(tx, towerY, towerW, towerH, building.tileX + Math.round(tx), building.tileY, {
+      light: '#bfb79b',
+      mid: '#918a72',
+      dark: '#635d4d',
+      stroke: 'rgba(48, 43, 34, 0.55)'
+    });
+    ctx.fillStyle = '#34251a';
+    for (let i = 0; i < 2; i++) {
+      drawRoundedRectPath(tx + towerW * (0.28 + i * 0.28), towerY + towerH * 0.28, towerW * 0.12, towerH * 0.26, 2);
+      ctx.fill();
+    }
+    drawEraTileRoof(tx - towerW * 0.12, towerY + towerH * 0.04, towerW * 1.24, towerH * 0.32, tileSize * 0.1);
+  }
+
+  drawEraBanners(accent, left + w * 0.64, top + h * 0.26, 0.9);
+  ctx.restore();
+}
+
+function drawEraKingdomsTownCenterFront(building) {
+  const x = building.x;
+  const y = building.y;
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+  const accent = getTeamAccent(building.team);
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  drawWoodPlanks(left + w * 0.28, top + h * 0.56, w * 0.44, h * 0.22, building.tileX + 4, building.tileY + 11);
+  ctx.fillStyle = 'rgba(60, 32, 17, 0.42)';
+  ctx.fillRect(left + w * 0.31, top + h * 0.61, w * 0.38, h * 0.035);
+  ctx.fillRect(left + w * 0.31, top + h * 0.69, w * 0.38, h * 0.035);
+
+  ctx.fillStyle = '#261710';
+  const doorW = w * 0.13;
+  const doorH = h * 0.18;
+  ctx.beginPath();
+  ctx.moveTo(-doorW * 0.5, top + h * 0.79);
+  ctx.lineTo(-doorW * 0.5, top + h * 0.67);
+  ctx.quadraticCurveTo(0, top + h * 0.61, doorW * 0.5, top + h * 0.67);
+  ctx.lineTo(doorW * 0.5, top + h * 0.79);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#c9a86d';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = '#241812';
+  for (const wx of [left + w * 0.38, left + w * 0.59]) {
+    drawRoundedRectPath(wx, top + h * 0.61, w * 0.055, h * 0.075, 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(236, 183, 91, 0.48)';
+    ctx.stroke();
+  }
+
+  const porchY = top + h * 0.79;
+  ctx.fillStyle = createBuildingGradient(left + w * 0.27, porchY, left + w * 0.73, porchY + h * 0.07, [
+    [0, '#90794f'],
+    [1, '#59452b']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.26, porchY);
+  ctx.lineTo(left + w * 0.74, porchY);
+  ctx.lineTo(left + w * 0.67, porchY + h * 0.07);
+  ctx.lineTo(left + w * 0.33, porchY + h * 0.07);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(59, 40, 23, 0.55)';
+  ctx.stroke();
+
+  ctx.strokeStyle = '#3b2717';
+  ctx.lineWidth = 3;
+  for (const px of [left + w * 0.3, left + w * 0.7]) {
+    ctx.beginPath();
+    ctx.moveTo(px, top + h * 0.58);
+    ctx.lineTo(px, top + h * 0.82);
+    ctx.stroke();
+  }
+
+  drawEraTileRoof(left + w * 0.25, top + h * 0.57, w * 0.5, h * 0.2, tileSize * 0.08);
+  drawEraBanners(accent, left + w * 0.51, top + h * 0.47, 1.05);
+
+  ctx.restore();
+}
+
+function drawEraKingdomsTownCenter(building, layer = 'full') {
+  if (layer === 'base') {
+    drawEraKingdomsTownCenterBase(building);
+    return;
+  }
+  if (layer === 'front') {
+    drawEraKingdomsTownCenterFront(building);
+    return;
+  }
+  drawEraKingdomsTownCenterBase(building);
+  drawEraKingdomsTownCenterFront(building);
+}
+
+function isBattleForgeTownHall(building) {
+  return !!building && (
+    building.definitionType === 'bf_town_hall' ||
+    (building.type === BUILDING_TYPES.HOME && (window.mapConfig?.mapStyle === 'enchanted_forest' || window.mapConfig?.visualStyle === 'fantasy_forest'))
+  );
+}
+
+function drawFantasyRoof(x, y, w, h, hue = 'green') {
+  const palette = hue === 'purple'
+    ? ['#78619b', '#4b3a6a', '#2c223f']
+    : ['#496f4a', '#2e5537', '#1b3425'];
+  ctx.fillStyle = createBuildingGradient(x, y - h * 0.45, x + w, y + h * 0.4, [
+    [0, palette[0]],
+    [0.52, palette[1]],
+    [1, palette[2]]
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(x + w * 0.25, y - h * 0.18, x + w * 0.5, y - h * 0.72);
+  ctx.quadraticCurveTo(x + w * 0.72, y - h * 0.16, x + w, y);
+  ctx.lineTo(x + w * 0.88, y + h * 0.26);
+  ctx.quadraticCurveTo(x + w * 0.5, y + h * 0.38, x + w * 0.12, y + h * 0.26);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(18, 25, 15, 0.72)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(190, 226, 154, 0.2)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 8; i++) {
+    const px = x + (w * i) / 8;
+    ctx.beginPath();
+    ctx.moveTo(px, y + h * 0.08);
+    ctx.quadraticCurveTo(x + w * 0.5, y - h * 0.38, x + w * 0.5, y - h * 0.66);
+    ctx.stroke();
+  }
+}
+
+function drawBattleForgeBanners(accent, x, y, scale = 1) {
+  ctx.strokeStyle = '#271a12';
+  ctx.lineWidth = Math.max(1.4, tileSize * 0.05 * scale);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y - tileSize * 0.9 * scale);
+  ctx.stroke();
+
+  ctx.fillStyle = accent;
+  ctx.beginPath();
+  ctx.moveTo(x, y - tileSize * 0.88 * scale);
+  ctx.lineTo(x + tileSize * 0.4 * scale, y - tileSize * 0.76 * scale);
+  ctx.lineTo(x + tileSize * 0.24 * scale, y - tileSize * 0.62 * scale);
+  ctx.lineTo(x + tileSize * 0.38 * scale, y - tileSize * 0.48 * scale);
+  ctx.lineTo(x, y - tileSize * 0.56 * scale);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(29, 18, 11, 0.58)';
+  ctx.stroke();
+}
+
+function drawBattleForgeTownHallBase(building) {
+  const x = building.x;
+  const y = building.y;
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+  const accent = getTeamAccent(building.team);
+  const isDark = /grave|horde|red|black/i.test(String(building.factionId || building.team || ''));
+
+  ctx.save();
+  ctx.translate(x, y);
+  drawBuildingShadow(w, h, 0.28);
+
+  ctx.fillStyle = 'rgba(75, 118, 68, 0.12)';
+  ctx.beginPath();
+  ctx.ellipse(0, top + h * 0.72, w * 0.42, h * 0.13, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  drawStoneSurface(left + w * 0.2, top + h * 0.5, w * 0.6, h * 0.23, building.tileX + 50, building.tileY + 19, {
+    light: '#b5b096',
+    mid: '#827b66',
+    dark: '#514a3c',
+    stroke: 'rgba(38, 33, 25, 0.56)'
+  });
+
+  drawWoodPlanks(left + w * 0.26, top + h * 0.34, w * 0.48, h * 0.27, building.tileX + 22, building.tileY + 5);
+  ctx.fillStyle = 'rgba(44, 27, 15, 0.35)';
+  ctx.fillRect(left + w * 0.29, top + h * 0.43, w * 0.42, h * 0.035);
+  ctx.fillRect(left + w * 0.29, top + h * 0.53, w * 0.42, h * 0.035);
+
+  drawFantasyRoof(left + w * 0.22, top + h * 0.34, w * 0.56, h * 0.27, isDark ? 'purple' : 'green');
+
+  const towerW = w * 0.16;
+  const towerH = h * 0.35;
+  for (const [tx, scale] of [[left + w * 0.12, 0.95], [left + w * 0.72, 1.05]]) {
+    drawStoneSurface(tx, top + h * 0.32, towerW, towerH, building.tileX + Math.round(tx), building.tileY + 31, {
+      light: '#aaa58d',
+      mid: '#746f5d',
+      dark: '#474237',
+      stroke: 'rgba(33, 29, 23, 0.58)'
+    });
+    ctx.fillStyle = '#1f1711';
+    drawRoundedRectPath(tx + towerW * 0.42, top + h * 0.44, towerW * 0.16, towerH * 0.28, 2);
+    ctx.fill();
+    drawFantasyRoof(tx - towerW * 0.18, top + h * 0.32, towerW * 1.36, towerH * 0.34 * scale, isDark ? 'purple' : 'green');
+  }
+
+  ctx.fillStyle = isDark ? 'rgba(151, 98, 220, 0.28)' : 'rgba(117, 205, 128, 0.26)';
+  ctx.beginPath();
+  ctx.arc(left + w * 0.5, top + h * 0.31, tileSize * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = isDark ? 'rgba(203, 162, 255, 0.7)' : 'rgba(180, 255, 174, 0.7)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  drawBattleForgeBanners(accent, left + w * 0.62, top + h * 0.31, 0.9);
+  ctx.restore();
+}
+
+function drawBattleForgeTownHallFront(building) {
+  const x = building.x;
+  const y = building.y;
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+  const accent = getTeamAccent(building.team);
+  const isDark = /grave|horde|red|black/i.test(String(building.factionId || building.team || ''));
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  drawStoneSurface(left + w * 0.31, top + h * 0.58, w * 0.38, h * 0.18, building.tileX + 77, building.tileY + 13, {
+    light: '#b6ad92',
+    mid: '#81755f',
+    dark: '#514534',
+    stroke: 'rgba(45, 33, 22, 0.58)'
+  });
+
+  ctx.fillStyle = '#23150f';
+  const doorW = w * 0.14;
+  ctx.beginPath();
+  ctx.moveTo(-doorW * 0.5, top + h * 0.77);
+  ctx.lineTo(-doorW * 0.5, top + h * 0.65);
+  ctx.quadraticCurveTo(0, top + h * 0.56, doorW * 0.5, top + h * 0.65);
+  ctx.lineTo(doorW * 0.5, top + h * 0.77);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = isDark ? '#9b77ca' : '#9ec77c';
+  ctx.lineWidth = 2.2;
+  ctx.stroke();
+
+  ctx.fillStyle = '#1e1510';
+  for (const wx of [left + w * 0.38, left + w * 0.58]) {
+    drawRoundedRectPath(wx, top + h * 0.62, w * 0.055, h * 0.07, 2);
+    ctx.fill();
+    ctx.strokeStyle = isDark ? 'rgba(190, 142, 255, 0.5)' : 'rgba(187, 236, 148, 0.48)';
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = '#382413';
+  ctx.lineWidth = 3;
+  for (const px of [left + w * 0.3, left + w * 0.7]) {
+    ctx.beginPath();
+    ctx.moveTo(px, top + h * 0.48);
+    ctx.lineTo(px, top + h * 0.78);
+    ctx.stroke();
+  }
+
+  drawFantasyRoof(left + w * 0.27, top + h * 0.56, w * 0.46, h * 0.18, isDark ? 'purple' : 'green');
+
+  ctx.fillStyle = createBuildingGradient(left + w * 0.28, top + h * 0.77, left + w * 0.72, top + h * 0.84, [
+    [0, '#7b613c'],
+    [1, '#3f2b1a']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.27, top + h * 0.77);
+  ctx.lineTo(left + w * 0.73, top + h * 0.77);
+  ctx.lineTo(left + w * 0.65, top + h * 0.84);
+  ctx.lineTo(left + w * 0.35, top + h * 0.84);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(38, 24, 14, 0.62)';
+  ctx.stroke();
+
+  drawBattleForgeBanners(accent, left + w * 0.48, top + h * 0.42, 1);
+
+  ctx.restore();
+}
+
+function drawBattleForgeTownHall(building, layer = 'full') {
+  if (layer === 'base') {
+    drawBattleForgeTownHallBase(building);
+    return;
+  }
+  if (layer === 'front') {
+    drawBattleForgeTownHallFront(building);
+    return;
+  }
+  drawBattleForgeTownHallBase(building);
+  drawBattleForgeTownHallFront(building);
+}
+
+function isModernWarlordCommandCenter(building) {
+  return !!building && (
+    building.definitionType === 'mw_command_center' ||
+    building.model === 'modern_command_center' ||
+    (building.type === BUILDING_TYPES.HOME && (window.mapConfig?.mapStyle === 'dry_oil_basin' || window.mapConfig?.visualStyle === 'industrial_desert'))
+  );
+}
+
+function drawHescoWall(x, y, w, h, seedX, seedY) {
+  ctx.fillStyle = createBuildingGradient(x, y, x + w, y + h, [
+    [0, '#c9b37e'],
+    [0.54, '#9e875b'],
+    [1, '#6b5739']
+  ]);
+  drawRoundedRectPath(x, y, w, h, Math.min(4, h * 0.24));
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(57, 44, 26, 0.52)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  const cells = Math.max(2, Math.floor(w / Math.max(10, tileSize * 0.38)));
+  ctx.strokeStyle = 'rgba(67, 51, 28, 0.42)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < cells; i++) {
+    const px = x + (w * i) / cells + (hashNoise(seedX + i, seedY) - 0.5) * 2;
+    ctx.beginPath();
+    ctx.moveTo(px, y + h * 0.08);
+    ctx.lineTo(px, y + h * 0.92);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(235, 214, 160, 0.2)';
+  ctx.beginPath();
+  ctx.moveTo(x + w * 0.04, y + h * 0.28);
+  ctx.lineTo(x + w * 0.96, y + h * 0.22);
+  ctx.stroke();
+}
+
+function drawSandbagStack(x, y, bags, scale = 1) {
+  for (let i = 0; i < bags; i++) {
+    const row = Math.floor(i / 4);
+    const col = i % 4;
+    const bx = x + col * tileSize * 0.2 * scale + (row % 2) * tileSize * 0.09 * scale;
+    const by = y - row * tileSize * 0.09 * scale;
+    ctx.fillStyle = i % 2 ? '#b49a68' : '#c4ad78';
+    ctx.beginPath();
+    ctx.ellipse(bx, by, tileSize * 0.13 * scale, tileSize * 0.07 * scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(71, 53, 30, 0.36)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
+function drawModernBarracksBlock(x, y, w, h, seedX, seedY) {
+  ctx.fillStyle = createBuildingGradient(x, y, x + w * 0.35, y + h, [
+    [0, '#d6c294'],
+    [0.48, '#aa9366'],
+    [1, '#746044']
+  ]);
+  drawRoundedRectPath(x, y, w, h, tileSize * 0.08);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(62, 48, 32, 0.58)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = '#8a7b60';
+  drawRoundedRectPath(x + w * 0.04, y - h * 0.08, w * 0.92, h * 0.12, tileSize * 0.05);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(48, 41, 30, 0.45)';
+  ctx.stroke();
+
+  ctx.fillStyle = '#2f342f';
+  const windows = Math.max(2, Math.floor(w / (tileSize * 0.75)));
+  for (let i = 0; i < windows; i++) {
+    const wx = x + w * (0.16 + i * (0.68 / Math.max(1, windows - 1))) - tileSize * 0.09;
+    drawRoundedRectPath(wx, y + h * 0.28 + (hashNoise(seedX + i, seedY) - 0.5) * 2, tileSize * 0.18, tileSize * 0.18, 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(206, 218, 190, 0.22)';
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#4b3b28';
+  drawRoundedRectPath(x + w * 0.44, y + h * 0.54, w * 0.12, h * 0.38, tileSize * 0.035);
+  ctx.fill();
+}
+
+function drawModernWarlordCommandCenterBase(building) {
+  const x = building.x;
+  const y = building.y;
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+  const accent = getTeamAccent(building.team);
+
+  ctx.save();
+  ctx.translate(x, y);
+  drawBuildingShadow(w, h, 0.22);
+
+  ctx.fillStyle = createBuildingGradient(left + w * 0.12, top + h * 0.34, left + w * 0.88, top + h * 0.88, [
+    [0, '#b89e69'],
+    [0.52, '#91774d'],
+    [1, '#594631']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.16, top + h * 0.45);
+  ctx.lineTo(left + w * 0.84, top + h * 0.38);
+  ctx.lineTo(left + w * 0.9, top + h * 0.74);
+  ctx.lineTo(left + w * 0.76, top + h * 0.88);
+  ctx.lineTo(left + w * 0.24, top + h * 0.86);
+  ctx.lineTo(left + w * 0.1, top + h * 0.72);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(54, 39, 24, 0.5)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  drawHescoWall(left + w * 0.1, top + h * 0.38, w * 0.8, h * 0.085, building.tileX, building.tileY);
+  drawHescoWall(left + w * 0.1, top + h * 0.73, w * 0.28, h * 0.085, building.tileX + 3, building.tileY + 2);
+  drawHescoWall(left + w * 0.62, top + h * 0.73, w * 0.28, h * 0.085, building.tileX + 9, building.tileY + 2);
+  drawHescoWall(left + w * 0.1, top + h * 0.45, w * 0.085, h * 0.28, building.tileX + 1, building.tileY + 6);
+  drawHescoWall(left + w * 0.815, top + h * 0.45, w * 0.085, h * 0.28, building.tileX + 11, building.tileY + 6);
+
+  drawModernBarracksBlock(left + w * 0.24, top + h * 0.46, w * 0.34, h * 0.22, building.tileX + 4, building.tileY + 4);
+  drawModernBarracksBlock(left + w * 0.54, top + h * 0.5, w * 0.22, h * 0.18, building.tileX + 8, building.tileY + 5);
+
+  const towerX = left + w * 0.67;
+  const towerY = top + h * 0.26;
+  ctx.fillStyle = '#7a6a4b';
+  drawRoundedRectPath(towerX, towerY, w * 0.11, h * 0.21, tileSize * 0.04);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(42, 31, 20, 0.52)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#4d4735';
+  drawRoundedRectPath(towerX - w * 0.02, towerY - h * 0.04, w * 0.15, h * 0.06, tileSize * 0.03);
+  ctx.fill();
+  ctx.fillStyle = '#242a26';
+  ctx.fillRect(towerX + w * 0.04, towerY + h * 0.06, w * 0.035, h * 0.07);
+
+  ctx.strokeStyle = '#2b241b';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.48, top + h * 0.45);
+  ctx.lineTo(left + w * 0.48, top + h * 0.22);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(38, 31, 22, 0.72)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(left + w * 0.48, top + h * 0.26, tileSize * 0.18, -0.8, 0.8);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#2c2116';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.6, top + h * 0.43);
+  ctx.lineTo(left + w * 0.6, top + h * 0.25);
+  ctx.stroke();
+  ctx.fillStyle = accent;
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.6, top + h * 0.25);
+  ctx.lineTo(left + w * 0.73, top + h * 0.3);
+  ctx.lineTo(left + w * 0.6, top + h * 0.36);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawModernWarlordCommandCenterFront(building) {
+  const x = building.x;
+  const y = building.y;
+  const w = building.width * tileSize;
+  const h = building.height * tileSize;
+  const left = -w * 0.5;
+  const top = -h * 0.5;
+
+  ctx.save();
+  ctx.translate(x, y);
+
+  const gateY = top + h * 0.72;
+  ctx.fillStyle = '#2d2b24';
+  drawRoundedRectPath(left + w * 0.39, gateY, w * 0.22, h * 0.12, tileSize * 0.035);
+  ctx.fill();
+  ctx.strokeStyle = '#b8a16d';
+  ctx.lineWidth = 2.2;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(193, 172, 119, 0.4)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const px = left + w * 0.39 + (w * 0.22 * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(px, gateY + h * 0.02);
+    ctx.lineTo(px, gateY + h * 0.1);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#756140';
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.34, top + h * 0.84);
+  ctx.lineTo(left + w * 0.66, top + h * 0.84);
+  ctx.lineTo(left + w * 0.58, top + h * 0.9);
+  ctx.lineTo(left + w * 0.42, top + h * 0.9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(54, 39, 24, 0.45)';
+  ctx.stroke();
+
+  drawSandbagStack(left + w * 0.22, top + h * 0.8, 8, 1.05);
+  drawSandbagStack(left + w * 0.68, top + h * 0.8, 8, 1.05);
+
+  ctx.fillStyle = '#343632';
+  ctx.fillRect(left + w * 0.27, top + h * 0.61, w * 0.11, h * 0.035);
+  ctx.fillRect(left + w * 0.62, top + h * 0.61, w * 0.08, h * 0.035);
+
+  ctx.restore();
+}
+
+function drawModernWarlordCommandCenter(building, layer = 'full') {
+  if (layer === 'base') {
+    drawModernWarlordCommandCenterBase(building);
+    return;
+  }
+  if (layer === 'front') {
+    drawModernWarlordCommandCenterFront(building);
+    return;
+  }
+  drawModernWarlordCommandCenterBase(building);
+  drawModernWarlordCommandCenterFront(building);
+}
+
 function drawTowerBuilding(building) {
   const x = building.x;
   const y = building.y;
   const w = building.width * tileSize;
   const h = building.height * tileSize;
   const accent = getTeamAccent(building.team);
-  const stone = '#87897f';
 
   ctx.save();
   ctx.translate(x, y);
 
-  ctx.globalAlpha = 0.25;
-  ctx.fillStyle = '#1c1209';
-  ctx.beginPath();
-  ctx.ellipse(0, h * 0.34, w * 0.43, h * 0.14, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
+  drawBuildingShadow(w, h, 0.24);
 
-  ctx.fillStyle = stone;
-  ctx.fillRect(-w * 0.28, -h * 0.56, w * 0.56, h * 0.96);
+  ctx.fillStyle = createBuildingGradient(-w * 0.33, -h * 0.62, w * 0.28, h * 0.42, [
+    [0, '#b9b5a4'],
+    [0.5, '#85877d'],
+    [1, '#575b53']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.26, h * 0.38);
+  ctx.lineTo(-w * 0.31, -h * 0.48);
+  ctx.quadraticCurveTo(0, -h * 0.6, w * 0.31, -h * 0.48);
+  ctx.lineTo(w * 0.26, h * 0.38);
+  ctx.quadraticCurveTo(0, h * 0.48, -w * 0.26, h * 0.38);
+  ctx.closePath();
+  ctx.fill();
   ctx.strokeStyle = '#383b35';
   ctx.lineWidth = 3;
-  ctx.strokeRect(-w * 0.28, -h * 0.56, w * 0.56, h * 0.96);
+  ctx.stroke();
 
-  ctx.fillStyle = '#666a60';
-  for (let i = -2; i <= 2; i++) {
-    ctx.fillRect(i * w * 0.13 - w * 0.045, -h * 0.72, w * 0.09, h * 0.18);
-  }
-  ctx.fillRect(-w * 0.36, -h * 0.58, w * 0.72, h * 0.08);
-  ctx.fillRect(-w * 0.37, -h * 0.63, w * 0.08, h * 0.13);
-  ctx.fillRect(w * 0.29, -h * 0.63, w * 0.08, h * 0.13);
-
-  ctx.strokeStyle = 'rgba(58, 55, 46, 0.45)';
-  ctx.lineWidth = 1;
-  for (let row = 0; row < 5; row++) {
-    const yy = -h * 0.38 + row * h * 0.15;
+  ctx.save();
+  ctx.clip();
+  for (let row = 0; row < 6; row++) {
+    const yy = -h * 0.42 + row * h * 0.14;
+    ctx.strokeStyle = row % 2 ? 'rgba(42, 40, 34, 0.28)' : 'rgba(241, 233, 205, 0.14)';
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(-w * 0.28, yy);
-    ctx.lineTo(w * 0.28, yy);
+    ctx.moveTo(-w * 0.23, yy);
+    ctx.lineTo(w * 0.23, yy + (row % 2 ? 1 : -1));
     ctx.stroke();
+  }
+  for (let i = 0; i < 16; i++) {
+    const n = hashNoise(building.tileX + i, building.tileY + 17);
+    const sx = -w * 0.22 + n * w * 0.44;
+    const sy = -h * 0.46 + hashNoise(building.tileX + i * 3, building.tileY) * h * 0.72;
+    ctx.fillStyle = n > 0.55 ? 'rgba(255,255,235,0.08)' : 'rgba(25,24,20,0.08)';
+    drawRoundedRectPath(sx, sy, w * 0.08, h * 0.045, 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  ctx.fillStyle = '#5f625a';
+  drawRoundedRectPath(-w * 0.38, -h * 0.62, w * 0.76, h * 0.1, tileSize * 0.03);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(40, 38, 32, 0.52)';
+  ctx.stroke();
+  for (let i = -2; i <= 2; i++) {
+    drawRoundedRectPath(i * w * 0.14 - w * 0.045, -h * 0.76, w * 0.09, h * 0.2, 2);
+    ctx.fill();
   }
 
   ctx.fillStyle = '#211914';
@@ -3294,3 +4948,6 @@ function hasLineOfSight(startTile, endTile, options = {}) {
 function smoothPath(path, options = {}) {
   return getNavigationService().smoothPath(path, options);
 }
+
+window.getBuildPlacementPreview = getBuildPlacementPreview;
+window.renderBuildPlacementPreview = renderBuildPlacementPreview;

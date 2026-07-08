@@ -1,14 +1,14 @@
 {
   "metal_plateau": {
-    "name": "Metal Plateau",
-    "description": "Broad metal-rich battlefield with sparse organic cover and enough reclaim fields for huge robot armies.",
+    "name": "Alien Metal Plateau",
+    "description": "Futuristic alien metallic planet with no water, no organic cover, and dense reclaim fields for huge robot armies.",
     "visualStyle": "metal_wasteland",
-    "waterLevel": 4,
-    "rockCount": 80,
-    "treeCount": 4,
+    "waterLevel": 0,
+    "rockCount": 96,
+    "treeCount": 0,
     "sheepCount": 0,
     "duckCount": 0,
-    "goldMineCount": 20,
+    "goldMineCount": 24,
     "houseCount": 0
   }
 }

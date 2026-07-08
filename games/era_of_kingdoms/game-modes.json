@@ -9,15 +9,17 @@
     "allowedUnits": ["eok_villager", "eok_spearman", "eok_archer", "eok_cavalry"],
     "defaults": {
       "enabledUnits": ["eok_villager", "eok_spearman", "eok_archer", "eok_cavalry"],
-      "mapStyle": "eok_arabia",
-      "visualStyle": "arabia_dryland",
+      "mapStyle": "temperate_valley",
+      "visualStyle": "temperate_kingdom",
       "mapSize": "default_large",
-      "waterLevel": 0,
-      "rockCount": 34,
-      "treeCount": 145,
+      "generatedLandscape": "lakes",
+      "generatedTerrain": "grass",
+      "waterLevel": 12,
+      "rockCount": 18,
+      "treeCount": 125,
       "sheepCount": 18,
-      "duckCount": 0,
-      "goldMineCount": 8,
+      "duckCount": 6,
+      "goldMineCount": 7,
       "houseCount": 0,
       "startingGold": 100,
       "startingWood": 250,
@@ -34,6 +36,6 @@
       "wildlife": true,
       "signature": "villager boom, hunting, chopping, mining, house growth, and town defense"
     },
-    "sections": ["map", "forces", "wildlife"]
+    "sections": ["map", "forces"]
   }
 }

@@ -396,6 +396,7 @@ test('game packages override platform modes without creating new game type butto
         id: 'versus',
         shortName: 'Versus',
         name: 'Versus',
+        summary: 'Player-versus-player battle with configurable teams and room settings.',
         allowedUnits: ['worker'],
         defaults: {
           mapStyle: 'coastal_grassland',
@@ -411,20 +412,44 @@ test('game packages override platform modes without creating new game type butto
 
   assert.deepEqual(JSON.parse(JSON.stringify(Object.keys(merged.modes))), ['versus', 'tower_defense', 'unit_comparison', 'map_builder']);
   assert.equal(merged.modes.versus.id, 'versus');
-  assert.equal(merged.modes.versus.shortName, 'StarSiege');
+  assert.equal(merged.modes.versus.shortName, 'Versus');
+  assert.equal(merged.modes.versus.name, 'Versus');
+  assert.match(merged.modes.versus.summary, /configurable teams and room settings/);
   assert.equal(merged.modes.versus.defaults.mapStyle, 'crystal_frontier');
   assert.equal(merged.modes.versus.defaults.startingGold, 50);
   assert.deepEqual(JSON.parse(JSON.stringify(merged.modes.versus.defaults.unitRoster)), { ss_probe: 4 });
   assert.deepEqual(JSON.parse(JSON.stringify(merged.modes.unit_comparison.allowedUnits)), ['ss_probe', 'ss_marine']);
   assert.deepEqual(JSON.parse(JSON.stringify(merged.modes.unit_comparison.defaults.enabledUnits)), ['ss_probe', 'ss_marine']);
+  assert.equal(merged.modes.unit_comparison.defaults.mapStyle, 'crystal_frontier');
   assert.deepEqual(JSON.parse(JSON.stringify(merged.modes.unit_comparison.defaults.leftUnitRoster)), { ss_probe: 4, ss_marine: 0 });
   assert.deepEqual(JSON.parse(JSON.stringify(merged.modes.unit_comparison.defaults.rightUnitRoster)), { ss_probe: 4, ss_marine: 0 });
+  assert.equal(merged.modes.tower_defense.shortName, 'TD');
+  assert.deepEqual(JSON.parse(JSON.stringify(merged.modes.tower_defense.allowedUnits)), ['ss_probe', 'ss_marine']);
+  assert.deepEqual(JSON.parse(JSON.stringify(merged.modes.tower_defense.defaults.enabledUnits)), ['ss_probe', 'ss_marine']);
+  assert.equal(merged.modes.tower_defense.defaults.mapStyle, 'crystal_frontier');
+  assert.deepEqual(JSON.parse(JSON.stringify(merged.modes.tower_defense.defaults.unitRoster)), { ss_probe: 4, ss_marine: 0 });
+  assert.equal(merged.modes.map_builder.shortName, 'Builder');
+  assert.deepEqual(JSON.parse(JSON.stringify(merged.modes.map_builder.allowedUnits)), ['ss_probe', 'ss_marine']);
+  assert.deepEqual(JSON.parse(JSON.stringify(merged.modes.map_builder.defaults.enabledUnits)), ['ss_probe', 'ss_marine']);
+  assert.equal(merged.modes.map_builder.defaults.mapStyle, 'crystal_frontier');
   assert.deepEqual(JSON.parse(JSON.stringify(merged.activeGamePackage.modeOverrides)), [{ source: 'spacesiege_versus', target: 'versus' }]);
-  assert.deepEqual(JSON.parse(JSON.stringify(merged.activeGamePackage.modeDerivatives)), [{
-    source: 'versus',
-    target: 'unit_comparison',
-    fields: ['allowedUnits', 'enabledUnits', 'leftUnitRoster', 'rightUnitRoster']
-  }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(merged.activeGamePackage.modeDerivatives)), [
+    {
+      source: 'versus',
+      target: 'unit_comparison',
+      fields: ['allowedUnits', 'enabledUnits', 'leftUnitRoster', 'rightUnitRoster', 'map defaults']
+    },
+    {
+      source: 'versus',
+      target: 'tower_defense',
+      fields: ['allowedUnits', 'enabledUnits', 'unitRoster', 'map defaults']
+    },
+    {
+      source: 'versus',
+      target: 'map_builder',
+      fields: ['allowedUnits', 'enabledUnits', 'map defaults']
+    }
+  ]);
   assert.deepEqual(JSON.parse(JSON.stringify(merged.activeGamePackage.ignoredModeIds)), ['spacesiege_campaign']);
 });
 

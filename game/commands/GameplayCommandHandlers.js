@@ -139,7 +139,9 @@
       register(commandTypes.WORKER_BUILD, 'Order a worker to construct a building.', {
         unitId: id,
         buildingType: 'string',
-        ...worldPoint
+        ...worldPoint,
+        tileX: { type: 'number', required: false, integer: true },
+        tileY: { type: 'number', required: false, integer: true }
       }, command => {
         const unit = resolveUnit(command.payload.unitId);
         if (!unit) return false;
@@ -147,7 +149,11 @@
           unit,
           command.payload.buildingType,
           command.payload.x,
-          command.payload.y
+          command.payload.y,
+          {
+            tileX: command.payload.tileX,
+            tileY: command.payload.tileY
+          }
         );
       });
       register(commandTypes.HOUSE_ENTER, 'Order one unit to enter a house through its door.', {

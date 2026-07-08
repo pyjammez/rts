@@ -1,77 +1,85 @@
 {
   "mw_united_coalition": {
     "name": "United Coalition",
-    "summary": "High-tech modern army with balanced infantry, sturdy tanks, and air support.",
+    "summary": "High-tech expeditionary army with strong air support, drones, missile infantry, and flexible defenses.",
     "ruleset": "modern_warlord_rules",
     "theme": "dry_oil_basin",
     "color": "#2d65c8",
-    "startingResources": { "supplies": 10000, "power": 0, "command_rank": 0 },
-    "startingUnits": { "mw_dozer": 1, "mw_rifleman": 2 },
+    "startingResources": { "supplies": 12000, "power": 0, "command_rank": 0 },
+    "startingUnits": { "mw_dozer": 3, "mw_rifleman": 2 },
     "startingBuildings": { "mw_command_center": 1 },
-    "units": ["mw_dozer", "mw_rifleman", "mw_tank", "mw_gunship"],
-    "buildings": ["mw_command_center", "mw_reactor", "mw_barracks", "mw_war_factory", "mw_patrol_tower"],
+    "units": ["mw_dozer", "mw_rifleman", "mw_missile_squad", "mw_commando", "mw_tank", "mw_aa_vehicle", "mw_gunship", "mw_combat_drone"],
+    "buildings": ["mw_command_center", "mw_reactor", "mw_supply_center", "mw_barracks", "mw_war_factory", "mw_airfield", "mw_strategy_center", "mw_patrol_tower", "mw_missile_battery", "mw_bunker"],
     "techTree": {
       "rootBuildings": ["mw_command_center"],
       "unlocks": {
-        "mw_command_center": ["mw_dozer", "mw_reactor", "mw_barracks"],
-        "mw_barracks": ["mw_rifleman", "mw_war_factory", "mw_patrol_tower"],
-        "mw_war_factory": ["mw_tank", "mw_gunship"]
+        "mw_command_center": ["mw_dozer", "mw_reactor", "mw_supply_center", "mw_barracks"],
+        "mw_reactor": ["mw_patrol_tower", "mw_missile_battery"],
+        "mw_barracks": ["mw_rifleman", "mw_missile_squad", "mw_commando", "mw_war_factory"],
+        "mw_war_factory": ["mw_tank", "mw_aa_vehicle", "mw_airfield", "mw_strategy_center"],
+        "mw_airfield": ["mw_gunship", "mw_combat_drone"],
+        "mw_strategy_center": ["mw_commando", "mw_bunker"]
       }
     },
     "production": {
       "mw_command_center": { "train": ["mw_dozer"], "research": [] },
-      "mw_barracks": { "train": ["mw_rifleman"], "research": [] },
-      "mw_war_factory": { "train": ["mw_tank", "mw_gunship"], "research": [] }
+      "mw_barracks": { "train": ["mw_rifleman", "mw_missile_squad", "mw_commando"], "research": [] },
+      "mw_war_factory": { "train": ["mw_tank", "mw_aa_vehicle"], "research": [] },
+      "mw_airfield": { "train": ["mw_gunship", "mw_combat_drone"], "research": [] }
     }
   },
   "mw_eastern_federation": {
     "name": "Eastern Federation",
-    "summary": "Mass-production modern army with stronger armor focus and heavier ground pressure.",
+    "summary": "Industrial war machine with cheaper infantry, heavier tanks, flame troops, artillery, and massed armor pressure.",
     "ruleset": "modern_warlord_rules",
     "theme": "dry_oil_basin",
     "color": "#c63c3c",
-    "startingResources": { "supplies": 10000, "power": 0, "command_rank": 0 },
-    "startingUnits": { "mw_dozer": 1, "mw_rifleman": 3 },
+    "startingResources": { "supplies": 12000, "power": 0, "command_rank": 0 },
+    "startingUnits": { "mw_dozer": 3, "mw_rifleman": 3 },
     "startingBuildings": { "mw_command_center": 1 },
-    "units": ["mw_dozer", "mw_rifleman", "mw_tank"],
-    "buildings": ["mw_command_center", "mw_reactor", "mw_barracks", "mw_war_factory", "mw_patrol_tower"],
+    "units": ["mw_dozer", "mw_rifleman", "mw_flamer", "mw_missile_squad", "mw_tank", "mw_heavy_tank", "mw_artillery", "mw_aa_vehicle"],
+    "buildings": ["mw_command_center", "mw_reactor", "mw_supply_center", "mw_barracks", "mw_war_factory", "mw_strategy_center", "mw_patrol_tower", "mw_missile_battery", "mw_bunker"],
     "techTree": {
       "rootBuildings": ["mw_command_center"],
       "unlocks": {
-        "mw_command_center": ["mw_dozer", "mw_reactor", "mw_barracks"],
-        "mw_barracks": ["mw_rifleman", "mw_war_factory", "mw_patrol_tower"],
-        "mw_war_factory": ["mw_tank"]
+        "mw_command_center": ["mw_dozer", "mw_reactor", "mw_supply_center", "mw_barracks"],
+        "mw_reactor": ["mw_patrol_tower", "mw_missile_battery"],
+        "mw_barracks": ["mw_rifleman", "mw_flamer", "mw_missile_squad", "mw_war_factory"],
+        "mw_war_factory": ["mw_tank", "mw_aa_vehicle", "mw_strategy_center"],
+        "mw_strategy_center": ["mw_heavy_tank", "mw_artillery", "mw_bunker"]
       }
     },
     "production": {
       "mw_command_center": { "train": ["mw_dozer"], "research": [] },
-      "mw_barracks": { "train": ["mw_rifleman"], "research": [] },
-      "mw_war_factory": { "train": ["mw_tank"], "research": [] }
+      "mw_barracks": { "train": ["mw_rifleman", "mw_flamer", "mw_missile_squad"], "research": [] },
+      "mw_war_factory": { "train": ["mw_tank", "mw_heavy_tank", "mw_artillery", "mw_aa_vehicle"], "research": [] }
     }
   },
   "mw_insurgent_network": {
     "name": "Insurgent Network",
-    "summary": "Scrappy asymmetric army with extra infantry starts, fast harassment, and limited heavy armor.",
+    "summary": "Asymmetric force with cheap infantry, fast technicals, demo squads, tunnels, salvage workers, and low-power base play.",
     "ruleset": "modern_warlord_rules",
     "theme": "dry_oil_basin",
     "color": "#c08935",
-    "startingResources": { "supplies": 10000, "power": 0, "command_rank": 0 },
-    "startingUnits": { "mw_dozer": 1, "mw_rifleman": 4 },
+    "startingResources": { "supplies": 11000, "power": 0, "command_rank": 0 },
+    "startingUnits": { "mw_worker_cell": 4, "mw_rebel": 4 },
     "startingBuildings": { "mw_command_center": 1 },
-    "units": ["mw_dozer", "mw_rifleman", "mw_gunship"],
-    "buildings": ["mw_command_center", "mw_barracks", "mw_war_factory", "mw_patrol_tower"],
+    "units": ["mw_worker_cell", "mw_rebel", "mw_missile_squad", "mw_demo_cell", "mw_technical", "mw_quad_truck", "mw_artillery", "mw_combat_drone"],
+    "buildings": ["mw_command_center", "mw_supply_center", "mw_barracks", "mw_war_factory", "mw_airfield", "mw_tunnel_network", "mw_bunker"],
     "techTree": {
       "rootBuildings": ["mw_command_center"],
       "unlocks": {
-        "mw_command_center": ["mw_dozer", "mw_barracks"],
-        "mw_barracks": ["mw_rifleman", "mw_war_factory"],
-        "mw_war_factory": ["mw_gunship"]
+        "mw_command_center": ["mw_worker_cell", "mw_supply_center", "mw_barracks", "mw_tunnel_network"],
+        "mw_barracks": ["mw_rebel", "mw_missile_squad", "mw_demo_cell", "mw_war_factory", "mw_bunker"],
+        "mw_war_factory": ["mw_technical", "mw_quad_truck", "mw_artillery", "mw_airfield"],
+        "mw_airfield": ["mw_combat_drone"]
       }
     },
     "production": {
-      "mw_command_center": { "train": ["mw_dozer"], "research": [] },
-      "mw_barracks": { "train": ["mw_rifleman"], "research": [] },
-      "mw_war_factory": { "train": ["mw_gunship"], "research": [] }
+      "mw_command_center": { "train": ["mw_worker_cell"], "research": [] },
+      "mw_barracks": { "train": ["mw_rebel", "mw_missile_squad", "mw_demo_cell"], "research": [] },
+      "mw_war_factory": { "train": ["mw_technical", "mw_quad_truck", "mw_artillery"], "research": [] },
+      "mw_airfield": { "train": ["mw_combat_drone"], "research": [] }
     }
   }
 }

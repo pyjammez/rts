@@ -1,12 +1,8 @@
 function initGameScreens() {
-  initTitleScreen();
   renderModeButtons();
   initGameSetupScreen();
   initReadyRoomScreen();
   initGameOverScreen();
-
-  mergeModeDefaults(DEFAULT_MODE_ID);
-  renderConfigPanel(DEFAULT_MODE_ID);
   updateModeButtons();
 }
 

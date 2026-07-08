@@ -141,7 +141,7 @@ const cameraController = OpenRTS.camera.controller.createCameraController({
   getComputedStyle,
   getMapWidthPx,
   getMapHeightPx,
-  use3DRenderer: () => typeof use3DRenderer === 'function' && use3DRenderer(),
+  use3DRenderer: () => false,
   refresh3DCameraMatrices: () => {
     if (typeof refresh3DCameraMatrices === 'function') refresh3DCameraMatrices();
   },
@@ -394,6 +394,9 @@ function render2DScene() {
     renderUnitSystem(gameRuntime.aliveUnits, ctx, DEBUG);
   }
   OpenRTS.systems.projectiles.render2D(ctx);
+  if (typeof window.renderBuildPlacementPreview === 'function') {
+    window.renderBuildPlacementPreview(ctx);
+  }
   if (typeof renderCommandClickMarkers === 'function') {
     renderCommandClickMarkers(ctx);
   }
@@ -407,16 +410,8 @@ function registerRenderers() {
   if (OpenRTS.rendering.describe().renderers.length > 0) return;
 
   OpenRTS.rendering.register({
-    id: 'three',
-    priority: 100,
-    available: () => typeof use3DRenderer === 'function' &&
-      use3DRenderer() &&
-      typeof render3DScene === 'function',
-    render: () => render3DScene(units)
-  });
-  OpenRTS.rendering.register({
     id: 'canvas-2d',
-    priority: 0,
+    priority: 100,
     render: render2DScene
   });
 }
@@ -488,6 +483,35 @@ function applyInitialCameraForMode() {
   clampCameraPosition();
 }
 
+function configureMatchResources(config = window.mapConfig || mapConfig || {}) {
+  const slots = typeof getActivePlayerSlots === 'function' ? getActivePlayerSlots(config) : [];
+  const teams = typeof getConfiguredTeams === 'function' ? getConfiguredTeams(config) : ['red', 'blue'];
+  const firstFaction = slots.length && typeof getFactionDefinition === 'function'
+    ? getFactionDefinition(slots[0].factionId)
+    : null;
+  const ruleset = typeof getRulesetDefinition === 'function'
+    ? getRulesetDefinition(firstFaction?.ruleset || 'open_rts_core')
+    : null;
+
+  OpenRTS.systems.resources?.configure({
+    resources: ruleset?.resources || null
+  });
+
+  OpenRTS.systems.resources?.reset(teams, {
+    gold: config.startingGold ?? 140,
+    wood: config.startingWood ?? 160,
+    stone: config.startingStone ?? 0,
+    food: config.startingFood ?? 0
+  });
+
+  for (const slot of slots) {
+    const faction = typeof getFactionDefinition === 'function' ? getFactionDefinition(slot.factionId) : null;
+    if (slot.flag && faction?.startingResources) {
+      OpenRTS.systems.resources?.set?.(slot.flag, faction.startingResources);
+    }
+  }
+}
+
 function initializeGame() {
   console.log('Initializing game with config:', mapConfig);
   if (typeof resetGameSession === 'function') resetGameSession();
@@ -498,15 +522,7 @@ function initializeGame() {
   OpenRTS.systems.skirmishAi?.reset();
   OpenRTS.systems.workerEconomy?.reset();
   OpenRTS.systems.towerDefense?.reset(window.mapConfig || mapConfig || {});
-  OpenRTS.systems.resources?.reset(
-    typeof getConfiguredTeams === 'function' ? getConfiguredTeams(window.mapConfig || mapConfig || {}) : ['red', 'blue'],
-    {
-      gold: (window.mapConfig || mapConfig || {}).startingGold ?? 140,
-      wood: (window.mapConfig || mapConfig || {}).startingWood ?? 160,
-      stone: (window.mapConfig || mapConfig || {}).startingStone ?? 0,
-      food: (window.mapConfig || mapConfig || {}).startingFood ?? 0
-    }
-  );
+  configureMatchResources(window.mapConfig || mapConfig || {});
   regenerateMapData();
   spawnInitialUnits();
   if (typeof startGameSession === 'function') startGameSession(window.mapConfig || mapConfig || {});

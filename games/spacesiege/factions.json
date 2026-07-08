@@ -1,71 +1,144 @@
 {
   "ss_humans": {
     "name": "Humans",
-    "summary": "Disciplined ranged infantry, defensive tech, and reliable air support.",
+    "summary": "Disciplined ranged infantry, modular production, strong defensive tech, siege vehicles, and reliable air support.",
     "ruleset": "spacesiege_rules",
-    "theme": "crystal_frontier",
+    "theme": "muddy_badlands",
     "color": "#47a8ff",
     "startingResources": { "minerals": 50, "vapor": 0, "supply": 10, "energy": 0 },
-    "startingUnits": { "ss_probe": 4, "ss_marine": 1 },
-    "startingBuildings": { "ss_nexus": 1 },
-    "units": ["ss_probe", "ss_marine", "ss_interceptor"],
-    "buildings": ["ss_nexus", "ss_pylon", "ss_gateway", "ss_defense_spire"],
+    "startingUnits": { "ss_human_engineer": 4, "ss_human_rifleman": 1 },
+    "startingBuildings": { "ss_human_command_hub": 1 },
+    "units": [
+      "ss_human_engineer",
+      "ss_human_rifleman",
+      "ss_human_firetrooper",
+      "ss_human_medic",
+      "ss_human_siege_tank",
+      "ss_human_goliath",
+      "ss_human_wraith",
+      "ss_human_battlecruiser"
+    ],
+    "buildings": [
+      "ss_human_command_hub",
+      "ss_human_depot",
+      "ss_human_refinery",
+      "ss_human_barracks",
+      "ss_human_factory",
+      "ss_human_starport",
+      "ss_human_armory",
+      "ss_human_missile_turret"
+    ],
     "techTree": {
-      "rootBuildings": ["ss_nexus"],
+      "rootBuildings": ["ss_human_command_hub"],
       "unlocks": {
-        "ss_nexus": ["ss_probe", "ss_pylon", "ss_gateway"],
-        "ss_gateway": ["ss_marine", "ss_interceptor", "ss_defense_spire"]
+        "ss_human_command_hub": ["ss_human_engineer", "ss_human_depot", "ss_human_refinery", "ss_human_barracks"],
+        "ss_human_depot": ["ss_human_missile_turret"],
+        "ss_human_barracks": ["ss_human_rifleman", "ss_human_firetrooper", "ss_human_medic", "ss_human_factory", "ss_human_armory"],
+        "ss_human_factory": ["ss_human_siege_tank", "ss_human_goliath", "ss_human_starport"],
+        "ss_human_armory": ["ss_human_goliath", "ss_human_battlecruiser"],
+        "ss_human_starport": ["ss_human_wraith", "ss_human_battlecruiser"]
       }
     },
     "production": {
-      "ss_nexus": { "train": ["ss_probe"], "research": [] },
-      "ss_gateway": { "train": ["ss_marine", "ss_interceptor"], "research": [] }
+      "ss_human_command_hub": { "train": ["ss_human_engineer"], "research": [] },
+      "ss_human_barracks": { "train": ["ss_human_rifleman", "ss_human_firetrooper", "ss_human_medic"], "research": [] },
+      "ss_human_factory": { "train": ["ss_human_siege_tank", "ss_human_goliath"], "research": [] },
+      "ss_human_starport": { "train": ["ss_human_wraith", "ss_human_battlecruiser"], "research": [] }
     }
   },
   "ss_cybernetic": {
     "name": "Cybernetic",
-    "summary": "Shielded machine walkers with smaller armies and stronger individual units.",
+    "summary": "Shielded elite warriors, fewer but stronger armies, powerful walkers, precision robotics, and expensive capital craft.",
     "ruleset": "spacesiege_rules",
-    "theme": "crystal_frontier",
+    "theme": "muddy_badlands",
     "color": "#b55cff",
     "startingResources": { "minerals": 50, "vapor": 0, "supply": 10, "energy": 0 },
-    "startingUnits": { "ss_probe": 4 },
-    "startingBuildings": { "ss_nexus": 1 },
-    "units": ["ss_probe", "ss_dragoon", "ss_interceptor"],
-    "buildings": ["ss_nexus", "ss_pylon", "ss_gateway", "ss_defense_spire"],
+    "startingUnits": { "ss_cyber_probe": 4 },
+    "startingBuildings": { "ss_cyber_nexus": 1 },
+    "units": [
+      "ss_cyber_probe",
+      "ss_cyber_bladeguard",
+      "ss_cyber_stalker",
+      "ss_cyber_sentry",
+      "ss_cyber_reaver",
+      "ss_cyber_interceptor",
+      "ss_cyber_carrier"
+    ],
+    "buildings": [
+      "ss_cyber_nexus",
+      "ss_cyber_pylon",
+      "ss_cyber_assimilator",
+      "ss_cyber_gateway",
+      "ss_cyber_core",
+      "ss_cyber_robotics",
+      "ss_cyber_stargate",
+      "ss_cyber_photon_spire"
+    ],
     "techTree": {
-      "rootBuildings": ["ss_nexus"],
+      "rootBuildings": ["ss_cyber_nexus"],
       "unlocks": {
-        "ss_nexus": ["ss_probe", "ss_pylon", "ss_gateway"],
-        "ss_gateway": ["ss_dragoon", "ss_interceptor", "ss_defense_spire"]
+        "ss_cyber_nexus": ["ss_cyber_probe", "ss_cyber_pylon", "ss_cyber_assimilator", "ss_cyber_gateway"],
+        "ss_cyber_pylon": ["ss_cyber_photon_spire"],
+        "ss_cyber_gateway": ["ss_cyber_bladeguard", "ss_cyber_core"],
+        "ss_cyber_core": ["ss_cyber_stalker", "ss_cyber_sentry", "ss_cyber_robotics", "ss_cyber_stargate"],
+        "ss_cyber_robotics": ["ss_cyber_reaver"],
+        "ss_cyber_stargate": ["ss_cyber_interceptor", "ss_cyber_carrier"]
       }
     },
     "production": {
-      "ss_nexus": { "train": ["ss_probe"], "research": [] },
-      "ss_gateway": { "train": ["ss_dragoon", "ss_interceptor"], "research": [] }
+      "ss_cyber_nexus": { "train": ["ss_cyber_probe"], "research": [] },
+      "ss_cyber_gateway": { "train": ["ss_cyber_bladeguard", "ss_cyber_stalker", "ss_cyber_sentry"], "research": [] },
+      "ss_cyber_robotics": { "train": ["ss_cyber_reaver"], "research": [] },
+      "ss_cyber_stargate": { "train": ["ss_cyber_interceptor", "ss_cyber_carrier"], "research": [] }
     }
   },
   "ss_aliens": {
     "name": "Aliens",
-    "summary": "Aggressive swarm-like raiders with quick infantry pressure and fast air harassment.",
+    "summary": "Aggressive biological swarm with cheap melee pressure, living tech structures, fast air harassment, and huge late-game beasts.",
     "ruleset": "spacesiege_rules",
-    "theme": "crystal_frontier",
+    "theme": "muddy_badlands",
     "color": "#7ccf4a",
     "startingResources": { "minerals": 50, "vapor": 0, "supply": 10, "energy": 0 },
-    "startingUnits": { "ss_probe": 5 },
-    "startingBuildings": { "ss_nexus": 1 },
-    "units": ["ss_probe", "ss_marine", "ss_interceptor"],
-    "buildings": ["ss_nexus", "ss_pylon", "ss_gateway", "ss_defense_spire"],
+    "startingUnits": { "ss_alien_drone": 5 },
+    "startingBuildings": { "ss_alien_hive": 1 },
+    "units": [
+      "ss_alien_drone",
+      "ss_alien_ripper",
+      "ss_alien_spitter",
+      "ss_alien_burrower",
+      "ss_alien_razorwing",
+      "ss_alien_guardian",
+      "ss_alien_behemoth"
+    ],
+    "buildings": [
+      "ss_alien_hive",
+      "ss_alien_overmind_node",
+      "ss_alien_extractor",
+      "ss_alien_spawning_pool",
+      "ss_alien_hydra_den",
+      "ss_alien_lair",
+      "ss_alien_spire",
+      "ss_alien_cavern",
+      "ss_alien_spore_colony"
+    ],
     "techTree": {
-      "rootBuildings": ["ss_nexus"],
+      "rootBuildings": ["ss_alien_hive"],
       "unlocks": {
-        "ss_nexus": ["ss_probe", "ss_pylon", "ss_gateway"],
-        "ss_gateway": ["ss_marine", "ss_interceptor"]
+        "ss_alien_hive": ["ss_alien_drone", "ss_alien_overmind_node", "ss_alien_extractor", "ss_alien_spawning_pool"],
+        "ss_alien_overmind_node": ["ss_alien_spore_colony"],
+        "ss_alien_spawning_pool": ["ss_alien_ripper", "ss_alien_hydra_den", "ss_alien_lair"],
+        "ss_alien_hydra_den": ["ss_alien_spitter", "ss_alien_burrower"],
+        "ss_alien_lair": ["ss_alien_razorwing", "ss_alien_spire", "ss_alien_cavern"],
+        "ss_alien_spire": ["ss_alien_razorwing", "ss_alien_guardian"],
+        "ss_alien_cavern": ["ss_alien_behemoth"]
       }
     },
     "production": {
-      "ss_nexus": { "train": ["ss_probe"], "research": [] },
-      "ss_gateway": { "train": ["ss_marine", "ss_interceptor"], "research": [] }
+      "ss_alien_hive": { "train": ["ss_alien_drone"], "research": [] },
+      "ss_alien_spawning_pool": { "train": ["ss_alien_ripper"], "research": [] },
+      "ss_alien_hydra_den": { "train": ["ss_alien_spitter", "ss_alien_burrower"], "research": [] },
+      "ss_alien_spire": { "train": ["ss_alien_razorwing", "ss_alien_guardian"], "research": [] },
+      "ss_alien_cavern": { "train": ["ss_alien_behemoth"], "research": [] }
     }
   }
 }

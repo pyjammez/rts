@@ -764,6 +764,12 @@ const configLoadState = {
   activeGamePackage: null
 };
 
+function resetConfigLoadState() {
+  configLoadState.usedFallback = false;
+  configLoadState.errors.length = 0;
+  configLoadState.activeGamePackage = null;
+}
+
 function normalizeDefinitionMap(data, fallback, label) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error(`${label} must be an object keyed by id`);
@@ -981,11 +987,16 @@ function describeConfigDefinitions() {
   };
 }
 
-async function applySelectedGamePackage() {
+async function applySelectedGamePackage(options = {}) {
   const packages = OpenRTS.config.gamePackages;
   if (!packages?.loadSelectedGamePackage || !packages?.applyGamePackage) return;
   try {
-    const gamePackage = await packages.loadSelectedGamePackage(window.location);
+    const hasExplicitPackage = Object.prototype.hasOwnProperty.call(options, 'packageId');
+    const packageId = hasExplicitPackage ? String(options.packageId || '') : '';
+    if (hasExplicitPackage && packages.selectGamePackage) packages.selectGamePackage(packageId);
+    const gamePackage = hasExplicitPackage
+      ? packageId ? await packages.loadGamePackage(packageId) : null
+      : await packages.loadSelectedGamePackage(window.location);
     if (!gamePackage) return;
     const merged = packages.applyGamePackage({
       abilities: ABILITY_DEFINITIONS,
@@ -1020,7 +1031,8 @@ async function applySelectedGamePackage() {
   }
 }
 
-async function loadGameDefinitions() {
+async function loadGameDefinitions(options = {}) {
+  resetConfigLoadState();
   await loadContentManifest();
 
   const loaders = [
@@ -1060,7 +1072,7 @@ async function loadGameDefinitions() {
     }
   }
 
-  await applySelectedGamePackage();
+  await applySelectedGamePackage(options);
   configLoadState.loaded = true;
   publishGameDefinitions();
   OpenRTS.events.emit(OpenRTS.events.types.CONFIG_LOADED, {

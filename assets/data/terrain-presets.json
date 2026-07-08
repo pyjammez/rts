@@ -4,17 +4,19 @@
     "waterLevel": 10,
     "rockCount": 20,
     "treeCount": 30,
-    "sheepCount": 10,
-    "duckCount": 5,
-    "goldMineCount": 5
+    "sheepCount": 0,
+    "duckCount": 0,
+    "goldMineCount": 5,
+    "houseCount": 0
   },
   "defense_pass": {
     "name": "Defense Pass",
     "waterLevel": 4,
     "rockCount": 24,
     "treeCount": 65,
-    "sheepCount": 4,
-    "duckCount": 3
+    "sheepCount": 0,
+    "duckCount": 0,
+    "houseCount": 0
   },
   "arena": {
     "name": "Open Arena",

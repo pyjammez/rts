@@ -8,8 +8,10 @@ function getActiveGamePackageId() {
   const activePackage = typeof describeConfigDefinitions === 'function'
     ? describeConfigDefinitions().activeGamePackage
     : null;
+  const selectedPackageId = OpenRTS.config.gamePackages?.loadState?.selectedGamePackageId || '';
+  if (selectedPackageId === 'core') return 'core';
   const search = new URLSearchParams(window.location.search || '');
-  return activePackage?.id || search.get('game') || search.get('package') || 'core';
+  return activePackage?.id || selectedPackageId || search.get('game') || search.get('package') || 'core';
 }
 
 function packageDisplayName(entry) {
@@ -18,16 +20,23 @@ function packageDisplayName(entry) {
     : String(entry.id || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 }
 
-function navigateToGamePackage(packageId) {
-  const url = new URL(window.location.href);
-  if (!packageId || packageId === 'core') {
-    url.searchParams.delete('game');
-    url.searchParams.delete('package');
-  } else {
-    url.searchParams.set('game', packageId);
-    url.searchParams.delete('package');
+async function selectThemePackage(packageId) {
+  const nextPackageId = !packageId || packageId === 'core' ? '' : packageId;
+  const panel = document.getElementById('packageBrowser');
+  if (panel) panel.classList.add('is-loading');
+
+  try {
+    if (typeof loadGameDefinitions === 'function') {
+      await loadGameDefinitions({ packageId: nextPackageId });
+    }
+    if (typeof setSelectedModeId === 'function') setSelectedModeId('');
+    if (typeof hideConfigPanel === 'function') hideConfigPanel();
+    renderModeButtons();
+  } catch (error) {
+    console.warn('Unable to switch theme package.', error);
+  } finally {
+    if (panel) panel.classList.remove('is-loading');
   }
-  window.location.href = url.toString();
 }
 
 function renderPackageCards(list, container) {
@@ -37,8 +46,8 @@ function renderPackageCards(list, container) {
   coreButton.type = 'button';
   coreButton.className = `package-card${activeId === 'core' ? ' selected' : ''}`;
   coreButton.dataset.packageId = 'core';
-  coreButton.innerHTML = '<span>Core Open RTS</span><small>Default medieval sandbox package</small>';
-  coreButton.addEventListener('click', () => navigateToGamePackage('core'));
+  coreButton.innerHTML = '<span>Core Open RTS</span>';
+  coreButton.addEventListener('click', () => selectThemePackage('core'));
   container.appendChild(coreButton);
 
   for (const entry of list) {
@@ -49,15 +58,9 @@ function renderPackageCards(list, container) {
 
     const title = document.createElement('span');
     title.textContent = packageDisplayName(entry);
-    const summary = document.createElement('small');
-    summary.textContent = entry.style || entry.description || entry.category || entry.id;
-    const tags = document.createElement('em');
-    tags.textContent = [entry.category, ...(entry.tags || []).slice(0, 3)].filter(Boolean).join(' / ');
 
     button.appendChild(title);
-    button.appendChild(summary);
-    button.appendChild(tags);
-    button.addEventListener('click', () => navigateToGamePackage(entry.id));
+    button.addEventListener('click', () => selectThemePackage(entry.id));
     container.appendChild(button);
   }
 }

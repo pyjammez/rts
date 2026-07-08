@@ -23,9 +23,8 @@ function returnToModeSelection() {
   setPanelVisible(document.getElementById('titleScreen'), false);
   setPanelVisible(document.getElementById('modePanel'), true);
 
-  setSelectedModeId(DEFAULT_MODE_ID);
-  mergeModeDefaults(DEFAULT_MODE_ID);
-  renderConfigPanel(DEFAULT_MODE_ID);
+  setSelectedModeId('');
+  hideConfigPanel();
   updateModeButtons();
 
   if (typeof resetGameSession === 'function') resetGameSession();

@@ -31,7 +31,7 @@
     },
     {
       "id": "ultimate_extinction",
-      "name": "Ultimate Destruction",
+      "name": "Total Destruction",
       "manifest": "ultimate_extinction/manifest.json",
       "featured": true,
       "category": "robot_war",
@@ -45,14 +45,6 @@
       "category": "historical",
       "style": "food-wood-gold-stone village boom",
       "tags": ["historical", "economy", "kingdoms"]
-    },
-    {
-      "id": "desert_command",
-      "manifest": "desert_command/manifest.json",
-      "featured": false,
-      "category": "modern",
-      "style": "low-income desert raids and ambushes",
-      "tags": ["modern", "desert", "sample"]
     }
   ]
 }

@@ -10,12 +10,17 @@ const PLAYER_FLAG_OPTIONS = [
   { id: 'black', name: 'Black', color: '#34302a' }
 ];
 
-let selectedModeId = DEFAULT_MODE_ID;
+let selectedModeId = '';
 
 var mapConfig = {
   modeId: DEFAULT_MODE_ID,
   modeName: getGameModeDefinition(DEFAULT_MODE_ID).name,
+  savedMapId: '',
+  loadedMap: null,
   mapSize: 'default_large',
+  generatedMapSize: '1v1',
+  generatedLandscape: 'flat',
+  generatedTerrain: 'grass',
   waterLevel: 10,
   rockCount: 20,
   treeCount: 30,
@@ -58,17 +63,11 @@ window.mapConfig = mapConfig;
 const SETTING_FIELDS = {
   map: [
     { key: 'savedMapId', label: 'Saved Map', type: 'select', options: getSavedMapOptions },
-    { key: 'mapStyle', label: 'Terrain Preset', type: 'select', options: getTerrainPresetOptions },
-    { key: 'waterLevel', label: 'Water/Lava Coverage', type: 'range', min: 0, max: 100, suffix: '%', hint: 'Some presets render water areas as lava' },
-    { key: 'rockCount', label: 'Rocks', type: 'range', min: 0, max: 150 },
-    { key: 'treeCount', label: 'Trees', type: 'range', min: 0, max: 300 },
-    { key: 'goldMineCount', label: 'Gold Mounds', type: 'range', min: 0, max: 20 },
-    { key: 'houseCount', label: 'Neutral Houses', type: 'range', min: 0, max: 30 }
+    { key: 'generatedMapSize', label: 'Generated Size', type: 'select', options: getGeneratedMapSizeOptions, generatedOnly: true },
+    { key: 'generatedLandscape', label: 'Landscape', type: 'select', options: getGeneratedLandscapeOptions, generatedOnly: true },
+    { key: 'generatedTerrain', label: 'Terrain', type: 'select', options: getGeneratedTerrainOptions, generatedOnly: true }
   ],
-  wildlife: [
-    { key: 'sheepCount', label: 'Sheep', type: 'range', min: 0, max: 80 },
-    { key: 'duckCount', label: 'Ducks', type: 'range', min: 0, max: 80 }
-  ],
+  wildlife: [],
   forces: [
     { key: 'unitCatalog', label: 'Unit Catalog', type: 'unitCatalog' },
     { key: 'unitLoadout', label: 'Unit Stats And Starting Counts', type: 'unitLoadout' }
@@ -94,11 +93,7 @@ const SETTING_FIELDS = {
   ],
   map_builder: [
     { key: 'mapBuilderSize', label: 'Map Size', type: 'select', options: getMapBuilderSizeOptions },
-    { key: 'mapStyle', label: 'Starting Terrain', type: 'select', options: getTerrainPresetOptions },
-    { key: 'waterLevel', label: 'Water Coverage', type: 'range', min: 0, max: 100, suffix: '%' },
-    { key: 'rockCount', label: 'Starting Rocks', type: 'range', min: 0, max: 150 },
-    { key: 'treeCount', label: 'Starting Trees', type: 'range', min: 0, max: 300 },
-    { key: 'houseCount', label: 'Starting Houses', type: 'range', min: 0, max: 30 }
+    { key: 'mapStyle', label: 'Starting Terrain', type: 'select', options: getTerrainPresetOptions }
   ]
 };
 
@@ -200,6 +195,38 @@ function getTerrainPresetOptions() {
     value: preset.id || id,
     label: preset.name || titleCase(preset.id || id)
   }));
+}
+
+function getGeneratedMapSizeOptions() {
+  return [
+    { value: '1v1', label: '1v1' },
+    { value: '2v2', label: '2v2' },
+    { value: '3v3', label: '3v3' },
+    { value: '4v4', label: '4v4' }
+  ];
+}
+
+function getGeneratedLandscapeOptions() {
+  return [
+    { value: 'flat', label: 'Flat' },
+    { value: 'hilly', label: 'Hilly' },
+    { value: 'cliffs', label: 'Cliffs' },
+    { value: 'lakes', label: 'Lakes' },
+    { value: 'forest', label: 'Forest' },
+    { value: 'ocean', label: 'Ocean' },
+    { value: 'city', label: 'City' }
+  ];
+}
+
+function getGeneratedTerrainOptions() {
+  return [
+    { value: 'sand', label: 'Sand' },
+    { value: 'grass', label: 'Grass' },
+    { value: 'swamp', label: 'Swamp' },
+    { value: 'desert', label: 'Desert' },
+    { value: 'volcanic', label: 'Volcanic' },
+    { value: 'metal', label: 'Metal' }
+  ];
 }
 
 function getMapBuilderSizeOptions() {
@@ -351,6 +378,21 @@ function getActivePlayerSlots(config = mapConfig) {
   return normalizePlayerSlots(config).filter(slot => slot.controller !== 'open');
 }
 
+function generatedSizeFromMapSize(sizeId) {
+  if (['1v1', '2v2', '3v3', '4v4'].includes(sizeId)) return sizeId;
+  return '1v1';
+}
+
+function inferGeneratedTerrain(defaults = {}) {
+  const style = String(defaults.mapStyle || defaults.visualStyle || '').toLowerCase();
+  if (style.includes('lava') || style.includes('volcanic')) return 'volcanic';
+  if (style.includes('metal')) return 'metal';
+  if (style.includes('desert') || style.includes('arabia') || style.includes('dry')) return 'desert';
+  if (style.includes('swamp')) return 'swamp';
+  if (style.includes('sand')) return 'sand';
+  return 'grass';
+}
+
 function setPanelVisible(panel, visible) {
   if (panel) panel.style.display = visible ? 'block' : 'none';
 }
@@ -365,6 +407,8 @@ function mergeModeDefaults(modeId) {
     ...defaults,
     modeId: mode.id,
     modeName: mode.name,
+    savedMapId: '',
+    loadedMap: null,
     teams: [...mode.teams],
     enabledUnits,
     unitOverrides: structuredClone(defaults.unitOverrides || {}),
@@ -373,6 +417,14 @@ function mergeModeDefaults(modeId) {
       era: 'all',
       ...(defaults.unitCatalogFilters || {})
     },
+    generatedMapSize: generatedSizeFromMapSize(defaults.generatedMapSize || defaults.mapSize),
+    generatedLandscape: defaults.generatedLandscape || 'flat',
+    generatedTerrain: defaults.generatedTerrain || inferGeneratedTerrain(defaults),
+    themeDefaultMapStyle: defaults.mapStyle,
+    themeDefaultVisualStyle: defaults.visualStyle,
+    themeDefaultHouseCount: Math.max(0, Math.floor(Number(defaults.houseCount) || 0)),
+    themeDefaultSheepCount: Math.max(0, Math.floor(Number(defaults.sheepCount) || 0)),
+    themeDefaultDuckCount: Math.max(0, Math.floor(Number(defaults.duckCount) || 0)),
     playerCount: defaults.playerCount || mode.teams.length || 2,
     playerSlots: Array.isArray(defaults.playerSlots)
       ? structuredClone(defaults.playerSlots)
@@ -380,6 +432,7 @@ function mergeModeDefaults(modeId) {
     terrain: {}
   };
   normalizePlayerSlots(mapConfig);
+  applyGeneratedMapSettings();
   window.mapConfig = mapConfig;
 }
 
@@ -387,6 +440,9 @@ function createSettingControl(field) {
   const value = mapConfig[field.key];
   const row = document.createElement('div');
   row.className = 'setting-row';
+  if (field.generatedOnly && mapConfig.loadedMap) {
+    row.style.display = 'none';
+  }
 
   const label = document.createElement('label');
   label.htmlFor = `setting-${field.key}`;
@@ -438,6 +494,10 @@ function createSettingControl(field) {
         renderConfigPanel(mapConfig.modeId);
       } else if (field.key === 'savedMapId') {
         mapConfig.loadedMap = event.target.value ? getSavedMapById(event.target.value) : null;
+        if (!mapConfig.loadedMap) applyGeneratedMapSettings();
+        renderConfigPanel(mapConfig.modeId);
+      } else if (['generatedMapSize', 'generatedLandscape', 'generatedTerrain'].includes(field.key)) {
+        applyGeneratedMapSettings();
       }
     });
 
@@ -823,6 +883,78 @@ function applyTerrainPreset(presetId) {
   mapConfig.duckCount = preset.duckCount || 0;
   if (Number.isFinite(Number(preset.goldMineCount))) mapConfig.goldMineCount = preset.goldMineCount;
   if (Number.isFinite(Number(preset.houseCount))) mapConfig.houseCount = preset.houseCount;
+  window.mapConfig = mapConfig;
+}
+
+function getActiveThemeId() {
+  const activePackage = typeof describeConfigDefinitions === 'function'
+    ? describeConfigDefinitions().activeGamePackage
+    : null;
+  return activePackage?.id || OpenRTS.config.gamePackages?.loadState?.selectedGamePackageId || 'core';
+}
+
+function activeThemeAllowsWildlife() {
+  return getActiveThemeId() === 'era_of_kingdoms';
+}
+
+function activeThemeAllowsNeutralHouses() {
+  return getActiveThemeId() === 'modern_warlord';
+}
+
+function generatedTerrainProfile(terrainId) {
+  const profiles = {
+    sand: { mapStyle: 'coastal_grassland', visualStyle: 'sand', waterLevel: 3, rockCount: 24, treeCount: 8, goldMineCount: 5 },
+    grass: { mapStyle: 'coastal_grassland', visualStyle: 'grassland', waterLevel: 8, rockCount: 20, treeCount: 42, goldMineCount: 5 },
+    swamp: { mapStyle: 'coastal_grassland', visualStyle: 'swamp', waterLevel: 22, rockCount: 14, treeCount: 72, goldMineCount: 4 },
+    desert: { mapStyle: 'coastal_grassland', visualStyle: 'desert', waterLevel: 1, rockCount: 34, treeCount: 4, goldMineCount: 6 },
+    volcanic: { mapStyle: 'volcanic_lava', visualStyle: 'volcanic', waterLevel: 18, rockCount: 64, treeCount: 0, goldMineCount: 4 },
+    metal: { mapStyle: 'metal_plateau', visualStyle: 'metal_wasteland', waterLevel: 2, rockCount: 72, treeCount: 0, goldMineCount: 10 }
+  };
+  return profiles[terrainId] || profiles.grass;
+}
+
+function generatedLandscapeProfile(landscapeId) {
+  const profiles = {
+    flat: { waterLevelDelta: 0, rockDelta: 0, treeDelta: 0, houseDelta: 0 },
+    hilly: { waterLevelDelta: 0, rockDelta: 10, treeDelta: 8, hilliness: 'hilly' },
+    cliffs: { waterLevelDelta: 0, rockDelta: 30, treeDelta: -8, hilliness: 'cliffs' },
+    lakes: { waterLevelDelta: 16, rockDelta: 0, treeDelta: 12 },
+    forest: { waterLevelDelta: 2, rockDelta: -6, treeDelta: 90 },
+    ocean: { waterLevelDelta: 34, rockDelta: 8, treeDelta: -12 },
+    city: { waterLevelDelta: 0, rockDelta: -4, treeDelta: -20, houseDelta: 10 }
+  };
+  return profiles[landscapeId] || profiles.flat;
+}
+
+function generatedSizeMultiplier(sizeId) {
+  return { '1v1': 1, '2v2': 1.55, '3v3': 2.05, '4v4': 2.55 }[sizeId] || 1;
+}
+
+function applyGeneratedMapSettings() {
+  if (mapConfig.loadedMap) return;
+  const terrain = generatedTerrainProfile(mapConfig.generatedTerrain || 'grass');
+  const landscape = generatedLandscapeProfile(mapConfig.generatedLandscape || 'flat');
+  const multiplier = generatedSizeMultiplier(mapConfig.generatedMapSize || '1v1');
+  const preserveThemeStyle = getActiveThemeId() !== 'core';
+
+  mapConfig.mapSize = mapConfig.generatedMapSize || '1v1';
+  mapConfig.mapStyle = preserveThemeStyle && mapConfig.themeDefaultMapStyle ? mapConfig.themeDefaultMapStyle : terrain.mapStyle;
+  mapConfig.visualStyle = preserveThemeStyle && mapConfig.themeDefaultVisualStyle ? mapConfig.themeDefaultVisualStyle : terrain.visualStyle;
+  mapConfig.waterLevel = Math.max(0, Math.min(70, Math.round((terrain.waterLevel || 0) + (landscape.waterLevelDelta || 0))));
+  mapConfig.rockCount = Math.max(0, Math.round(((terrain.rockCount || 0) + (landscape.rockDelta || 0)) * multiplier));
+  mapConfig.treeCount = Math.max(0, Math.round(((terrain.treeCount || 0) + (landscape.treeDelta || 0)) * multiplier));
+  mapConfig.goldMineCount = Math.max(0, Math.round((terrain.goldMineCount || 0) * multiplier));
+  mapConfig.generatedHilliness = landscape.hilliness || mapConfig.generatedLandscape || 'flat';
+  mapConfig.houseCount = activeThemeAllowsNeutralHouses()
+    ? Math.max(0, Math.round((Number(mapConfig.themeDefaultHouseCount) || 0) + (landscape.houseDelta || 0)))
+    : 0;
+  if (activeThemeAllowsWildlife()) {
+    mapConfig.sheepCount = Math.max(0, Math.floor(Number(mapConfig.themeDefaultSheepCount) || 0));
+    mapConfig.duckCount = Math.max(0, Math.floor(Number(mapConfig.themeDefaultDuckCount) || 0));
+  } else {
+    mapConfig.sheepCount = 0;
+    mapConfig.duckCount = 0;
+  }
   window.mapConfig = mapConfig;
 }
 

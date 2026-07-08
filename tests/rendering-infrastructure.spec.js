@@ -129,11 +129,22 @@ test('canvas terrain painter owns tile accents transitions and water ripples', (
     tileSize: 32,
     noise: () => 0.9
   });
+  const callsBeforeWaterTransition = calls.length;
   painter.drawTransitions(ctx, 0, 0, terrain.WATER, 0, 0, {
     terrain,
     terrainData: [[terrain.WATER, terrain.SAND]],
     tileSize: 32,
-    isInsideMap: (x, y) => x >= 0 && y >= 0 && x < 2 && y < 1
+    isInsideMap: (x, y) => x >= 0 && y >= 0 && x < 2 && y < 1,
+    noise: () => 0.85
+  });
+  const waterTransitionCalls = calls.slice(callsBeforeWaterTransition);
+  painter.drawTransitions(ctx, 1, 0, terrain.SAND, 32, 0, {
+    terrain,
+    terrainData: [[terrain.WATER, terrain.SAND]],
+    tileSize: 32,
+    isInsideMap: (x, y) => x >= 0 && y >= 0 && x < 2 && y < 1,
+    noise: () => 0.9,
+    volcanic: true
   });
   painter.renderWaterRipples(ctx, {
     camX: 0,
@@ -151,8 +162,12 @@ test('canvas terrain painter owns tile accents transitions and water ripples', (
 
   assert.ok(calls.some(call => call[0] === 'fillRect'));
   assert.ok(calls.some(call => call[0] === 'quadraticCurveTo'));
+  assert.ok(calls.some(call => call[0] === 'translate'));
+  assert.ok(calls.filter(call => call[0] === 'lineTo').length >= 4);
   assert.ok(calls.some(call => call[0] === 'ellipse'));
   assert.ok(calls.some(call => call[0] === 'stroke'));
+  assert.ok(waterTransitionCalls.some(call => call[0] === 'stroke'));
+  assert.equal(waterTransitionCalls.some(call => call[0] === 'fill'), false);
 });
 
 test('three scene bootstrap creates renderer scene groups and ray helpers', () => {
@@ -315,7 +330,13 @@ test('three terrain mesh factory owns terrain sampling color and geometry output
   }
   const factory = context.OpenRTS.rendering.threeTerrainMeshes.createFactory({
     THREE: { Color, BufferGeometry, Float32BufferAttribute, Mesh },
-    materials: { ground: 'ground-material' },
+    materials: {
+      ground: 'ground-material',
+      terrainGrassClump: 'grass-clump-material',
+      terrainDryPatch: 'dry-patch-material',
+      terrainPebbles: 'pebble-material',
+      terrainShrubPatch: 'shrub-material'
+    },
     tileSize: 32,
     getRows: () => 2,
     getColumns: () => 3,
@@ -328,17 +349,18 @@ test('three terrain mesh factory owns terrain sampling color and geometry output
 
   const meshes = factory.createTerrainMeshes({ subdivisions: 1 });
   const sample = factory.sampleTerrain(1, 1);
+  const groundMesh = meshes.find(mesh => mesh.material === 'ground-material');
 
-  assert.equal(meshes.length, 1);
-  assert.equal(meshes[0].material, 'ground-material');
-  assert.equal(meshes[0].receiveShadow, true);
-  assert.equal(meshes[0].geometry.attributes.position.values.length, 3 * 2 * 6 * 3);
-  assert.equal(meshes[0].geometry.attributes.color.values.length, 3 * 2 * 6 * 3);
-  assert.equal(meshes[0].geometry.normalsComputed, true);
+  assert.ok(groundMesh);
+  assert.equal(groundMesh.receiveShadow, true);
+  assert.equal(groundMesh.geometry.attributes.position.values.length, 3 * 2 * 6 * 3);
+  assert.equal(groundMesh.geometry.attributes.color.values.length, 3 * 2 * 6 * 3);
+  assert.equal(groundMesh.geometry.normalsComputed, true);
   assert.equal(Number.isFinite(sample.waterBlend), true);
   assert.equal(Number.isFinite(factory.terrainHeight(1, 1, sample)), true);
   assert.ok(factory.terrainColor(1, 1, sample) instanceof Color);
   assert.equal(Number.isFinite(factory.grassDetail(1, 1).lush), true);
+  assert.equal(Array.isArray(factory.createTerrainDetailMeshesForRange({ startX: 0, startY: 0, endX: 3, endY: 2 })), true);
 
   const alienFactory = context.OpenRTS.rendering.threeTerrainMeshes.createFactory({
     THREE: { Color, BufferGeometry, Float32BufferAttribute, Mesh },
@@ -358,9 +380,10 @@ test('three terrain mesh factory owns terrain sampling color and geometry output
   );
 
   const chunked = factory.createTerrainMeshes({ subdivisions: 1, chunkTiles: 2 });
-  assert.equal(chunked.length, 2);
-  assert.deepEqual(JSON.parse(JSON.stringify(chunked.map(mesh => mesh.userData.staticChunkId))), ['0:0', '1:0']);
-  assert.equal(chunked[0].userData.terrainChunk, true);
+  const chunkGroundMeshes = chunked.filter(mesh => mesh.material === 'ground-material');
+  assert.equal(chunkGroundMeshes.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(chunkGroundMeshes.map(mesh => mesh.userData.staticChunkId))), ['0:0', '1:0']);
+  assert.equal(chunkGroundMeshes[0].userData.terrainChunk, true);
 });
 
 test('three material factory gives terrain a generated grass detail texture', () => {
@@ -377,6 +400,7 @@ test('three material factory gives terrain a generated grass detail texture', ()
     lineTo: (...args) => calls.push(['lineTo', ...args]),
     stroke: () => calls.push(['stroke']),
     arc: (...args) => calls.push(['arc', ...args]),
+    ellipse: (...args) => calls.push(['ellipse', ...args]),
     fill: () => calls.push(['fill']),
     clearRect: (...args) => calls.push(['clearRect', ...args]),
     createRadialGradient: () => ({ addColorStop: () => {} })
@@ -429,6 +453,11 @@ test('three material factory gives terrain a generated grass detail texture', ()
   assert.ok(materials.foliage.map instanceof CanvasTexture);
   assert.ok(materials.foliageDark.map instanceof CanvasTexture);
   assert.ok(materials.foliageWarm.map instanceof CanvasTexture);
+  assert.ok(materials.terrainGrassClump.map instanceof CanvasTexture);
+  assert.ok(materials.terrainDryPatch.map instanceof CanvasTexture);
+  assert.ok(materials.terrainPebbles.map instanceof CanvasTexture);
+  assert.ok(materials.terrainShrubPatch.map instanceof CanvasTexture);
+  assert.equal(materials.terrainGrassClump.userData.terrainDecal, true);
   assert.equal(materials.foliage.alphaTest, 0.18);
   assert.deepEqual(materials.groundDetail.repeatValue, { x: 18, y: 18 });
   assert.ok(calls.some(([name]) => name === 'lineTo'));

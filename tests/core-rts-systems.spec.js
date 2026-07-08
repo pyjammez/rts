@@ -23,8 +23,9 @@ test('resource system supports package-defined resource vocabularies', () => {
   assert.equal(resources.canAfford('blue', { supplies: 600, power: 4 }), true);
   assert.equal(resources.spend('blue', { supplies: 600, power: 4 }), true);
   assert.deepEqual(plain(resources.get('blue')), { supplies: 7400, power: 1, command_points: 2 });
+  assert.deepEqual(plain(resources.set('blue', { supplies: 12000, power: 0, command_points: 3 })), { supplies: 12000, power: 0, command_points: 3 });
   resources.add('blue', 'supplies', 100);
-  assert.equal(resources.get('blue').supplies, 7500);
+  assert.equal(resources.get('blue').supplies, 12100);
 });
 
 test('tech tree system gates production by owned buildings and research', () => {

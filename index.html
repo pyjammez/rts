@@ -8,12 +8,7 @@
   <link rel="stylesheet" href="ui/style.css?v=southedge1" />
 </head>
 <body>
-  <div id="titleScreen" class="title-screen">
-    <h1>open rts</h1>
-    <div class="title-hint">click anywhere to continue</div>
-  </div>
-
-  <div id="modePanel" class="config-panel mode-panel" style="display: none;">
+  <div id="modePanel" class="config-panel mode-panel">
     <h1>open rts</h1>
     <div id="packageBrowser" class="package-browser" aria-label="Theme selection"></div>
     <div id="modeOptions" class="mode-options"></div>
@@ -73,6 +68,7 @@
   </div>
 
   <div id="hud" class="hud" style="display: none;">
+    <div id="gameBottomEdgeScrollZone" class="game-bottom-edge-scroll-zone" aria-hidden="true"></div>
     <div class="hud-panel command-bar">
       <div id="bottomEdgeScrollZone" class="bottom-edge-scroll-zone" aria-hidden="true"></div>
       <section id="selectedInfo" class="selected-info-panel">
@@ -110,11 +106,9 @@
     </div>
   </div>
   
-  <canvas id="gameCanvas3d"></canvas>
+  <canvas id="gameCanvas3d" hidden aria-hidden="true"></canvas>
   <canvas id="gameCanvas"></canvas>
 
-  <script src="engine/three-runtime/open-rts-three.js?v=three7"></script>
-  <script src="world/threeBootstrap.js?v=three5"></script>
   <script src="core/openRts.js?v=runtime6"></script>
   <script src="core/events/eventBus.js?v=runtime6"></script>
   <script src="core/diagnostics/DiagnosticsRegistry.js?v=diagnostics1"></script>
@@ -136,35 +130,12 @@
   <script src="world/rendering/canvas/CanvasRenderListService.js?v=renderextract1"></script>
   <script src="world/rendering/canvas/CanvasMinimapRenderer.js?v=renderextract1"></script>
   <script src="world/rendering/canvas/CanvasTerrainPainter.js?v=split2"></script>
-  <script src="world/rendering/three/GeometryCache.js?v=renderextract1"></script>
-  <script src="world/rendering/three/ThreeCoordinateService.js?v=renderextract2"></script>
-  <script src="world/rendering/three/RenderOptimizationServices.js?v=cartoonperf1"></script>
-  <script src="world/rendering/three/StaticInstanceBatcher.js?v=renderperf1"></script>
-  <script src="world/rendering/three/MeshPrimitiveFactory.js?v=renderextract2"></script>
-  <script src="world/rendering/three/ThreeCameraSyncService.js?v=renderextract2"></script>
-  <script src="world/rendering/three/ThreeSceneBootstrap.js?v=cartoonperf1"></script>
-  <script src="world/rendering/three/StaticWorldSignatureService.js?v=visualstyles1"></script>
-  <script src="world/rendering/three/StaticWorldComposer.js?v=renderextract3"></script>
-  <script src="world/rendering/three/TreeWindAnimator.js?v=renderextract3"></script>
-  <script src="world/rendering/three/EntityElevationService.js?v=renderextract4"></script>
-  <script src="world/rendering/three/ProjectileVisualFactory.js?v=renderextract4"></script>
-  <script src="world/rendering/three/DynamicWorldComposer.js?v=solidbuildings1"></script>
-  <script src="world/rendering/three/RendererFactoryRegistry.js?v=factories1"></script>
-  <script src="world/rendering/three/MaterialFactory.js?v=unitshadows1"></script>
-  <script src="world/rendering/three/ThreeRenderDomains.js?v=renderdomains1"></script>
-  <script src="world/rendering/three/ModelFactoryResolver.js?v=factories2"></script>
-  <script src="world/rendering/three/RenderAssetAuditService.js?v=renderaudit1"></script>
-  <script src="world/rendering/three/ThreeTerrainMeshFactory.js?v=arabia1"></script>
-  <script src="world/rendering/three/ThreeBuildingModelFactory.js?v=simplecastle1"></script>
-  <script src="world/rendering/three/ThreeUnitAttachmentFactory.js?v=split1"></script>
-  <script src="world/rendering/three/ThreeUnitModelFactory.js?v=unitshadows1"></script>
-  <script src="world/rendering/three/OverlayPass.js?v=solidbuildings1"></script>
   <script src="game/systems/cookingSystem.js?v=infrastructure1"></script>
   <script src="game/systems/castleUpgradeSystem.js?v=infrastructure1"></script>
   <script src="game/systems/wildlifeSystem.js?v=runtime3"></script>
   <script src="game/systems/buildingCombatSystem.js?v=solidbuildings1"></script>
   <script src="game/systems/projectileSystem.js?v=runtime5"></script>
-  <script src="game/systems/resourceSystem.js?v=economy2"></script>
+  <script src="game/systems/resourceSystem.js?v=dozerbuild1"></script>
   <script src="game/systems/TechTreeSystem.js?v=core-rts1"></script>
   <script src="game/systems/ProductionQueueSystem.js?v=core-rts1"></script>
   <script src="game/systems/AbilityEffectSystem.js?v=core-rts1"></script>
@@ -199,8 +170,8 @@
     const ctx = canvas.getContext('2d');
 
     function resizeCanvas() {
-      canvas3d.width = window.innerWidth;
-      canvas3d.height = window.innerHeight;
+      canvas3d.width = 0;
+      canvas3d.height = 0;
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     }
@@ -214,22 +185,21 @@
   <script src="game/config/PackageManifestService.js?v=modpackages1"></script>
   <script src="game/config/ContentSchemaService.js?v=contentschemas1"></script>
   <script src="game/config/PackageReportService.js?v=packagereports1"></script>
-  <script src="game/config/ContentPackLoader.js?v=packagecompare1"></script>
+  <script src="game/config/ContentPackLoader.js?v=themeflow1"></script>
   <script src="game/config/ScenarioRegistry.js?v=scenarios1"></script>
   <script src="game/config/ScenarioComposer.js?v=worldclass1"></script>
   <script src="game/config/ContentIndex.js?v=contentindex1"></script>
-  <script src="game/config/definitionRegistry.js?v=contentindex1"></script>
+  <script src="game/config/definitionRegistry.js?v=themeflow1"></script>
   <script src="ui/config.js?v=presetfix1"></script>
-  <script src="ui/screens/TitleScreen.js?v=three1"></script>
-  <script src="ui/screens/ModeSelectScreen.js?v=themeheading1"></script>
-  <script src="ui/screens/GameSetupScreen.js?v=playersplit1"></script>
-  <script src="ui/screens/ReadyRoomScreen.js?v=factions1"></script>
-  <script src="ui/screens/GameOverScreen.js?v=three1"></script>
-  <script src="ui/screens/bootstrap.js?v=three1"></script>
-  <script src="ui/CommandTargetingController.js?v=uecommander1"></script>
-  <script src="ecs/entityManager.js?v=three1"></script>
+  <script src="ui/screens/ModeSelectScreen.js?v=themeflow1"></script>
+  <script src="ui/screens/GameSetupScreen.js?v=mapsetuponly1"></script>
+  <script src="ui/screens/ReadyRoomScreen.js?v=themeflow1"></script>
+  <script src="ui/screens/GameOverScreen.js?v=canvas2d1"></script>
+  <script src="ui/screens/bootstrap.js?v=canvas2d1"></script>
+  <script src="ui/CommandTargetingController.js?v=buildpreview1"></script>
+  <script src="ecs/entityManager.js?v=canvas2d1"></script>
   <script src="ecs/ComponentSchemaRegistry.js?v=worldclass1"></script>
-  <script src="ecs/unitComponents.js?v=three1"></script>
+  <script src="ecs/unitComponents.js?v=canvas2d1"></script>
   <script src="ecs/EntityQueries.js?v=entityqueries1"></script>
   <script src="entities/UnitCommandTypes.js?v=split1"></script>
   <script src="entities/UnitStateFactory.js?v=solidbuildings1"></script>
@@ -237,11 +207,11 @@
   <script src="entities/unit.js?v=autoaggro1"></script>
   <script src="systems/processors/unitMovementProcessor.js?v=itemtarget1"></script>
   <script src="systems/processors/unitCombatProcessor.js?v=autoaggro1"></script>
-  <script src="systems/processors/unitRenderProcessor.js?v=workeranim1"></script>
-  <script src="systems/unitMovement.js?v=three1"></script>
-  <script src="systems/unitCombat.js?v=three1"></script>
-  <script src="systems/unitRender.js?v=three1"></script>
-  <script src="systems/physics.js?v=three1"></script>
+  <script src="systems/processors/unitRenderProcessor.js?v=dozerbuild1"></script>
+  <script src="systems/unitMovement.js?v=canvas2d1"></script>
+  <script src="systems/unitCombat.js?v=canvas2d1"></script>
+  <script src="systems/unitRender.js?v=canvas2d1"></script>
+  <script src="systems/physics.js?v=canvas2d1"></script>
   <script src="world/navigation/NavigationService.js?v=architecture1"></script>
   <script src="world/navigation/NavigationPlanner.js?v=worldclass1"></script>
   <script src="world/spatial/SpatialHashGrid.js?v=worldclass1"></script>
@@ -262,14 +232,13 @@
   <script src="world/objects/ItemService.js?v=objectfactories1"></script>
   <script src="world/objects/ObstacleService.js?v=objectfactories1"></script>
   <script src="world/objects/ObjectFactoryRegistry.js?v=objectservices1"></script>
-  <script src="world/map.js?v=eokcastle1"></script>
+  <script src="world/map.js?v=starsiege1"></script>
   <script src="world/objects/WorldObjectServices.js?v=solidbuildings1"></script>
   <script src="world/gameState.js?v=uespawnfix1"></script>
-  <script src="ui/hud.js?v=uecommander1"></script>
-  <script src="world/renderer3d.js?v=eokcastle1"></script>
-  <script src="core/gameLoop.js?v=three1"></script>
+  <script src="ui/hud.js?v=dozerbuild1"></script>
+  <script src="core/gameLoop.js?v=canvas2d1"></script>
   <script src="systems/input.js?v=solidbuildings1"></script>
-  <script src="core/main.js?v=uecamerafix1"></script>
+  <script src="core/main.js?v=dozerbuild1"></script>
   <script src="game/systems/mapBuilderSystem.js?v=builderterrain1"></script>
 </body>
 </html>

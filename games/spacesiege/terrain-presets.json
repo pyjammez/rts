@@ -1,14 +1,14 @@
 {
-  "crystal_frontier": {
-    "name": "Crystal Frontier",
-    "description": "Sparse alien flats with many crystal outcrops, almost no organic cover, and open lanes for ranged armies.",
-    "visualStyle": "alien_crystal",
-    "waterLevel": 1,
-    "rockCount": 44,
+  "muddy_badlands": {
+    "name": "Muddy Badlands",
+    "description": "Brown muddy rocky sci-fi battlefield with cliff edges, mineral fields, and open lanes for ranged armies.",
+    "visualStyle": "muddy_badlands",
+    "waterLevel": 2,
+    "rockCount": 72,
     "treeCount": 0,
     "sheepCount": 0,
     "duckCount": 0,
-    "goldMineCount": 16,
+    "goldMineCount": 18,
     "houseCount": 0
   }
 }

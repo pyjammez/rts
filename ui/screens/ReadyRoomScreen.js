@@ -11,8 +11,86 @@ function formatUnitRoster(roster) {
   return entries.length ? entries.join(', ') : 'No starting units';
 }
 
+function formatBuildingRoster(roster) {
+  const entries = Object.entries(roster || {})
+    .map(([buildingId, count]) => {
+      const amount = Math.max(0, Math.floor(Number(count) || 0));
+      if (amount <= 0) return null;
+      const building = typeof getBuildingDefinition === 'function' ? getBuildingDefinition(buildingId) : null;
+      return `${amount} ${building?.name || buildingId}`;
+    })
+    .filter(Boolean);
+
+  return entries.length ? entries.join(', ') : '';
+}
+
+function getFallbackBuildingRoster() {
+  const roster = {};
+  const homeCount = Math.max(0, Math.floor(Number(mapConfig.homesPerTeam) || 0));
+  const towerCount = Math.max(0, Math.floor(Number(mapConfig.towersPerTeam) || 0));
+  if (homeCount > 0) roster.home = homeCount;
+  if (towerCount > 0) roster.tower = towerCount;
+  return roster;
+}
+
+function getStartingUnitSummary(activeSlots) {
+  const fallbackRoster = mapConfig.unitRoster || {};
+  const summaries = (activeSlots || [])
+    .map(slot => {
+      const faction = typeof getFactionDefinition === 'function' ? getFactionDefinition(slot.factionId) : null;
+      const roster = Object.keys(faction?.startingUnits || {}).length
+        ? faction.startingUnits
+        : fallbackRoster;
+      return {
+        team: getFlagOption(slot.flag).name,
+        value: formatUnitRoster(roster)
+      };
+    })
+    .filter(summary => summary.value && summary.value !== 'No starting units');
+
+  if (!summaries.length) {
+    const fallback = formatUnitRoster(fallbackRoster);
+    return fallback && fallback !== 'No starting units' ? `${fallback} per team` : '';
+  }
+
+  const uniqueValues = new Set(summaries.map(summary => summary.value));
+  if (uniqueValues.size === 1) return `${summaries[0].value} per team`;
+  return summaries.map(summary => `${summary.team}: ${summary.value}`).join('; ');
+}
+
+function getStartingBuildingSummary(activeSlots) {
+  const fallbackRoster = getFallbackBuildingRoster();
+  const summaries = (activeSlots || [])
+    .map(slot => {
+      const faction = typeof getFactionDefinition === 'function' ? getFactionDefinition(slot.factionId) : null;
+      const roster = Object.keys(faction?.startingBuildings || {}).length
+        ? faction.startingBuildings
+        : fallbackRoster;
+      return {
+        team: getFlagOption(slot.flag).name,
+        value: formatBuildingRoster(roster)
+      };
+    })
+    .filter(summary => summary.value);
+
+  if (!summaries.length) {
+    const fallback = formatBuildingRoster(fallbackRoster);
+    return fallback ? `${fallback} per team` : '';
+  }
+
+  const uniqueValues = new Set(summaries.map(summary => summary.value));
+  if (uniqueValues.size === 1) return `${summaries[0].value} per team`;
+  return summaries.map(summary => `${summary.team}: ${summary.value}`).join('; ');
+}
+
 function getReviewRows(mode) {
   const terrain = getTerrainPreset(mapConfig.mapStyle);
+  const mapLabel = mapConfig.loadedMap
+    ? mapConfig.loadedMap.name || 'Saved Map'
+    : `Generated ${String(mapConfig.generatedMapSize || '1v1').toUpperCase()} map`;
+  const terrainLabel = mapConfig.loadedMap
+    ? terrain.name
+    : `${titleCase(mapConfig.generatedLandscape || 'flat')} ${titleCase(mapConfig.generatedTerrain || 'grass')}`;
   const activeSlots = typeof getActivePlayerSlots === 'function' ? getActivePlayerSlots(mapConfig) : [];
   const factionNames = activeSlots
     .map(slot => getFactionDefinition(slot.factionId)?.name || slot.factionId)
@@ -22,25 +100,23 @@ function getReviewRows(mode) {
     ['Players', `${activeSlots.length || mapConfig.playerCount || 2} of ${mapConfig.playerCount || 2} slots filled`],
     ['Teams', activeSlots.length ? activeSlots.map(slot => getFlagOption(slot.flag).name).join(' vs ') : 'Configured in room'],
     ['Factions', factionNames.length ? factionNames.join(' vs ') : 'Configured in room'],
-    ['Terrain', terrain.name],
+    ['Map', mapLabel],
+    ['Terrain', terrainLabel],
     ['Map Detail', `${mapConfig.waterLevel || 0}% ${mapConfig.mapStyle === 'volcanic_lava' ? 'lava' : 'water'}, ${mapConfig.rockCount || 0} rock outcrops, ${mapConfig.treeCount || 0} trees`]
   ];
 
-  if (Number.isFinite(Number(mapConfig.sheepCount)) || Number.isFinite(Number(mapConfig.duckCount))) {
+  if ((Number(mapConfig.sheepCount) || 0) > 0 || (Number(mapConfig.duckCount) || 0) > 0) {
     rows.push(['Wildlife', `${mapConfig.sheepCount || 0} sheep, ${mapConfig.duckCount || 0} ducks`]);
   }
 
   if (mapConfig.unitRoster) {
-    rows.push(['Starting Units', `${formatUnitRoster(mapConfig.unitRoster)} per team`]);
+    const unitSummary = getStartingUnitSummary(activeSlots);
+    if (unitSummary) rows.push(['Starting Units', unitSummary]);
   }
 
   if (Number.isFinite(Number(mapConfig.homesPerTeam)) || Number.isFinite(Number(mapConfig.towersPerTeam))) {
-    const castleCount = Number(mapConfig.homesPerTeam) || 0;
-    const buildingParts = [`${castleCount} ${castleCount === 1 ? 'castle' : 'castles'}`];
-    if ((Number(mapConfig.towersPerTeam) || 0) > 0) {
-      buildingParts.push(`${mapConfig.towersPerTeam || 0} tower(s)`);
-    }
-    rows.push(['Starting Buildings', `${buildingParts.join(', ')} per team`]);
+    const buildingSummary = getStartingBuildingSummary(activeSlots);
+    if (buildingSummary) rows.push(['Starting Buildings', buildingSummary]);
   }
 
   if (Number.isFinite(Number(mapConfig.redUnitCount)) && Number.isFinite(Number(mapConfig.blueUnitCount))) {
@@ -262,6 +338,7 @@ function renderWaitingRoom() {
   const teams = document.getElementById('waitingRoomTeams');
   const settings = document.getElementById('waitingRoomSettings');
   const chatLog = document.getElementById('waitingRoomChatLog');
+  const backToSettings = document.getElementById('backToSettings');
 
   if (summary) {
     summary.textContent = 'Choose teams, flags, and AI slots before starting the match.';
@@ -285,6 +362,10 @@ function renderWaitingRoom() {
     appendWaitingRoomChat('System', 'Local human and AI slots are ready for testing.');
   }
 
+  if (backToSettings) {
+    backToSettings.textContent = selectedModeHasMapSetup() ? 'Back to Map Setup' : 'Back to Modes';
+  }
+
   setPanelVisible(document.getElementById('configPanel'), false);
   setPanelVisible(waitingRoomPanel, true);
 }
@@ -301,9 +382,15 @@ function sendWaitingRoomChat() {
   input.focus();
 }
 
+function selectedModeHasMapSetup() {
+  const mode = getGameModeDefinition(mapConfig.modeId);
+  return Array.isArray(mode.sections) && mode.sections.some(sectionId => (SECTION_COLUMNS[sectionId] || 'players') === 'map');
+}
+
 function initReadyRoomScreen() {
   const waitingRoomPanel = document.getElementById('waitingRoomPanel');
   const configPanel = document.getElementById('configPanel');
+  const modePanel = document.getElementById('modePanel');
   const backToSettings = document.getElementById('backToSettings');
   const readyButton = document.getElementById('readyButton');
   const chatSendButton = document.getElementById('waitingRoomChatSend');
@@ -312,7 +399,11 @@ function initReadyRoomScreen() {
   if (backToSettings) {
     backToSettings.addEventListener('click', () => {
       setPanelVisible(waitingRoomPanel, false);
-      setPanelVisible(configPanel, true);
+      if (selectedModeHasMapSetup()) {
+        setPanelVisible(configPanel, true);
+      } else {
+        setPanelVisible(modePanel, true);
+      }
     });
   }
 

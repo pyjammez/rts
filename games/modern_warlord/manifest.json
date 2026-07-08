@@ -19,6 +19,7 @@
     "units": "units.json",
     "buildings": "buildings.json",
     "weapons": "weapons.json",
+    "assets": "assets.json",
     "terrainPresets": "terrain-presets.json",
     "modes": "game-modes.json"
   }

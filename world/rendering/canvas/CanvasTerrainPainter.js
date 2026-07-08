@@ -71,21 +71,196 @@
     terrain,
     terrainData,
     tileSize,
-    isInsideMap
+    isInsideMap,
+    noise,
+    volcanic = false
   }) {
-    if (terrainType !== terrain.WATER) return;
     const neighbors = [
-      { x: x + 1, y },
-      { x: x - 1, y },
-      { x, y: y + 1 },
-      { x, y: y - 1 }
+      { x: x + 1, y, side: 'right' },
+      { x: x - 1, y, side: 'left' },
+      { x, y: y + 1, side: 'bottom' },
+      { x, y: y - 1, side: 'top' }
     ];
-    const hasLandNeighbor = neighbors.some(n =>
-      isInsideMap(n.x, n.y) && terrainData[n.y][n.x] !== terrain.WATER
-    );
-    if (!hasLandNeighbor) return;
-    ctx.fillStyle = 'rgba(255, 240, 180, 0.15)';
-    ctx.fillRect(drawX, drawY, tileSize, tileSize);
+
+    for (const neighbor of neighbors) {
+      if (!isInsideMap(neighbor.x, neighbor.y)) continue;
+      const neighborType = terrainData[neighbor.y][neighbor.x];
+      if (neighborType === terrainType) continue;
+      drawTerrainEdge(ctx, {
+        terrain,
+        terrainType,
+        neighborType,
+        drawX,
+        drawY,
+        tileSize,
+        side: neighbor.side,
+        seedX: x,
+        seedY: y,
+        noise,
+        volcanic
+      });
+    }
+  }
+
+  function fallbackNoise(x, y) {
+    const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123;
+    return n - Math.floor(n);
+  }
+
+  function edgeNoise(noise, x, y, offset = 0) {
+    return typeof noise === 'function' ? noise(x + offset * 17, y + offset * 31) : fallbackNoise(x + offset * 17, y + offset * 31);
+  }
+
+  function transitionColors(terrain, terrainType, neighborType, volcanic) {
+    const waterTouch = terrainType === terrain.WATER || neighborType === terrain.WATER;
+    if (volcanic && waterTouch) {
+      return {
+        fill: terrainType === terrain.WATER ? 'rgba(255, 198, 64, 0)' : 'rgba(42, 31, 25, 0.42)',
+        detail: terrainType === terrain.WATER ? 'rgba(255, 236, 118, 0.38)' : 'rgba(255, 98, 35, 0.28)',
+        line: 'rgba(255, 181, 49, 0.45)',
+        depth: terrainType === terrain.WATER ? 0 : 11
+      };
+    }
+    if (waterTouch) {
+      return {
+        fill: terrainType === terrain.WATER ? 'rgba(140, 207, 221, 0)' : 'rgba(112, 92, 57, 0.13)',
+        detail: terrainType === terrain.WATER ? 'rgba(226, 242, 232, 0.14)' : 'rgba(245, 226, 160, 0.12)',
+        line: 'rgba(238, 240, 207, 0.18)',
+        depth: terrainType === terrain.WATER ? 0 : 7
+      };
+    }
+    if (terrainType === terrain.SAND || neighborType === terrain.SAND) {
+      return {
+        fill: terrainType === terrain.SAND ? 'rgba(87, 118, 51, 0.13)' : 'rgba(203, 173, 92, 0.18)',
+        detail: 'rgba(80, 58, 32, 0.08)',
+        line: 'rgba(245, 224, 145, 0.13)',
+        depth: 10
+      };
+    }
+    return {
+      fill: 'rgba(75, 55, 35, 0.1)',
+      detail: 'rgba(26, 60, 24, 0.08)',
+      line: 'rgba(210, 190, 132, 0.1)',
+      depth: 8
+    };
+  }
+
+  function drawTerrainEdge(ctx, options) {
+    const colors = transitionColors(options.terrain, options.terrainType, options.neighborType, options.volcanic);
+    if (options.terrainType !== options.terrain.WATER && colors.depth > 0) {
+      drawWavyEdgeBand(ctx, {
+        ...options,
+        depth: colors.depth,
+        fillStyle: colors.fill
+      });
+    }
+    drawWavyEdgeLine(ctx, {
+      ...options,
+      strokeStyle: colors.line
+    });
+
+    const n = edgeNoise(options.noise, options.seedX, options.seedY, options.side.length);
+    if (options.terrainType !== options.terrain.WATER && n > 0.45) {
+      drawPatchyEdgeDetail(ctx, {
+        ...options,
+        fillStyle: colors.detail,
+        count: n > 0.78 ? 3 : 2
+      });
+    }
+  }
+
+  function edgePoint(side, tileSize, along, inset = 0, wobble = 0) {
+    if (side === 'right') return { x: tileSize - inset + wobble, y: along };
+    if (side === 'left') return { x: inset + wobble, y: along };
+    if (side === 'bottom') return { x: along, y: tileSize - inset + wobble };
+    return { x: along, y: inset + wobble };
+  }
+
+  function drawWavyEdgeBand(ctx, {
+    drawX,
+    drawY,
+    tileSize,
+    side,
+    seedX,
+    seedY,
+    noise,
+    depth,
+    fillStyle
+  }) {
+    const steps = 5;
+    const outer = [];
+    const inner = [];
+    for (let i = 0; i <= steps; i++) {
+      const along = (i / steps) * tileSize;
+      const wobble = (edgeNoise(noise, seedX + i, seedY, 3) - 0.5) * tileSize * 0.16;
+      const innerDepth = depth + edgeNoise(noise, seedX, seedY + i, 7) * tileSize * 0.18;
+      outer.push(edgePoint(side, tileSize, along, 0, wobble * 0.25));
+      inner.push(edgePoint(side, tileSize, along, innerDepth, wobble));
+    }
+
+    ctx.save();
+    ctx.translate(drawX, drawY);
+    ctx.fillStyle = fillStyle;
+    ctx.beginPath();
+    ctx.moveTo(outer[0].x, outer[0].y);
+    for (const point of outer.slice(1)) ctx.lineTo(point.x, point.y);
+    for (const point of inner.reverse()) ctx.lineTo(point.x, point.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawWavyEdgeLine(ctx, {
+    drawX,
+    drawY,
+    tileSize,
+    side,
+    seedX,
+    seedY,
+    noise,
+    strokeStyle
+  }) {
+    const steps = 5;
+    ctx.save();
+    ctx.translate(drawX, drawY);
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = Math.max(1, tileSize * 0.035);
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const along = (i / steps) * tileSize;
+      const wobble = (edgeNoise(noise, seedX + i, seedY, 11) - 0.5) * tileSize * 0.12;
+      const point = edgePoint(side, tileSize, along, 2, wobble);
+      if (i === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPatchyEdgeDetail(ctx, {
+    drawX,
+    drawY,
+    tileSize,
+    side,
+    seedX,
+    seedY,
+    noise,
+    fillStyle,
+    count
+  }) {
+    ctx.save();
+    ctx.translate(drawX, drawY);
+    ctx.fillStyle = fillStyle;
+    for (let i = 0; i < count; i++) {
+      const along = tileSize * (0.18 + edgeNoise(noise, seedX + i, seedY, 19) * 0.64);
+      const inset = tileSize * (0.12 + edgeNoise(noise, seedX, seedY + i, 23) * 0.22);
+      const point = edgePoint(side, tileSize, along, inset, 0);
+      const radius = tileSize * (0.06 + edgeNoise(noise, seedX + i, seedY + i, 29) * 0.08);
+      ctx.beginPath();
+      ctx.ellipse(point.x, point.y, radius * 1.8, radius, side === 'left' || side === 'right' ? Math.PI * 0.5 : 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   function renderWaterRipples(ctx, {

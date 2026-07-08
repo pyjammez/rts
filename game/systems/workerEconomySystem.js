@@ -85,11 +85,19 @@
     return true;
   }
 
-  function startBuild(unit, buildingType, worldX, worldY) {
+  function startBuild(unit, buildingType, worldX, worldY, options = {}) {
     if (!isWorker(unit)) return false;
     const type = canBuildBuilding(buildingType) ? buildingType : null;
     if (!type || typeof findNearestBuildableSite !== 'function') return false;
-    const site = findNearestBuildableSite(type, worldX, worldY, 8);
+    const stats = getBuildingDefinitionFor(type);
+    const requestedTileX = Math.floor(Number(options.tileX));
+    const requestedTileY = Math.floor(Number(options.tileY));
+    const requestedSite = Number.isInteger(requestedTileX) && Number.isInteger(requestedTileY) &&
+      typeof canPlaceBuildingAt === 'function' &&
+      canPlaceBuildingAt(type, requestedTileX, requestedTileY, { stats })
+      ? { x: requestedTileX, y: requestedTileY }
+      : null;
+    const site = requestedSite || findNearestBuildableSite(type, worldX, worldY, 8, { stats });
     if (!site) return false;
     const cost = getBuildCost(type);
     if (!app.systems.resources?.spend(unit.team, cost)) return false;
@@ -99,6 +107,7 @@
       buildingType: type,
       tileX: site.x,
       tileY: site.y,
+      stats,
       target,
       progress: 0,
       required: getBuildSeconds(type),
@@ -154,7 +163,7 @@
 
   function finishBuild(unit, job) {
     if (typeof buildBuildingAtTile !== 'function') return false;
-    return !!buildBuildingAtTile(job.buildingType, unit.team, job.tileX, job.tileY);
+    return !!buildBuildingAtTile(job.buildingType, unit.team, job.tileX, job.tileY, { stats: job.stats });
   }
 
   function faceTarget(unit, target) {

@@ -19,6 +19,10 @@
       return this.mode;
     }
 
+    getBuildPlacementType() {
+      return this.isBuildMode(this.mode) ? this.getBuildType(this.mode) : null;
+    }
+
     selectedUnits() {
       return this.callbacks.getSelectedUnits?.() || [];
     }
@@ -178,6 +182,12 @@
           this.setMessage('Select a worker to build');
           return true;
         }
+        const preview = root.getBuildPlacementPreview?.();
+        if (preview && !preview.valid) {
+          this.setMessage('Choose a clear buildable area');
+          return true;
+        }
+        const placement = preview?.valid ? preview.building : null;
         const definition = root.getBuildingDefinition?.(buildingType) || {};
         const cost = app.systems.workerEconomy?.getBuildCost?.(buildingType) || app.systems.workerEconomy?.BUILD_COSTS?.[buildingType] || {};
         if (app.systems.resources && !app.systems.resources.canAfford(worker.team, cost)) {
@@ -186,9 +196,16 @@
         }
         app.commands.enqueue({
           type: app.commands.types.WORKER_BUILD,
-          payload: { unitId: worker.id, buildingType, x: worldX, y: worldY }
+          payload: {
+            unitId: worker.id,
+            buildingType,
+            x: placement?.x ?? worldX,
+            y: placement?.y ?? worldY,
+            tileX: placement?.tileX,
+            tileY: placement?.tileY
+          }
         });
-        if (marker) marker(worldX, worldY, 'gold');
+        if (marker) marker(placement?.x ?? worldX, placement?.y ?? worldY, 'gold');
         this.complete(`${definition.name || 'Building'} construction ordered`);
         return true;
       }

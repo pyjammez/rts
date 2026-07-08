@@ -2,23 +2,25 @@
   "modern_warlord_versus": {
     "shortName": "ModernWarlord",
     "name": "ModernWarlord Versus",
-    "summary": "Heavy modern base-war skirmish focused on supplies, power, factories, tanks, and aircraft.",
+    "summary": "Modern base-war skirmish with command centers, dozers, supply fields, power, infantry tech, factories, armor, aircraft, defenses, and asymmetric factions.",
     "playable": true,
     "startLabel": "Create ModernWarlord Room",
     "teams": ["blue", "gold"],
-    "allowedUnits": ["mw_dozer", "mw_rifleman", "mw_tank", "mw_gunship"],
+    "allowedUnits": ["mw_dozer", "mw_worker_cell", "mw_rifleman", "mw_missile_squad", "mw_commando", "mw_rebel", "mw_flamer", "mw_demo_cell", "mw_tank", "mw_heavy_tank", "mw_artillery", "mw_aa_vehicle", "mw_technical", "mw_quad_truck", "mw_gunship", "mw_combat_drone"],
     "defaults": {
-      "enabledUnits": ["mw_dozer", "mw_rifleman", "mw_tank", "mw_gunship"],
+      "enabledUnits": ["mw_dozer", "mw_worker_cell", "mw_rifleman", "mw_missile_squad", "mw_commando", "mw_rebel", "mw_flamer", "mw_demo_cell", "mw_tank", "mw_heavy_tank", "mw_artillery", "mw_aa_vehicle", "mw_technical", "mw_quad_truck", "mw_gunship", "mw_combat_drone"],
       "mapStyle": "dry_oil_basin",
       "visualStyle": "industrial_desert",
       "mapSize": "default_large",
+      "generatedLandscape": "hilly",
+      "generatedTerrain": "desert",
       "waterLevel": 0,
-      "rockCount": 42,
+      "rockCount": 54,
       "treeCount": 0,
       "sheepCount": 0,
       "duckCount": 0,
-      "goldMineCount": 12,
-      "houseCount": 3,
+      "goldMineCount": 14,
+      "houseCount": 6,
       "startingGold": 12000,
       "startingWood": 0,
       "startingFood": 0,
@@ -26,13 +28,13 @@
       "playerCount": 2,
       "homesPerTeam": 1,
       "towersPerTeam": 0,
-      "unitRoster": { "mw_dozer": 1, "mw_rifleman": 1, "mw_tank": 0, "mw_gunship": 0 }
+      "unitRoster": { "mw_dozer": 3, "mw_worker_cell": 0, "mw_rifleman": 2, "mw_missile_squad": 0, "mw_commando": 0, "mw_rebel": 0, "mw_flamer": 0, "mw_demo_cell": 0, "mw_tank": 0, "mw_heavy_tank": 0, "mw_artillery": 0, "mw_aa_vehicle": 0, "mw_technical": 0, "mw_quad_truck": 0, "mw_gunship": 0, "mw_combat_drone": 0 }
     },
     "rules": {
       "identity": "heavy_power_base",
       "economyPace": "boom",
       "powerDependency": true,
-      "signature": "reactors, supply depots, war factories, tanks, and gunships"
+      "signature": "dozer construction, command-center starts, supply fields, power tech, barracks, arms factories, airfields, tanks, artillery, aircraft, and asymmetric defenses"
     },
     "sections": ["map", "forces"]
   }

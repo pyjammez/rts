@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "models": {
+    "unit.king": { "kind": "procedural", "renderer": "canvas", "factory": "king" },
+    "unit.worker": { "kind": "procedural", "renderer": "canvas", "factory": "worker" },
+    "unit.soldier": { "kind": "procedural", "renderer": "canvas", "factory": "soldier" },
+    "unit.archer": { "kind": "procedural", "renderer": "canvas", "factory": "archer" },
+    "unit.knight": { "kind": "procedural", "renderer": "canvas", "factory": "knight" },
+    "unit.scout": { "kind": "procedural", "renderer": "canvas", "factory": "scout" },
+    "unit.gunman": { "kind": "procedural", "renderer": "canvas", "factory": "gunman" },
+    "unit.crossbowman": { "kind": "procedural", "renderer": "canvas", "factory": "crossbowman" },
+    "unit.grenademan": { "kind": "procedural", "renderer": "canvas", "factory": "grenademan" },
+    "unit.balloon": { "kind": "procedural", "renderer": "canvas", "factory": "balloon" },
+    "unit.construction_dozer": { "kind": "procedural", "renderer": "canvas", "factory": "construction_dozer" },
+    "unit.hover_tank": { "kind": "procedural", "renderer": "canvas", "factory": "hover_tank" },
+    "building.castle": { "kind": "procedural", "renderer": "canvas", "factory": "castle" },
+    "building.eok_town_center": { "kind": "procedural", "renderer": "canvas", "factory": "eok_town_center" },
+    "building.modern_command_center": { "kind": "procedural", "renderer": "canvas", "factory": "modern_command_center" },
+    "building.modern_reactor": { "kind": "procedural", "renderer": "canvas", "factory": "modern_reactor" },
+    "building.modern_supply": { "kind": "procedural", "renderer": "canvas", "factory": "modern_supply" },
+    "building.modern_barracks": { "kind": "procedural", "renderer": "canvas", "factory": "modern_barracks" },
+    "building.modern_factory": { "kind": "procedural", "renderer": "canvas", "factory": "modern_factory" },
+    "building.modern_airfield": { "kind": "procedural", "renderer": "canvas", "factory": "modern_airfield" },
+    "building.modern_strategy": { "kind": "procedural", "renderer": "canvas", "factory": "modern_strategy" },
+    "building.modern_bunker": { "kind": "procedural", "renderer": "canvas", "factory": "modern_bunker" },
+    "building.arrow_tower": { "kind": "procedural", "renderer": "canvas", "factory": "arrow_tower" }
+  },
+  "textures": {},
+  "sounds": {}
+}

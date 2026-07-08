@@ -74,6 +74,10 @@
     const merged = mergeMap(baseMode, override);
     merged.id = targetId || baseMode.id || override.id || '';
     merged.defaults = mergeMap(baseMode.defaults, override.defaults);
+    merged.name = baseMode.name || merged.name;
+    merged.shortName = baseMode.shortName || merged.shortName;
+    merged.summary = baseMode.summary || merged.summary;
+    merged.startLabel = baseMode.startLabel || merged.startLabel;
     return merged;
   }
 
@@ -134,10 +138,8 @@
 
   function applyPackageModeDerivatives(modes = {}, gamePackage = {}) {
     const appliedTargets = new Set((gamePackage.modeOverrides || []).map(override => override.target));
-    if (appliedTargets.has('unit_comparison')) return modes;
     const versus = modes.versus;
-    const comparison = modes.unit_comparison;
-    if (!versus || !comparison) return modes;
+    if (!versus) return modes;
 
     const allowedUnits = Array.isArray(versus.allowedUnits) && versus.allowedUnits.length
       ? [...versus.allowedUnits]
@@ -149,25 +151,72 @@
     const enabledUnits = Array.isArray(versus.defaults?.enabledUnits) && versus.defaults.enabledUnits.length
       ? versus.defaults.enabledUnits.filter(unitId => allowedUnits.includes(unitId))
       : [...allowedUnits];
-    const derivedRoster = defaultComparisonRoster(versus.defaults, allowedUnits);
-    const defaults = {
-      ...(comparison.defaults || {}),
-      mapStyle: versus.defaults?.mapStyle || comparison.defaults?.mapStyle,
-      visualStyle: versus.defaults?.visualStyle || comparison.defaults?.visualStyle,
-      enabledUnits,
-      leftUnitRoster: { ...derivedRoster },
-      rightUnitRoster: { ...derivedRoster }
+
+    const inheritMapDefaults = (targetDefaults = {}) => {
+      const result = {
+        mapStyle: versus.defaults?.mapStyle || targetDefaults.mapStyle,
+        visualStyle: versus.defaults?.visualStyle || targetDefaults.visualStyle
+      };
+      for (const key of ['waterLevel', 'rockCount', 'treeCount', 'goldMineCount', 'stoneCount', 'houseCount', 'sheepCount', 'duckCount']) {
+        if (Number.isFinite(Number(versus.defaults?.[key]))) {
+          result[key] = versus.defaults[key];
+        }
+      }
+      return result;
     };
 
-    modes.unit_comparison = {
-      ...comparison,
-      allowedUnits,
-      defaults
+    const recordDerivative = (target, fields) => {
+      gamePackage.modeDerivatives = [
+        ...(gamePackage.modeDerivatives || []),
+        { source: 'versus', target, fields }
+      ];
     };
-    gamePackage.modeDerivatives = [
-      ...(gamePackage.modeDerivatives || []),
-      { source: 'versus', target: 'unit_comparison', fields: ['allowedUnits', 'enabledUnits', 'leftUnitRoster', 'rightUnitRoster'] }
-    ];
+
+    if (!appliedTargets.has('unit_comparison') && modes.unit_comparison) {
+      const comparison = modes.unit_comparison;
+      const derivedRoster = defaultComparisonRoster(versus.defaults, allowedUnits);
+      modes.unit_comparison = {
+        ...comparison,
+        allowedUnits,
+        defaults: {
+          ...(comparison.defaults || {}),
+          ...inheritMapDefaults(comparison.defaults || {}),
+          enabledUnits,
+          leftUnitRoster: { ...derivedRoster },
+          rightUnitRoster: { ...derivedRoster }
+        }
+      };
+      recordDerivative('unit_comparison', ['allowedUnits', 'enabledUnits', 'leftUnitRoster', 'rightUnitRoster', 'map defaults']);
+    }
+
+    if (!appliedTargets.has('tower_defense') && modes.tower_defense) {
+      const towerDefense = modes.tower_defense;
+      modes.tower_defense = {
+        ...towerDefense,
+        allowedUnits,
+        defaults: {
+          ...(towerDefense.defaults || {}),
+          ...inheritMapDefaults(towerDefense.defaults || {}),
+          enabledUnits,
+          unitRoster: { ...defaultComparisonRoster(versus.defaults, allowedUnits) }
+        }
+      };
+      recordDerivative('tower_defense', ['allowedUnits', 'enabledUnits', 'unitRoster', 'map defaults']);
+    }
+
+    if (!appliedTargets.has('map_builder') && modes.map_builder) {
+      const builder = modes.map_builder;
+      modes.map_builder = {
+        ...builder,
+        allowedUnits,
+        defaults: {
+          ...(builder.defaults || {}),
+          ...inheritMapDefaults(builder.defaults || {}),
+          enabledUnits
+        }
+      };
+      recordDerivative('map_builder', ['allowedUnits', 'enabledUnits', 'map defaults']);
+    }
     return modes;
   }
 
@@ -270,9 +319,17 @@
   async function loadSelectedGamePackage(locationLike = root.location) {
     const search = String(locationLike?.search || '');
     const params = new URLSearchParams(search);
-    const packageId = safePackageId(params.get('game') || params.get('package'));
+    const selectedPackageId = loadState.selectedGamePackageId === 'core' ? '' : loadState.selectedGamePackageId;
+    const packageId = safePackageId(selectedPackageId || params.get('game') || params.get('package'));
     if (!packageId) return null;
     return loadGamePackage(packageId);
+  }
+
+  function selectGamePackage(id = '') {
+    const packageId = safePackageId(id);
+    loadState.selectedGamePackageId = packageId || 'core';
+    if (!packageId) loadState.activeGamePackage = null;
+    return packageId;
   }
 
   async function loadGamePackageIndex(path = 'games/index.json') {
@@ -488,6 +545,7 @@
   });
   app.config.gamePackages = Object.freeze({
     loadGamePackage,
+    selectGamePackage,
     loadSelectedGamePackage,
     loadGamePackageIndex,
     loadIndexedGamePackage,

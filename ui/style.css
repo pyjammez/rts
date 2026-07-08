@@ -445,19 +445,19 @@ body {
 
 .package-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 8px;
-  max-height: 230px;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px;
+  max-height: 170px;
   overflow-y: auto;
   padding-right: 2px;
 }
 
 .package-card {
   display: grid;
-  gap: 3px;
-  min-height: 88px;
-  padding: 10px;
-  text-align: left;
+  place-items: center;
+  min-height: 44px;
+  padding: 8px 10px;
+  text-align: center;
   color: #3b2412;
   font-family: Georgia, "Times New Roman", serif;
   background: rgba(255, 244, 204, 0.52);
@@ -467,7 +467,7 @@ body {
 }
 
 .package-card span {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -1039,6 +1039,18 @@ body {
   border-bottom: 0;
   border-left: 0;
   border-radius: 0;
+}
+
+.game-bottom-edge-scroll-zone {
+  position: absolute;
+  right: 0;
+  left: 0;
+  bottom: 174px;
+  z-index: 2;
+  height: 16px;
+  pointer-events: auto;
+  cursor: s-resize;
+  background: linear-gradient(to top, rgba(63, 38, 19, 0.12), transparent);
 }
 
 .bottom-edge-scroll-zone {

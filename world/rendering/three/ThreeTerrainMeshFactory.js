@@ -209,11 +209,150 @@
       return [terrain];
     }
 
+    function appendTerrainDecal(batch, centerX, centerZ, y, width, depth, rotation = 0) {
+      const halfWidth = width * 0.5;
+      const halfDepth = depth * 0.5;
+      const cos = Math.cos(rotation);
+      const sin = Math.sin(rotation);
+      const corners = [
+        [-halfWidth, -halfDepth, 0, 0],
+        [halfWidth, -halfDepth, 1, 0],
+        [-halfWidth, halfDepth, 0, 1],
+        [halfWidth, halfDepth, 1, 1]
+      ].map(([x, z, u, v]) => ({
+        x: centerX + x * cos - z * sin,
+        z: centerZ + x * sin + z * cos,
+        u,
+        v
+      }));
+      for (const index of [0, 2, 1, 1, 2, 3]) {
+        const corner = corners[index];
+        batch.positions.push(corner.x, y, corner.z);
+        batch.uvs.push(corner.u, corner.v);
+      }
+    }
+
+    function terrainDetailKind(x, y, sample) {
+      if (sample.isWater || sample.waterBlend < 0.58) return null;
+      const style = visualStyle();
+      const patch = smoothValueNoise(x + 1703, y + 733, 2.1);
+      const fine = hashNoise(Math.floor(x * 13) + 1511, Math.floor(y * 13) + 1999);
+      const shore = sample.waterBlend < 0.82;
+      const sandy = sample.grassBlend < 0.42;
+      const grassy = sample.grassBlend > 0.62;
+
+      if (style === 'volcanic_lava' || style === 'metal_wasteland') {
+        if (patch > 0.68 && fine > 0.44) return 'pebbles';
+        if (patch > 0.82) return 'dryPatch';
+        return null;
+      }
+
+      if (style === 'industrial_desert' || style === 'desert_raid' || style === 'arabia_dryland') {
+        if ((sandy || shore) && patch > 0.58 && fine > 0.38) return 'dryPatch';
+        if (patch > 0.76 && fine > 0.5) return 'pebbles';
+        if (grassy && patch > 0.7 && fine > 0.45) return 'shrub';
+        return null;
+      }
+
+      if (shore && patch > 0.64) return sandy ? 'dryPatch' : 'pebbles';
+      if (grassy && patch > 0.78 && fine > 0.34) return 'grass';
+      if (grassy && patch > 0.68 && fine > 0.62) return 'shrub';
+      if (!grassy && patch > 0.76) return 'dryPatch';
+      if (patch > 0.9) return 'pebbles';
+      return null;
+    }
+
+    function createTerrainDetailMeshesForRange({ startX = 0, startY = 0, endX = getColumns(), endY = getRows(), chunkId = null } = {}) {
+      const rows = getRows();
+      const columns = getColumns();
+      const batches = {
+        grass: { positions: [], uvs: [], material: materials.terrainGrassClump },
+        dryPatch: { positions: [], uvs: [], material: materials.terrainDryPatch },
+        pebbles: { positions: [], uvs: [], material: materials.terrainPebbles },
+        shrub: { positions: [], uvs: [], material: materials.terrainShrubPatch }
+      };
+
+      const tileStartX = Math.max(0, Math.floor(startX));
+      const tileStartY = Math.max(0, Math.floor(startY));
+      const tileEndX = Math.min(columns, Math.ceil(endX));
+      const tileEndY = Math.min(rows, Math.ceil(endY));
+      const densityScale = Math.max(0.45, Math.min(1, 4096 / Math.max(1, rows * columns)));
+
+      for (let tileY = tileStartY; tileY < tileEndY; tileY++) {
+        for (let tileX = tileStartX; tileX < tileEndX; tileX++) {
+          const baseRoll = hashNoise(tileX + 3607, tileY + 911);
+          if (baseRoll > densityScale) continue;
+          const sampleX = tileX + 0.18 + hashNoise(tileX + 101, tileY + 313) * 0.64;
+          const sampleY = tileY + 0.18 + hashNoise(tileX + 421, tileY + 211) * 0.64;
+          const sample = sampleTerrain(sampleX, sampleY);
+          const kind = terrainDetailKind(sampleX, sampleY, sample);
+          if (!kind || !batches[kind]?.material) continue;
+          const y = terrainHeight(sampleX, sampleY, sample) + 0.022 + Object.keys(batches).indexOf(kind) * 0.002;
+          const centerX = sampleX - columns * 0.5;
+          const centerZ = sampleY - rows * 0.5;
+          const sizeNoise = hashNoise(tileX + 877, tileY + 1291);
+          const rotation = hashNoise(tileX + 587, tileY + 809) * Math.PI * 2;
+          const width = kind === 'grass'
+            ? 0.68 + sizeNoise * 0.55
+            : kind === 'shrub'
+              ? 0.78 + sizeNoise * 0.78
+              : kind === 'pebbles'
+                ? 0.54 + sizeNoise * 0.7
+                : 0.92 + sizeNoise * 1.12;
+          const depth = kind === 'grass'
+            ? width * (0.48 + hashNoise(tileX + 1, tileY + 3) * 0.32)
+            : kind === 'shrub'
+              ? width * (0.58 + hashNoise(tileX + 5, tileY + 7) * 0.28)
+              : kind === 'pebbles'
+                ? width * (0.62 + hashNoise(tileX + 11, tileY + 13) * 0.34)
+                : width * (0.46 + hashNoise(tileX + 17, tileY + 19) * 0.26);
+          appendTerrainDecal(batches[kind], centerX, centerZ, y, width, depth, rotation);
+
+          if ((kind === 'grass' || kind === 'shrub') && hashNoise(tileX + 1741, tileY + 1429) > 0.78) {
+            appendTerrainDecal(
+              batches.grass,
+              centerX + (hashNoise(tileX + 31, tileY + 37) - 0.5) * 0.72,
+              centerZ + (hashNoise(tileX + 41, tileY + 43) - 0.5) * 0.72,
+              y + 0.004,
+              width * 0.52,
+              depth * 0.7,
+              rotation + 0.8
+            );
+          }
+        }
+      }
+
+      const meshes = [];
+      for (const [kind, batch] of Object.entries(batches)) {
+        if (!batch.positions.length || !batch.material) continue;
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(batch.positions, 3));
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(batch.uvs, 2));
+        const mesh = new THREE.Mesh(geometry, batch.material);
+        mesh.receiveShadow = false;
+        mesh.castShadow = false;
+        mesh.renderOrder = 1;
+        mesh.userData = {
+          ...(mesh.userData || {}),
+          staticChunkId: chunkId,
+          terrainDetail: kind,
+          terrainChunk: !!chunkId
+        };
+        meshes.push(mesh);
+      }
+      return meshes;
+    }
+
     function createTerrainMeshes({ subdivisions = 8, chunkTiles = 0 } = {}) {
       const rows = getRows();
       const columns = getColumns();
       const chunkSize = Math.max(0, Math.floor(Number(chunkTiles) || 0));
-      if (!chunkSize) return createTerrainMeshForRange({ startX: 0, startY: 0, endX: columns, endY: rows, subdivisions });
+      if (!chunkSize) {
+        return [
+          ...createTerrainMeshForRange({ startX: 0, startY: 0, endX: columns, endY: rows, subdivisions }),
+          ...createTerrainDetailMeshesForRange({ startX: 0, startY: 0, endX: columns, endY: rows })
+        ];
+      }
 
       const meshes = [];
       for (let startY = 0; startY < rows; startY += chunkSize) {
@@ -228,6 +367,13 @@
             subdivisions,
             chunkId: `${chunkX}:${chunkY}`
           }));
+          meshes.push(...createTerrainDetailMeshesForRange({
+            startX,
+            startY,
+            endX: Math.min(columns, startX + chunkSize),
+            endY: Math.min(rows, startY + chunkSize),
+            chunkId: `${chunkX}:${chunkY}`
+          }));
         }
       }
       return meshes;
@@ -236,6 +382,7 @@
     return Object.freeze({
       createTerrainMeshes,
       createTerrainMeshForRange,
+      createTerrainDetailMeshesForRange,
       sampleTerrain,
       terrainHeight,
       terrainColor,
