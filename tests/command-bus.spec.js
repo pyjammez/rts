@@ -135,6 +135,13 @@ test('command bus exposes a distinct attack-move command type', () => {
   assert.equal(context.OpenRTS.commands.types.ATTACK_MOVE, 'unit.attack-move');
 });
 
+test('command bus exposes mobile building command types', () => {
+  const context = loadOpenRTSScript('../../game/commands/CommandBus.js');
+  assert.equal(context.OpenRTS.commands.types.BUILDING_LIFT_OFF, 'building.lift-off');
+  assert.equal(context.OpenRTS.commands.types.BUILDING_RELOCATE, 'building.relocate');
+  assert.equal(context.OpenRTS.commands.types.BUILDING_LAND, 'building.land');
+});
+
 test('command bus supports immutable public API with sanctioned command module extensions', () => {
   const context = loadOpenRTSScript('../../game/commands/CommandBus.js');
   loadOpenRTSScript('../../game/commands/GameplayCommandHandlers.js', context);

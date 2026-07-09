@@ -130,6 +130,9 @@ test('starsiege defines an asymmetric starcraft-like sci-fi tech structure', () 
   assert.equal(factions.ss_cybernetic.startingBuildings.ss_cyber_nexus, 1);
   assert.equal(factions.ss_aliens.startingBuildings.ss_alien_hive, 1);
   assert.equal(buildings.ss_human_command_hub.hqStyle, 'command_center');
+  assert.equal(buildings.ss_human_command_hub.mobility.canLiftOff, true);
+  assert.equal(buildings.ss_human_command_hub.mobility.canLand, true);
+  assert.equal(buildings.ss_human_command_hub.tags.includes('liftable'), true);
   assert.equal(buildings.ss_cyber_nexus.hqStyle, 'nexus');
   assert.equal(buildings.ss_alien_hive.hqStyle, 'hatchery');
   assert.match(buildings.ss_human_command_hub.name, /Command Center/);
@@ -141,7 +144,18 @@ test('starsiege defines an asymmetric starcraft-like sci-fi tech structure', () 
   assert.equal(rules.damageTypes.biological.name, 'Biological');
   assert.match(mapSource, /function isStarSiegeBuilding/);
   assert.match(mapSource, /function drawStarSiegeBuilding/);
+  assert.ok(
+    mapSource.indexOf('if (isStarSiegeBuilding(building))') < mapSource.indexOf("if (building.type === BUILDING_TYPES.HOME && layer === 'base')"),
+    'StarSiege buildings must bypass the generic home base renderer before castle/home routing runs'
+  );
   assert.match(mapSource, /function drawStarSiegeCommandCenterBase/);
+  assert.match(mapSource, /const stadiumY = top \+ h \* 0\.66/);
+  assert.match(mapSource, /const domeCrownY = top \+ h \* 0\.2/);
+  assert.match(mapSource, /ctx\.ellipse\(0, stadiumY, w \* 0\.48, h \* 0\.22/);
+  assert.match(mapSource, /#f8faf7/);
+  assert.match(mapSource, /#c9d0d0/);
+  assert.match(mapSource, /ctx\.fillRect\(left \+ w \* wx - w \* 0\.018, top \+ h \* 0\.575/);
+  assert.match(mapSource, /ctx\.ellipse\(0, top \+ h \* 0\.69, w \* 0\.16, h \* 0\.06/);
   assert.match(mapSource, /function drawStarSiegeNexusBase/);
   assert.match(mapSource, /function drawStarSiegeHatcheryBase/);
 });
@@ -253,6 +267,8 @@ test('versus start policy places default 1v1 teams on opposite map sides', () =>
 
   assert.match(mapSource, /function getTeamStartRatio/);
   assert.match(mapSource, /function shouldUseGeneratedStartRatios/);
+  assert.match(mapSource, /function twoPlayerSideStartRatios/);
+  assert.match(mapSource, /if \(count === 2\) return twoPlayerSideStartRatios\(\)\[teamIndex % 2\]/);
   assert.match(mapSource, /'1v1': \[\[0\.18, 0\.5\], \[0\.82, 0\.5\]\]/);
   assert.match(mapSource, /'default_large'/);
   assert.match(mapSource, /const generatedRatio = getTeamStartRatio\(teamIndex, teams\.length, config\)/);

@@ -121,6 +121,37 @@ test('production queue spends resources and completes units or research after du
   assert.equal(resources.get('blue').supplies, 700);
 });
 
+test('building mobility system lifts relocates and lands mobile structures', () => {
+  const context = loadOpenRTSScript('../../game/systems/buildingMobilitySystem.js', { tileSize: 32 });
+  const mobility = context.OpenRTS.systems.buildingMobility;
+  const building = {
+    id: 1,
+    x: 64,
+    y: 64,
+    tileX: 0,
+    tileY: 0,
+    width: 4,
+    height: 4,
+    isDead: false,
+    mobility: { canLiftOff: true, canLand: true, flySpeed: 100, liftTime: 0.5, landTime: 0.5 },
+    mobilityState: 'landed',
+    flightHeight: 0
+  };
+
+  assert.equal(mobility.liftOff(building), true);
+  mobility.update(0.5, { buildings: [building], tileSize: 32 });
+  assert.equal(building.mobilityState, 'flying');
+  assert.equal(building.flightHeight > 0, true);
+  assert.equal(mobility.relocate(building, 164, 64), true);
+  mobility.update(1, { buildings: [building], tileSize: 32 });
+  assert.equal(Math.round(building.x), 164);
+  assert.equal(building.relocationTarget, null);
+  assert.equal(mobility.land(building), true);
+  mobility.update(0.5, { buildings: [building], tileSize: 32 });
+  assert.equal(building.mobilityState, 'landed');
+  assert.equal(building.flightHeight, 0);
+});
+
 test('ability effect system applies damage heal buffs and custom handlers', () => {
   const context = loadOpenRTSScript('../../game/systems/resourceSystem.js');
   loadOpenRTSScript('../../game/systems/AbilityEffectSystem.js', context);

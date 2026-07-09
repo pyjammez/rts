@@ -390,6 +390,21 @@ canvas.addEventListener('contextmenu', (e) => {
 
   const selectedUnits = units.filter(unit => unit.selected && !unit.isDead);
   if (selectedUnits.length === 0) {
+    const selectedBuilding = typeof getSelectedBuilding === 'function' ? getSelectedBuilding() : null;
+    if (
+      selectedBuilding &&
+      !selectedBuilding.isDead &&
+      OpenRTS.systems.buildingMobility?.canLift?.(selectedBuilding) &&
+      OpenRTS.systems.buildingMobility?.isFlying?.(selectedBuilding)
+    ) {
+      OpenRTS.commands.enqueue({
+        type: OpenRTS.commands.types.BUILDING_RELOCATE,
+        payload: { buildingId: selectedBuilding.id, x: world.x, y: world.y }
+      });
+      addCommandClickMarker(world.x, world.y, 'green');
+      return;
+    }
+
     const selectedHouse = typeof getSelectedWorldObject === 'function' ? getSelectedWorldObject() : null;
     if (selectedHouse?.objectType === 'house' && Array.isArray(selectedHouse.occupants) && selectedHouse.occupants.length > 0) {
       selectedHouse.occupants.forEach((unitId, index) => {

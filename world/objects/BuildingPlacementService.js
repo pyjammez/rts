@@ -103,11 +103,12 @@
     const height = Math.max(1, Math.floor(finiteNumber(stats.height, 1)));
     const canPlace = options.canPlace || (() => false);
     const sliceWidth = columns / teamCount;
+    const isLeftSideSlot = teamIndex % 2 === 0;
     const homeSideMin = teamCount === 2
-      ? team === 'red' ? 2 : Math.floor(columns * 0.52)
+      ? isLeftSideSlot ? 2 : Math.floor(columns * 0.52)
       : Math.max(2, Math.floor(teamIndex * sliceWidth) + 1);
     const homeSideMax = teamCount === 2
-      ? team === 'red' ? Math.floor(columns * 0.48) : columns - width - 2
+      ? isLeftSideSlot ? Math.floor(columns * 0.48) : columns - width - 2
       : Math.min(columns - width - 2, Math.floor((teamIndex + 1) * sliceWidth) - width - 1);
     const preferredX = Math.floor(columns * preferredXRatio - width * 0.5);
     const preferredY = Math.floor(rows * preferredYRatio - height * 0.5);

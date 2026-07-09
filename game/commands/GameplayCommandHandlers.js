@@ -186,6 +186,25 @@
         const building = resolveBuilding(command.payload.buildingId);
         return !!systems.castleUpgrades?.upgrade(building, king);
       });
+      register(commandTypes.BUILDING_LIFT_OFF, 'Lift a mobile building into flight.', {
+        buildingId: id
+      }, command => {
+        const building = resolveBuilding(command.payload.buildingId);
+        return !!systems.buildingMobility?.liftOff(building);
+      });
+      register(commandTypes.BUILDING_RELOCATE, 'Order a flying mobile building to shift to a world point.', {
+        buildingId: id,
+        ...worldPoint
+      }, command => {
+        const building = resolveBuilding(command.payload.buildingId);
+        return !!systems.buildingMobility?.relocate(building, command.payload.x, command.payload.y);
+      });
+      register(commandTypes.BUILDING_LAND, 'Land a flying mobile building at its current location.', {
+        buildingId: id
+      }, command => {
+        const building = resolveBuilding(command.payload.buildingId);
+        return !!systems.buildingMobility?.land(building);
+      });
     }
 
     return Object.freeze({

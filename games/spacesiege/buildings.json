@@ -12,8 +12,15 @@
     "startBuilding": true,
     "role": "Human headquarters, worker producer, command uplink, and resource drop-off.",
     "armorType": "structure",
+    "mobility": {
+      "canLiftOff": true,
+      "canLand": true,
+      "flySpeed": 86,
+      "liftTime": 1.1,
+      "landTime": 1.1
+    },
     "produces": ["ss_human_engineer"],
-    "tags": ["hq", "human", "command_center", "resource_dropoff"]
+    "tags": ["hq", "human", "command_center", "resource_dropoff", "mobile_building", "liftable"]
   },
   "ss_human_depot": {
     "name": "Supply Depot",

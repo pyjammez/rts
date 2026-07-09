@@ -336,6 +336,14 @@ function registerRuntimeSystems() {
     }
   });
   runtime.registerSystem({
+    id: 'building-mobility',
+    order: 95,
+    update: dt => OpenRTS.systems.buildingMobility?.update(dt, {
+      buildings: OpenRTS.world.runtime.get('buildings'),
+      tileSize
+    })
+  });
+  runtime.registerSystem({
     id: 'buildings',
     order: 100,
     update: dt => OpenRTS.systems.buildingCombat.update(dt, {

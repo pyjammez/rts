@@ -30,6 +30,8 @@
     const width = Math.max(1, Math.floor(finiteNumber(stats.width, 1)));
     const height = Math.max(1, Math.floor(finiteNumber(stats.height, 1)));
     const hp = Math.max(1, finiteNumber(stats.hp, 100));
+    const tags = Array.isArray(stats.tags) ? [...stats.tags] : [];
+    const mobility = stats.mobility && typeof stats.mobility === 'object' ? { ...stats.mobility } : null;
 
     return {
       id: options.id || 'building',
@@ -48,6 +50,13 @@
       model: stats.model || type,
       definitionType: options.definitionType || stats.id || type,
       factionId: options.factionId || null,
+      tags,
+      mobility,
+      mobilityState: mobility?.canLiftOff ? 'landed' : 'static',
+      flightHeight: 0,
+      liftProgress: 0,
+      landProgress: 0,
+      relocationTarget: null,
       range: finiteNumber(stats.range, 0),
       damage: finiteNumber(stats.damage, 0),
       attackCooldown: finiteNumber(stats.attackCooldown, 1),

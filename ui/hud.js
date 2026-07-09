@@ -24,6 +24,9 @@ let mineStoneAction = null;
 let chopWoodAction = null;
 let gatherFoodAction = null;
 let burnHouseAction = null;
+let buildingLiftAction = null;
+let buildingShiftAction = null;
+let buildingLandAction = null;
 let unitActionStatus = null;
 let actionMessage = '';
 let actionMessageUntil = 0;
@@ -61,9 +64,13 @@ function initHUD() {
   chopWoodAction = document.getElementById('chopWoodAction');
   gatherFoodAction = document.getElementById('gatherFoodAction');
   burnHouseAction = document.getElementById('burnHouseAction');
+  buildingLiftAction = document.getElementById('buildingLiftAction');
+  buildingShiftAction = document.getElementById('buildingShiftAction');
+  buildingLandAction = document.getElementById('buildingLandAction');
   unitActionStatus = document.getElementById('unitActionStatus');
   OpenRTS.ui.commandTargeting?.configure({
     getSelectedUnits: getSelectedLivingUnits,
+    getSelectedBuilding: () => typeof getSelectedBuilding === 'function' ? getSelectedBuilding() : null,
     setMessage: setActionMessage,
     clearMessage: () => { actionMessageUntil = 0; },
     updateActions: updateUnitActions,
@@ -121,6 +128,9 @@ function initHUD() {
   chopWoodAction?.addEventListener('click', () => toggleItemActionTargeting('chop-wood'));
   gatherFoodAction?.addEventListener('click', () => toggleItemActionTargeting('gather-food'));
   burnHouseAction?.addEventListener('click', () => toggleItemActionTargeting('burn-house'));
+  buildingLiftAction?.addEventListener('click', () => orderSelectedBuildingLiftOff());
+  buildingShiftAction?.addEventListener('click', () => toggleItemActionTargeting('building-relocate'));
+  buildingLandAction?.addEventListener('click', () => orderSelectedBuildingLand());
   constructionActionsEl?.addEventListener('click', event => {
     const button = event.target.closest?.('[data-building-type]');
     if (!button || button.disabled) return;
@@ -351,6 +361,41 @@ function toggleItemActionTargeting(mode) {
   OpenRTS.ui.commandTargeting?.toggle(mode);
 }
 
+function getSelectedMobileBuilding() {
+  const building = typeof getSelectedBuilding === 'function' ? getSelectedBuilding() : null;
+  return building && !building.isDead && OpenRTS.systems.buildingMobility?.canLift?.(building)
+    ? building
+    : null;
+}
+
+function orderSelectedBuildingLiftOff() {
+  const building = getSelectedMobileBuilding();
+  if (!building) {
+    setActionMessage('Select a mobile building');
+    return;
+  }
+  OpenRTS.commands.enqueue({
+    type: OpenRTS.commands.types.BUILDING_LIFT_OFF,
+    payload: { buildingId: building.id }
+  });
+  setActionMessage(`${building.displayName || 'Building'} lifting off`);
+  updateUnitActions();
+}
+
+function orderSelectedBuildingLand() {
+  const building = getSelectedMobileBuilding();
+  if (!building) {
+    setActionMessage('Select a mobile building');
+    return;
+  }
+  OpenRTS.commands.enqueue({
+    type: OpenRTS.commands.types.BUILDING_LAND,
+    payload: { buildingId: building.id }
+  });
+  setActionMessage(`${building.displayName || 'Building'} landing`);
+  updateUnitActions();
+}
+
 function cancelItemActionTargeting(message = 'Item action cancelled') {
   OpenRTS.ui.commandTargeting?.cancel(message);
 }
@@ -377,9 +422,13 @@ function updateUnitActions() {
   const canDrop = selectedUnits.some(unit => !!unit.inventoryItem);
   const canPickUp = selectedUnits.some(unit => !unit.inventoryItem);
   const hasWorker = selectedUnits.some(isBuilderUnit);
+  const selectedBuilding = typeof getSelectedBuilding === 'function' ? getSelectedBuilding() : null;
+  const mobileBuilding = getSelectedMobileBuilding();
+  const hasMobileBuilding = !!mobileBuilding;
 
   const itemActionTargetMode = getCommandTargetMode();
-  if (!hasUnits && itemActionTargetMode) OpenRTS.ui.commandTargeting?.cancel('');
+  if (!hasUnits && itemActionTargetMode && itemActionTargetMode !== 'building-relocate') OpenRTS.ui.commandTargeting?.cancel('');
+  if (itemActionTargetMode === 'building-relocate' && !hasMobileBuilding) OpenRTS.ui.commandTargeting?.cancel('');
   renderConstructionActions(selectedUnits, itemActionTargetMode);
 
   for (const button of [
@@ -397,6 +446,9 @@ function updateUnitActions() {
     burnHouseAction
   ]) {
     if (button) button.disabled = !hasUnits;
+  }
+  for (const button of [buildingLiftAction, buildingShiftAction, buildingLandAction]) {
+    if (button) button.disabled = !hasMobileBuilding;
   }
   if (pickUpItemAction) pickUpItemAction.disabled = !canPickUp;
   if (dropItemAction) dropItemAction.disabled = !canDrop;
@@ -416,6 +468,10 @@ function updateUnitActions() {
   chopWoodAction?.classList.toggle('is-active', itemActionTargetMode === 'chop-wood');
   gatherFoodAction?.classList.toggle('is-active', itemActionTargetMode === 'gather-food');
   burnHouseAction?.classList.toggle('is-active', itemActionTargetMode === 'burn-house');
+  buildingShiftAction?.classList.toggle('is-active', itemActionTargetMode === 'building-relocate');
+  if (buildingLiftAction) buildingLiftAction.disabled = !hasMobileBuilding || mobileBuilding.mobilityState !== 'landed';
+  if (buildingShiftAction) buildingShiftAction.disabled = !hasMobileBuilding || mobileBuilding.mobilityState === 'landing';
+  if (buildingLandAction) buildingLandAction.disabled = !hasMobileBuilding || mobileBuilding.mobilityState !== 'flying';
   attackAtWillAction?.setAttribute('aria-pressed', String(allAttack));
   holdFireAction?.setAttribute('aria-pressed', String(allHold));
   attackMoveAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'attack-move'));
@@ -428,9 +484,14 @@ function updateUnitActions() {
   chopWoodAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'chop-wood'));
   gatherFoodAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'gather-food'));
   burnHouseAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'burn-house'));
+  buildingLiftAction?.setAttribute('aria-pressed', String(selectedBuilding?.mobilityState === 'lifting'));
+  buildingShiftAction?.setAttribute('aria-pressed', String(itemActionTargetMode === 'building-relocate'));
+  buildingLandAction?.setAttribute('aria-pressed', String(selectedBuilding?.mobilityState === 'landing'));
 
   if (!unitActionStatus) return;
-  if (itemActionTargetMode === 'attack-move') {
+  if (itemActionTargetMode === 'building-relocate') {
+    unitActionStatus.textContent = 'Click a map location to shift the building';
+  } else if (itemActionTargetMode === 'attack-move') {
     unitActionStatus.textContent = 'Click a map location to attack-move';
   } else if (itemActionTargetMode === 'pickup') {
     unitActionStatus.textContent = 'Click a tree, rock, or item';
@@ -457,6 +518,9 @@ function updateUnitActions() {
     unitActionStatus.textContent = 'Click an intact house to burn it';
   } else if (performance.now() < actionMessageUntil) {
     unitActionStatus.textContent = actionMessage;
+  } else if (hasMobileBuilding) {
+    const state = mobileBuilding.mobilityState === 'landed' ? 'Landed' : mobileBuilding.mobilityState === 'flying' ? 'Flying' : mobileBuilding.mobilityState;
+    unitActionStatus.textContent = `${mobileBuilding.displayName || 'Building'} | ${state}`;
   } else if (!hasUnits) {
     unitActionStatus.textContent = 'Select a unit';
   } else {
@@ -539,6 +603,7 @@ function updateSelectedInfo() {
         ${createInfoStat('HP', `${Math.ceil(building.hp)} / ${building.maxHp}`)}
         ${createInfoStat('Attack', building.damage ? building.damage : 'None')}
         ${createInfoStat('Range', building.range ? Math.round(building.range) : 'None')}
+        ${building.mobility ? createInfoStat('Mobility', building.mobilityState || 'landed') : ''}
         ${building.type === 'home' ? createInfoStat('Upg.', `${building.upgradeLevel || 0} / ${building.maxUpgradeLevel || 3}`) : ''}
       </div>
     `;

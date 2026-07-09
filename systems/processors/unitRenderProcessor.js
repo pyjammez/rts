@@ -73,7 +73,9 @@ function drawUnitMount(unit, ctx, isMoving, stride) {
 function getSwordSwing(unit) {
   if (!unit.attackAnimationTime || !unit.attackAnimationDuration) return 0;
   const progress = 1 - Math.max(0, Math.min(1, unit.attackAnimationTime / unit.attackAnimationDuration));
-  return Math.sin(progress * Math.PI);
+  if (progress < 0.18) return -progress / 0.18;
+  if (progress < 0.72) return (progress - 0.18) / 0.54;
+  return 1 - ((progress - 0.72) / 0.28) * 0.35;
 }
 
 function getAttackProgress(unit) {
@@ -87,22 +89,66 @@ function getAttackTargetAngle(unit, facing) {
   return Math.atan2(target.y - unit.y, target.x - unit.x);
 }
 
-function drawSwordWeapon(unit, ctx, facing, baseX, baseY, length = 17) {
-  const swing = getSwordSwing(unit);
-  const restingAngle = -0.72;
-  const attackAngle = -1.85 + swing * 2.75;
+function drawSwordSlashEffect(unit, ctx, facing, baseX, baseY, length) {
+  if (!unit.attackAnimationTime || !unit.attackAnimationDuration) return;
+  const progress = getAttackProgress(unit);
+  if (progress < 0.16 || progress > 0.72) return;
 
+  const alpha = Math.sin(((progress - 0.16) / 0.56) * Math.PI);
+  const reach = length + 8;
   ctx.save();
-  ctx.translate(baseX, baseY);
+  ctx.translate(baseX + facing * reach * 0.55, baseY - 2);
   ctx.scale(facing, 1);
-  ctx.rotate(unit.weaponId === 'sword' ? attackAngle : restingAngle);
-
-  ctx.strokeStyle = '#d9d6c7';
-  ctx.lineWidth = 3;
+  ctx.rotate(-0.32 + progress * 0.42);
+  ctx.strokeStyle = `rgba(255, 248, 204, ${0.5 * alpha})`;
+  ctx.lineWidth = 2.3;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(length, 0);
+  ctx.arc(0, 0, reach * 0.55, -1.05, 1.08);
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(202, 223, 231, ${0.34 * alpha})`;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(1, 1, reach * 0.72, -0.82, 0.9);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSwordWeapon(unit, ctx, facing, baseX, baseY, length = 17) {
+  const swing = getSwordSwing(unit);
+  const active = !!(unit.attackAnimationTime && unit.attackAnimationDuration);
+  const restingAngle = -0.74;
+  const attackAngle = active ? -1.55 + swing * 2.45 : restingAngle;
+  const armReach = active ? 4 + Math.max(0, swing) * 4 : 0;
+
+  drawSwordSlashEffect(unit, ctx, facing, baseX, baseY, length);
+
+  ctx.save();
+  ctx.translate(baseX + facing * armReach, baseY);
+  ctx.scale(facing, 1);
+  ctx.rotate(attackAngle);
+
+  ctx.strokeStyle = '#6b4423';
+  ctx.lineWidth = 4.4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-7, 1);
+  ctx.lineTo(3, 0);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#d9d6c7';
+  ctx.lineWidth = active ? 3.5 : 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(2, 0);
+  ctx.lineTo(length + (active ? 3 : 0), 0);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(5, -1);
+  ctx.lineTo(length - 2 + (active ? 3 : 0), -1);
   ctx.stroke();
 
   ctx.strokeStyle = '#5b3a1c';

@@ -118,7 +118,7 @@
         fill: terrainType === terrain.WATER ? 'rgba(255, 198, 64, 0)' : 'rgba(42, 31, 25, 0.42)',
         detail: terrainType === terrain.WATER ? 'rgba(255, 236, 118, 0.38)' : 'rgba(255, 98, 35, 0.28)',
         line: 'rgba(255, 181, 49, 0.45)',
-        depth: terrainType === terrain.WATER ? 0 : 11
+        depth: 0
       };
     }
     if (waterTouch) {
@@ -126,7 +126,7 @@
         fill: terrainType === terrain.WATER ? 'rgba(140, 207, 221, 0)' : 'rgba(112, 92, 57, 0.13)',
         detail: terrainType === terrain.WATER ? 'rgba(226, 242, 232, 0.14)' : 'rgba(245, 226, 160, 0.12)',
         line: 'rgba(238, 240, 207, 0.18)',
-        depth: terrainType === terrain.WATER ? 0 : 7
+        depth: 0
       };
     }
     if (terrainType === terrain.SAND || neighborType === terrain.SAND) {
@@ -145,7 +145,15 @@
     };
   }
 
+  function isWaterTransition(terrain, terrainType, neighborType) {
+    return terrainType === terrain.WATER || neighborType === terrain.WATER;
+  }
+
   function drawTerrainEdge(ctx, options) {
+    if (!isWaterTransition(options.terrain, options.terrainType, options.neighborType)) {
+      return;
+    }
+
     const colors = transitionColors(options.terrain, options.terrainType, options.neighborType, options.volcanic);
     if (options.terrainType !== options.terrain.WATER && colors.depth > 0) {
       drawWavyEdgeBand(ctx, {

@@ -35,6 +35,15 @@ test('player input delegates unit command intent construction', () => {
   );
 });
 
+test('player input routes selected flying buildings through relocate commands', () => {
+  const input = fs.readFileSync(new URL('../systems/input.js', import.meta.url), 'utf8');
+
+  assert.match(input, /getSelectedBuilding/);
+  assert.match(input, /OpenRTS\.systems\.buildingMobility\?\.isFlying\?\.\(selectedBuilding\)/);
+  assert.match(input, /type:\s*OpenRTS\.commands\.types\.BUILDING_RELOCATE/);
+  assert.match(input, /payload:\s*{\s*buildingId:\s*selectedBuilding\.id,\s*x:\s*world\.x,\s*y:\s*world\.y\s*}/);
+});
+
 test('gameplay command registration lives outside the composition root', () => {
   const main = fs.readFileSync(new URL('../core/main.js', import.meta.url), 'utf8');
   const handlers = fs.readFileSync(new URL('../game/commands/GameplayCommandHandlers.js', import.meta.url), 'utf8');

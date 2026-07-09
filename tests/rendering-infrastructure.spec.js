@@ -39,6 +39,59 @@ test('canvas render list service culls and sorts world drawables by depth', () =
   );
 });
 
+test('2D unit renderer draws visible sword swing frames during melee attacks', () => {
+  const context = loadOpenRTSScript('../../systems/processors/unitRenderProcessor.js', {
+    tileSize: 32,
+    tileSprites: { unit: { complete: false, naturalWidth: 0 } },
+    getTeamColor: () => '#c63c3c'
+  });
+
+  function renderCalls(overrides = {}) {
+    const calls = [];
+    const ctx = new Proxy({}, {
+      get(target, prop) {
+        if (prop in target) return target[prop];
+        return (...args) => calls.push([prop, ...args]);
+      },
+      set(target, prop, value) {
+        calls.push(['set', prop, value]);
+        target[prop] = value;
+        return true;
+      }
+    });
+    context.processUnitRender({
+      id: 1,
+      unitType: 'soldier',
+      team: 'red',
+      x: 80,
+      y: 80,
+      size: 20,
+      hp: 100,
+      maxHp: 100,
+      selected: false,
+      isDead: false,
+      melee: true,
+      weaponId: 'sword',
+      spriteFrame: 0,
+      spriteDirectionRow: 0,
+      path: [],
+      pathIndex: 0,
+      target: null,
+      hasActivePath: () => false,
+      ...overrides
+    }, ctx);
+    return calls;
+  }
+
+  const idleArcCount = renderCalls().filter(call => call[0] === 'arc').length;
+  const attackArcCount = renderCalls({
+    attackAnimationTime: 0.12,
+    attackAnimationDuration: 0.24
+  }).filter(call => call[0] === 'arc').length;
+
+  assert.equal(attackArcCount > idleArcCount, true);
+});
+
 test('geometry cache creates each geometry once and exposes diagnostics helpers', () => {
   const context = loadOpenRTSScript('../../world/rendering/three/GeometryCache.js');
   const cache = context.OpenRTS.rendering.geometryCaches.createGeometryCache();
@@ -168,6 +221,48 @@ test('canvas terrain painter owns tile accents transitions and water ripples', (
   assert.ok(calls.some(call => call[0] === 'stroke'));
   assert.ok(waterTransitionCalls.some(call => call[0] === 'stroke'));
   assert.equal(waterTransitionCalls.some(call => call[0] === 'fill'), false);
+
+  const landWaterCalls = [];
+  const landWaterCtx = new Proxy({}, {
+    get(target, prop) {
+      if (prop in target) return target[prop];
+      return (...args) => landWaterCalls.push([prop, ...args]);
+    },
+    set(target, prop, value) {
+      landWaterCalls.push(['set', prop, value]);
+      target[prop] = value;
+      return true;
+    }
+  });
+  painter.drawTransitions(landWaterCtx, 1, 0, terrain.SAND, 32, 0, {
+    terrain,
+    terrainData: [[terrain.WATER, terrain.SAND]],
+    tileSize: 32,
+    isInsideMap: (x, y) => x >= 0 && y >= 0 && x < 2 && y < 1,
+    noise: () => 0.4
+  });
+  assert.equal(landWaterCalls.some(call => call[0] === 'fill'), false);
+
+  const dryLandCalls = [];
+  const dryLandCtx = new Proxy({}, {
+    get(target, prop) {
+      if (prop in target) return target[prop];
+      return (...args) => dryLandCalls.push([prop, ...args]);
+    },
+    set(target, prop, value) {
+      dryLandCalls.push(['set', prop, value]);
+      target[prop] = value;
+      return true;
+    }
+  });
+  painter.drawTransitions(dryLandCtx, 0, 0, terrain.SAND, 0, 0, {
+    terrain,
+    terrainData: [[terrain.SAND, terrain.DIRT]],
+    tileSize: 32,
+    isInsideMap: (x, y) => x >= 0 && y >= 0 && x < 2 && y < 1,
+    noise: () => 0.9
+  });
+  assert.equal(dryLandCalls.length, 0);
 });
 
 test('three scene bootstrap creates renderer scene groups and ray helpers', () => {

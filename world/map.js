@@ -238,15 +238,16 @@ function generatedStartRatios(sizeId = '1v1') {
   return starts[sizeId] || starts['1v1'];
 }
 
+function twoPlayerSideStartRatios() {
+  return [[0.18, 0.5], [0.82, 0.5]];
+}
+
 function generatedStartRatio(teamIndex = 0, teamCount = 2, config = window.mapConfig || mapConfig || {}) {
-  const slots = generatedStartRatios(config.generatedMapSize || config.mapSize || '1v1');
   const count = Math.max(1, Math.floor(Number(teamCount) || 1));
+  if (count === 2) return twoPlayerSideStartRatios()[teamIndex % 2];
+
+  const slots = generatedStartRatios(config.generatedMapSize || config.mapSize || '1v1');
   if (count >= slots.length) return slots[(teamIndex + MAP_SEED) % slots.length];
-  if (count === 2 && slots.length >= 4) {
-    const offset = MAP_SEED % slots.length;
-    const pair = [offset, (offset + Math.floor(slots.length / 2)) % slots.length];
-    return slots[pair[teamIndex % 2]];
-  }
   const step = slots.length / count;
   const offset = MAP_SEED % slots.length;
   return slots[Math.floor(offset + teamIndex * step) % slots.length];
@@ -1667,6 +1668,7 @@ function isTileBlockedByBuilding(tileX, tileY, ignoredBuilding = null) {
 
   for (const building of buildingData) {
     if (building === ignoredBuilding || building.isDead) continue;
+    if (OpenRTS.systems.buildingMobility?.isFlying?.(building)) continue;
     if (
       tileX >= building.tileX &&
       tileX < building.tileX + building.width &&
@@ -3200,19 +3202,25 @@ function renderWaterRipples(camX, camY, viewWidth, viewHeight) {
 function drawBuilding(building, layer = 'full') {
   if (!building || building.isDead) return;
 
+  if (building.selected && layer !== 'base') {
+    drawBuildingSelection(building);
+  }
+
+  if (isStarSiegeBuilding(building)) {
+    drawStarSiegeBuilding(building, layer);
+    if (building.selected && layer !== 'base') {
+      drawBuildingHealth(building);
+    }
+    return;
+  }
+
   if (building.type === BUILDING_TYPES.HOME && layer === 'base') {
     drawHomeBuilding(building, 'base');
     return;
   }
 
-  if (building.selected && layer !== 'base') {
-    drawBuildingSelection(building);
-  }
-
   const isTowerModel = building.type === BUILDING_TYPES.TOWER || building.model === 'arrow_tower' || /tower/i.test(String(building.type || ''));
-  if (isStarSiegeBuilding(building)) {
-    drawStarSiegeBuilding(building, layer);
-  } else if (isTowerModel) {
+  if (isTowerModel) {
     drawTowerBuilding(building);
   } else {
     drawHomeBuilding(building, layer);
@@ -3270,93 +3278,148 @@ function getStarSiegeHqStyle(building) {
   return '';
 }
 
+function getBuildingFlightOffset(building) {
+  return Math.max(0, Number(building?.flightHeight) || 0);
+}
+
 function drawStarSiegeCommandCenterBase(building, style) {
   const w = building.width * tileSize;
   const h = building.height * tileSize;
   const left = -w * 0.5;
   const top = -h * 0.5;
+  const flightOffset = getBuildingFlightOffset(building);
+  const stadiumY = top + h * 0.66;
+  const domeCrownY = top + h * 0.2;
+  const domeRimY = top + h * 0.62;
+  const accent = getTeamAccent(building.team);
 
-  drawBuildingShadow(w, h, 0.2);
+  if (flightOffset > 0) {
+    ctx.save();
+    ctx.translate(0, flightOffset);
+    ctx.globalAlpha = Math.max(0.12, 0.26 - flightOffset / 220);
+    drawBuildingShadow(w, h, 0.42);
+    ctx.restore();
+  } else {
+    drawBuildingShadow(w, h, 0.2);
+  }
 
-  ctx.fillStyle = 'rgba(12, 20, 25, 0.78)';
+  ctx.fillStyle = flightOffset > 0 ? 'rgba(45, 58, 66, 0.22)' : 'rgba(28, 25, 22, 0.58)';
   ctx.beginPath();
-  ctx.ellipse(0, top + h * 0.69, w * 0.48, h * 0.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, stadiumY + h * 0.14, w * 0.5, h * 0.14, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = createBuildingGradient(left + w * 0.14, top + h * 0.54, left + w * 0.86, top + h * 0.84, [
-    [0, '#6f8792'],
-    [0.48, '#3f5561'],
-    [1, '#17252d']
+  ctx.fillStyle = createBuildingGradient(left + w * 0.08, top + h * 0.48, left + w * 0.92, top + h * 0.88, [
+    [0, '#c9d0d0'],
+    [0.26, '#939d9f'],
+    [0.68, '#5b666b'],
+    [1, '#30383c']
   ]);
   ctx.beginPath();
-  ctx.moveTo(left + w * 0.12, top + h * 0.67);
-  ctx.lineTo(left + w * 0.26, top + h * 0.54);
-  ctx.lineTo(left + w * 0.74, top + h * 0.54);
-  ctx.lineTo(left + w * 0.88, top + h * 0.67);
-  ctx.lineTo(left + w * 0.78, top + h * 0.82);
-  ctx.lineTo(left + w * 0.22, top + h * 0.82);
+  ctx.ellipse(0, stadiumY, w * 0.48, h * 0.22, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(35, 39, 41, 0.82)';
+  ctx.lineWidth = Math.max(2, tileSize * 0.042);
+  ctx.stroke();
+
+  ctx.fillStyle = createBuildingGradient(left + w * 0.14, top + h * 0.5, left + w * 0.86, top + h * 0.76, [
+    [0, '#f0f3f1'],
+    [0.44, '#aab5b7'],
+    [1, '#687379']
+  ]);
+  ctx.beginPath();
+  ctx.ellipse(0, stadiumY - h * 0.015, w * 0.38, h * 0.145, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = createBuildingGradient(left + w * 0.18, domeCrownY, left + w * 0.82, domeRimY, [
+    [0, '#f8faf7'],
+    [0.24, '#d8dee0'],
+    [0.58, '#a5b0b4'],
+    [1, '#6d787e']
+  ]);
+  ctx.beginPath();
+  ctx.moveTo(left + w * 0.1, domeRimY);
+  ctx.bezierCurveTo(left + w * 0.16, top + h * 0.38, left + w * 0.31, domeCrownY, left + w * 0.5, domeCrownY);
+  ctx.bezierCurveTo(left + w * 0.69, domeCrownY, left + w * 0.84, top + h * 0.38, left + w * 0.9, domeRimY);
+  ctx.bezierCurveTo(left + w * 0.73, top + h * 0.7, left + w * 0.27, top + h * 0.7, left + w * 0.1, domeRimY);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = 'rgba(7, 13, 17, 0.78)';
+  ctx.strokeStyle = 'rgba(61, 70, 74, 0.9)';
   ctx.lineWidth = Math.max(2, tileSize * 0.04);
   ctx.stroke();
 
-  ctx.fillStyle = createBuildingGradient(left + w * 0.17, top + h * 0.14, left + w * 0.82, top + h * 0.72, [
-    [0, '#edf9fb'],
-    [0.22, '#bad2da'],
-    [0.62, style.mid],
-    [1, '#2a3e49']
-  ]);
+  ctx.strokeStyle = 'rgba(82, 91, 95, 0.5)';
+  ctx.lineWidth = Math.max(1, tileSize * 0.024);
+  ctx.lineCap = 'round';
+  for (const panelX of [0.2, 0.29, 0.38, 0.5, 0.62, 0.71, 0.8]) {
+    ctx.beginPath();
+    ctx.moveTo(left + w * 0.5, domeCrownY + h * 0.025);
+    ctx.quadraticCurveTo(left + w * panelX, top + h * 0.39, left + w * panelX, domeRimY - h * 0.015);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+  ctx.lineWidth = Math.max(1, tileSize * 0.018);
   ctx.beginPath();
-  ctx.moveTo(left + w * 0.16, top + h * 0.62);
-  ctx.bezierCurveTo(left + w * 0.18, top + h * 0.26, left + w * 0.35, top + h * 0.1, left + w * 0.5, top + h * 0.1);
-  ctx.bezierCurveTo(left + w * 0.65, top + h * 0.1, left + w * 0.82, top + h * 0.26, left + w * 0.84, top + h * 0.62);
-  ctx.bezierCurveTo(left + w * 0.74, top + h * 0.72, left + w * 0.26, top + h * 0.72, left + w * 0.16, top + h * 0.62);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(17, 29, 38, 0.75)';
-  ctx.lineWidth = Math.max(2, tileSize * 0.04);
+  ctx.ellipse(0, top + h * 0.37, w * 0.24, h * 0.11, 0, 0.08, Math.PI - 0.08);
   ctx.stroke();
 
-  ctx.fillStyle = 'rgba(196, 225, 232, 0.42)';
+  ctx.strokeStyle = 'rgba(56, 64, 68, 0.55)';
+  ctx.lineWidth = Math.max(2, tileSize * 0.028);
+  for (const band of [
+    { y: 0.43, rx: 0.27 },
+    { y: 0.53, rx: 0.34 },
+    { y: 0.61, rx: 0.42 }
+  ]) {
+    ctx.beginPath();
+    ctx.ellipse(0, top + h * band.y, w * band.rx, h * 0.037, 0, 0.05, Math.PI - 0.05);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = accent;
+  ctx.globalAlpha = 0.72;
+  ctx.lineWidth = Math.max(1.5, tileSize * 0.02);
   ctx.beginPath();
-  ctx.ellipse(0, top + h * 0.38, w * 0.24, h * 0.13, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(238, 252, 255, 0.42)';
-  ctx.lineWidth = Math.max(1, tileSize * 0.025);
-  for (const panelX of [0.3, 0.4, 0.6, 0.7]) {
-    ctx.beginPath();
-    ctx.moveTo(left + w * 0.5, top + h * 0.12);
-    ctx.quadraticCurveTo(left + w * panelX, top + h * 0.33, left + w * panelX, top + h * 0.66);
-    ctx.stroke();
-  }
-
-  ctx.strokeStyle = 'rgba(12, 23, 30, 0.42)';
-  ctx.lineWidth = Math.max(2, tileSize * 0.032);
-  for (const bandY of [0.44, 0.58]) {
-    ctx.beginPath();
-    ctx.ellipse(0, top + h * bandY, w * (0.18 + bandY * 0.34), h * 0.045, 0, 0.08, Math.PI - 0.08);
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = '#21333d';
-  for (const pod of [[0.15, 0.62], [0.85, 0.62]]) {
-    drawRoundedRectPath(left + w * pod[0] - w * 0.075, top + h * pod[1] - h * 0.045, w * 0.15, h * 0.09, Math.max(4, tileSize * 0.04));
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(8, 15, 19, 0.75)';
-    ctx.lineWidth = Math.max(1.5, tileSize * 0.025);
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = style.glow;
-  ctx.globalAlpha = 0.55;
-  for (const light of [[0.25, 0.68], [0.75, 0.68], [0.38, 0.76], [0.62, 0.76]]) {
-    ctx.beginPath();
-    ctx.arc(left + w * light[0], top + h * light[1], Math.max(2.5, tileSize * 0.045), 0, Math.PI * 2);
-    ctx.fill();
-  }
+  ctx.ellipse(0, top + h * 0.62, w * 0.43, h * 0.045, 0, 0.05, Math.PI - 0.05);
+  ctx.stroke();
   ctx.globalAlpha = 1;
+
+  ctx.fillStyle = '#475259';
+  for (const service of [[0.17, 0.67], [0.83, 0.67]]) {
+    ctx.beginPath();
+    ctx.ellipse(left + w * service[0], top + h * service[1], w * 0.06, h * 0.035, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(35, 39, 42, 0.65)';
+    ctx.lineWidth = Math.max(1, tileSize * 0.018);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = 'rgba(225, 239, 243, 0.82)';
+  for (const wx of [0.24, 0.31, 0.38, 0.62, 0.69, 0.76]) {
+    ctx.fillRect(left + w * wx - w * 0.018, top + h * 0.575, w * 0.036, h * 0.018);
+  }
+
+  ctx.fillStyle = 'rgba(30, 35, 38, 0.78)';
+  ctx.beginPath();
+  ctx.ellipse(0, top + h * 0.75, w * 0.17, h * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(221, 231, 232, 0.78)';
+  ctx.lineWidth = Math.max(1.5, tileSize * 0.028);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(222, 211, 168, 0.82)';
+  ctx.fillRect(-w * 0.035, top + h * 0.75, w * 0.07, h * 0.2);
+
+  if (flightOffset > 0) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(0.38, 0.16 + flightOffset / 180);
+    ctx.fillStyle = 'rgba(152, 195, 216, 0.68)';
+    for (const thrusterX of [-0.28, -0.09, 0.09, 0.28]) {
+      ctx.beginPath();
+      ctx.ellipse(thrusterX * w, top + h * 0.87, w * 0.035, h * 0.085, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 }
 
 function drawStarSiegeNexusBase(building, style) {
@@ -3441,7 +3504,7 @@ function drawStarSiegeBuildingBase(building) {
   const hqStyle = getStarSiegeHqStyle(building);
 
   ctx.save();
-  ctx.translate(building.x, building.y);
+  ctx.translate(building.x, building.y - getBuildingFlightOffset(building));
 
   if (hqStyle === 'command_center') {
     drawStarSiegeCommandCenterBase(building, style);
@@ -3537,65 +3600,61 @@ function drawStarSiegeBuildingFront(building) {
   const isSupply = /depot|pylon|node/i.test(String(building.definitionType || building.model || ''));
 
   ctx.save();
-  ctx.translate(building.x, building.y);
+  ctx.translate(building.x, building.y - getBuildingFlightOffset(building));
 
   if (hqStyle === 'command_center') {
-    ctx.fillStyle = '#111f27';
-    drawRoundedRectPath(left + w * 0.38, top + h * 0.59, w * 0.24, h * 0.19, Math.max(6, tileSize * 0.09));
+    ctx.fillStyle = 'rgba(34, 39, 42, 0.92)';
+    ctx.beginPath();
+    ctx.ellipse(0, top + h * 0.69, w * 0.16, h * 0.06, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(12, 20, 25, 0.88)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(226, 234, 234, 0.86)';
+    ctx.lineWidth = Math.max(1.4, tileSize * 0.025);
     ctx.stroke();
 
-    ctx.strokeStyle = style.glow;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(left + w * 0.43, top + h * 0.65);
-    ctx.lineTo(left + w * 0.57, top + h * 0.65);
-    ctx.moveTo(left + w * 0.5, top + h * 0.6);
-    ctx.lineTo(left + w * 0.5, top + h * 0.77);
-    ctx.stroke();
+    ctx.strokeStyle = 'rgba(180, 194, 198, 0.86)';
+    ctx.lineWidth = Math.max(1, tileSize * 0.018);
+    for (const gateX of [-0.075, 0, 0.075]) {
+      ctx.beginPath();
+      ctx.moveTo(gateX * w, top + h * 0.64);
+      ctx.lineTo(gateX * w, top + h * 0.74);
+      ctx.stroke();
+    }
 
-    ctx.fillStyle = '#10232c';
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#d6e4e7';
+    for (const wx of [0.22, 0.29, 0.36, 0.64, 0.71, 0.78]) {
+      ctx.fillRect(left + w * wx - w * 0.016, top + h * 0.56, w * 0.032, h * 0.022);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = '#59666b';
     ctx.beginPath();
-    ctx.ellipse(left + w * 0.5, top + h * 0.31, w * 0.09, h * 0.052, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, top + h * 0.31, w * 0.082, h * 0.042, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = style.glow;
-    ctx.lineWidth = Math.max(1.5, tileSize * 0.03);
+    ctx.strokeStyle = 'rgba(234, 239, 238, 0.72)';
+    ctx.lineWidth = Math.max(1.2, tileSize * 0.022);
     ctx.stroke();
 
     ctx.fillStyle = accent;
     ctx.beginPath();
-    ctx.arc(left + w * 0.5, top + h * 0.31, Math.max(4, tileSize * 0.075), 0, Math.PI * 2);
+    ctx.arc(0, top + h * 0.31, Math.max(4, tileSize * 0.07), 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = '#dff8ff';
-    for (const wx of [0.28, 0.36, 0.64, 0.72]) {
-      ctx.beginPath();
-      ctx.ellipse(left + w * wx, top + h * 0.5, w * 0.035, h * 0.018, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
     ctx.strokeStyle = accent;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = Math.max(1.2, tileSize * 0.018);
     ctx.beginPath();
-    ctx.moveTo(left + w * 0.68, top + h * 0.28);
-    ctx.lineTo(left + w * 0.83, top + h * 0.1);
-    ctx.moveTo(left + w * 0.83, top + h * 0.1);
-    ctx.lineTo(left + w * 0.91, top + h * 0.1);
+    ctx.ellipse(0, top + h * 0.66, w * 0.36, h * 0.09, 0, 0.08, Math.PI - 0.08);
     ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(223, 248, 255, 0.32)';
+    ctx.strokeStyle = 'rgba(68, 76, 80, 0.36)';
     ctx.lineWidth = Math.max(1, tileSize * 0.02);
-    for (const arc of [0.27, 0.35, 0.43]) {
+    for (const arc of [0.28, 0.36, 0.44, 0.52]) {
       ctx.beginPath();
-      ctx.ellipse(0, top + h * arc, w * (0.12 + arc * 0.5), h * 0.03, 0, 0.12, Math.PI - 0.12);
+      ctx.ellipse(0, top + h * arc, w * (0.11 + arc * 0.48), h * 0.026, 0, 0.12, Math.PI - 0.12);
       ctx.stroke();
     }
 
-    ctx.fillStyle = 'rgba(131, 220, 255, 0.16)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
     ctx.beginPath();
     ctx.ellipse(0, top + h * 0.42, w * 0.25, h * 0.1, 0, 0, Math.PI * 2);
     ctx.fill();

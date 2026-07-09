@@ -19,6 +19,9 @@
     HOUSE_EXIT: 'house.exit',
     HOUSE_BURN: 'house.burn',
     CASTLE_UPGRADE: 'castle.upgrade',
+    BUILDING_LIFT_OFF: 'building.lift-off',
+    BUILDING_RELOCATE: 'building.relocate',
+    BUILDING_LAND: 'building.land',
     PRODUCTION_ENQUEUE: 'production.enqueue',
     ABILITY_CAST: 'ability.cast'
   });

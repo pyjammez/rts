@@ -457,6 +457,25 @@ test('building placement service validates footprints, castle aprons, and neares
     canPlace: (type, x, y) => placement.canPlaceAt(type, x, y, options)
   });
   assert.deepEqual(JSON.parse(JSON.stringify(nearest)), { x: 6, y: 1 });
+
+  const firstSlotSite = placement.findTeamBuildingSite('blue', 'home', 0.18, 0.5, {
+    stats: { width: 4, height: 4 },
+    columns: 100,
+    rows: 60,
+    teamIndex: 0,
+    teamCount: 2,
+    canPlace: () => true
+  });
+  const secondSlotSite = placement.findTeamBuildingSite('red', 'home', 0.82, 0.5, {
+    stats: { width: 4, height: 4 },
+    columns: 100,
+    rows: 60,
+    teamIndex: 1,
+    teamCount: 2,
+    canPlace: () => true
+  });
+  assert.equal(firstSlotSite.x < 50, true);
+  assert.equal(secondSlotSite.x > 50, true);
 });
 
 test('three render domains provide registry-backed dynamic render sources', () => {

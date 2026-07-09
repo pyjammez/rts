@@ -27,6 +27,10 @@
       return this.callbacks.getSelectedUnits?.() || [];
     }
 
+    selectedBuilding() {
+      return this.callbacks.getSelectedBuilding?.() || null;
+    }
+
     setMessage(message) {
       this.callbacks.setMessage?.(message);
     }
@@ -55,6 +59,7 @@
       const workerMode = ['mine-gold', 'mine-stone', 'chop-wood', 'gather-food'].includes(mode) || this.isBuildMode(mode);
       if (workerMode) return selectedUnits.some(unit => this.isWorkerUnit(unit));
       if (mode === 'burn-house') return selectedUnits.length > 0;
+      if (mode === 'building-relocate') return !!this.selectedBuilding();
       if (mode === 'pickup') return selectedUnits.some(unit => !unit.inventoryItem);
       if (mode === 'drop') return selectedUnits.some(unit => !!unit.inventoryItem);
       if (mode === 'upgrade-castle') return selectedUnits.some(unit => unit.unitType === 'king');
@@ -92,6 +97,21 @@
       const marker = this.callbacks.addMarker || root.addCommandClickMarker;
       const pick = app.entities?.picker?.pickAllAtPoint?.(worldX, worldY) || {};
       const worldObjects = app.world?.objects;
+
+      if (mode === 'building-relocate') {
+        const building = this.selectedBuilding();
+        if (!building || !app.systems.buildingMobility?.canLift?.(building)) {
+          this.setMessage('Select a mobile building');
+          return true;
+        }
+        app.commands.enqueue({
+          type: app.commands.types.BUILDING_RELOCATE,
+          payload: { buildingId: building.id, x: worldX, y: worldY }
+        });
+        if (marker) marker(worldX, worldY, 'green');
+        this.complete(`${building.displayName || 'Building'} shifting position`);
+        return true;
+      }
 
       if (mode === 'attack-move') {
         const team = selectedUnits[0]?.team;
